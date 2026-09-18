@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly audit so a new advisory in a pinned dependency is noticed (§7).
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: no third-party script/style hosts in the export
+        run: |
+          if grep -rEo '(src|href)="https?://[^"]+"' out/*.html; then
+            echo "external resource in HTML"; exit 1; fi
+          grep -q "script-src 'self'" out/_headers
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-site
+          path: out
+          retention-days: 7
+
+  live:
+    # Read-only tests against public RPCs; manual because public RPCs are flaky.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --project integration tests/integration/probe.live.test.ts tests/integration/decodeTx.live.test.ts
