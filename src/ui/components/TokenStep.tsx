@@ -6,6 +6,7 @@ import { isTxHash } from '@/core/decodeTx'
 import type { OftInfo, SuspiciousFlag } from '@/core/types'
 import { useDict } from '@/i18n'
 import { Address } from './Address'
+import { ChainIcon } from './ChainIcon'
 import { Alert, Box, BoxLabel, Button, ChainDot, Disclosure, Row, Spinner, Tabs } from './ui'
 
 export type TokenMode = 'address' | 'tx'
@@ -168,6 +169,7 @@ function OftDetails({ chain, info }: { chain: ChainDef; info: OftInfo }) {
               const c = byEid(r.eid)!
               return (
                 <li key={r.eid} className="flex items-center justify-end gap-2">
+                  <ChainIcon chain={c.key} size={16} />
                   <span>{c.name}</span>
                   <span className="text-xs text-muted">eid {r.eid}</span>
                   <span className="text-xs">

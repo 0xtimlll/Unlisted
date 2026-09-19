@@ -5,7 +5,8 @@ import { byEid, type ChainDef } from '@/core/chains'
 import { scanMessageUrl } from '@/core/track'
 import { fmt, useDict } from '@/i18n'
 import { useTrack } from '../hooks'
-import { Alert, Box, BoxLabel, Button, ChainDot, Spinner } from './ui'
+import { ChainIcon } from './ChainIcon'
+import { Alert, Box, BoxLabel, Button, Spinner } from './ui'
 
 export function Tracker(p: { src: ChainDef; dstEid: number; txHash: Hash; startedAt: number; onNew: () => void }) {
   const d = useDict()
@@ -16,10 +17,10 @@ export function Tracker(p: { src: ChainDef; dstEid: number; txHash: Hash; starte
   const phase = s?.phase ?? 'no_data'
   const minutes = Math.max(1, Math.round((p.src.srcConfirmationsHint * 12) / 60))
 
-  const steps: { label: string; state: 'done' | 'active' | 'todo' | 'failed' }[] = [
-    { label: p.src.name, state: receipt.isSuccess ? 'done' : 'active' },
+  const steps: { label: React.ReactNode; state: 'done' | 'active' | 'todo' | 'failed' }[] = [
+    { label: <span className="inline-flex items-center gap-1"><ChainIcon chain={p.src.key} size={14} />{p.src.name}</span>, state: receipt.isSuccess ? 'done' : 'active' },
     { label: 'LayerZero', state: !receipt.isSuccess ? 'todo' : phase === 'delivered' ? 'done' : phase === 'failed' ? 'failed' : 'active' },
-    { label: dst?.name ?? String(p.dstEid), state: phase === 'delivered' ? 'done' : 'todo' },
+    { label: dst ? <span className="inline-flex items-center gap-1"><ChainIcon chain={dst.key} size={14} />{dst.name}</span> : String(p.dstEid), state: phase === 'delivered' ? 'done' : 'todo' },
   ]
 
   return (
@@ -64,7 +65,7 @@ export function Tracker(p: { src: ChainDef; dstEid: number; txHash: Hash; starte
         {s?.dstTxHash && dst ? (
           <div className="flex items-center justify-between gap-3">
             <span className="inline-flex items-center gap-1.5 text-muted">
-              <ChainDot name={dst.name} size={16} /> {d.tracker.destTx}
+              <ChainIcon chain={dst.key} size={16} /> {d.tracker.destTx}
             </span>
             <a href={dst.explorerTxUrl + s.dstTxHash} target="_blank" rel="noopener noreferrer" className="mono text-accent-ink hover:underline">
               {s.dstTxHash.slice(0, 10)}…{s.dstTxHash.slice(-6)}

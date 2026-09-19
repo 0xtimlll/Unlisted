@@ -48,7 +48,8 @@ export default function Providers() {
   return (
     <WagmiProvider config={config} key={rpcKey}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={rkTheme} modalSize="compact">
+        {/* RainbowKit otherwise follows the browser language; the whole app is English. */}
+        <RainbowKitProvider theme={rkTheme} modalSize="compact" locale="en-US">
           <BridgeApp stored={stored} setStored={setStored} onTheme={onTheme} />
         </RainbowKitProvider>
       </QueryClientProvider>

@@ -3,7 +3,7 @@ import { byEid, byKey } from '@/core/chains'
 import { scanMessageUrl } from '@/core/track'
 import { useDict } from '@/i18n'
 import type { HistoryEntry } from '../storage'
-import { ChainDot } from './ui'
+import { ChainIcon } from './ChainIcon'
 
 export function History({ entries, onClear }: { entries: HistoryEntry[]; onClear: () => void }) {
   const d = useDict()
@@ -23,8 +23,8 @@ export function History({ entries, onClear }: { entries: HistoryEntry[]; onClear
           return (
             <li key={e.txHash} className="flex items-center gap-3 px-3 py-2 text-xs">
               <span className="flex items-center -space-x-1.5">
-                <ChainDot name={src.name} size={20} />
-                <ChainDot name={dst?.name ?? '?'} size={20} />
+                <ChainIcon chain={src.key} size={20} className="rounded-full ring-2 ring-surface" />
+                {dst ? <ChainIcon chain={dst.key} size={20} className="rounded-full ring-2 ring-surface" /> : null}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-ink">

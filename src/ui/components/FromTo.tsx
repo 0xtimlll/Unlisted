@@ -6,6 +6,7 @@ import type { SendPlan } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
 import { useDict } from '@/i18n'
 import { Address } from './Address'
+import { ChainIcon } from './ChainIcon'
 import { AmountInput, Box, BoxLabel, Input, PillSelect } from './ui'
 
 export type DestinationState = {
@@ -57,17 +58,12 @@ export function FromBox(p: {
         <PillSelect
           label={p.src.name}
           sub={p.info ? p.info.symbol : p.src.nativeSymbol}
-          dot={p.src.name}
+          icon={<ChainIcon chain={p.src.key} />}
           value={p.src.key}
-          onChange={(e) => p.onSrcChange(e.target.value as ChainKey)}
+          onSelect={(v) => p.onSrcChange(v as ChainKey)}
+          options={CHAINS.map((c) => ({ value: c.key, label: c.name, sub: c.nativeSymbol, icon: <ChainIcon chain={c.key} size={28} /> }))}
           aria-label={d.header.sourceChain}
-        >
-          {CHAINS.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.name}
-            </option>
-          ))}
-        </PillSelect>
+        />
       </div>
       <div className="mt-2 min-h-4 text-xs">
         {p.amountError ? (
@@ -126,21 +122,15 @@ export function ToBox(p: {
         <PillSelect
           label={dst?.name ?? d.step2.destination}
           sub={dst ? `eid ${dst.eid}` : ''}
-          {...(dst ? { dot: dst.name } : {})}
-          value={s.dstEid ?? ''}
-          onChange={(e) => set({ dstEid: e.target.value ? Number(e.target.value) : undefined })}
-          aria-label={d.step2.destination}
-        >
-          <option value="">—</option>
-          {routes.map((r) => {
+          {...(dst ? { icon: <ChainIcon chain={dst.key} /> } : {})}
+          value={s.dstEid !== undefined ? String(s.dstEid) : ''}
+          onSelect={(v) => set({ dstEid: v ? Number(v) : undefined })}
+          options={routes.map((r) => {
             const c = byEid(r.eid)!
-            return (
-              <option key={r.eid} value={r.eid}>
-                {c.name} (eid {r.eid})
-              </option>
-            )
+            return { value: String(r.eid), label: c.name, sub: `eid ${r.eid}`, icon: <ChainIcon chain={c.key} size={28} /> }
           })}
-        </PillSelect>
+          aria-label={d.step2.destination}
+        />
       </div>
       <div className="mt-2 text-xs text-muted">{d.step3.receiveMin}</div>
 

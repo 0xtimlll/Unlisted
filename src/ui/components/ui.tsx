@@ -1,6 +1,6 @@
 'use client'
 /** In-house primitives in the Relay-like visual language (§1: no UI kits). */
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 
 const focus = 'outline-none focus-visible:ring-2 focus-visible:ring-ink/30'
 
@@ -57,27 +57,96 @@ export function Select({ className = '', ...p }: SelectHTMLAttributes<HTMLSelect
   )
 }
 
-/** Pill-shaped chain/token selector (a real <select> underneath, for accessibility). */
+export type PillOption = { value: string; label: string; sub?: string; icon?: ReactNode }
+
+/**
+ * Pill-shaped chain selector with a custom dropdown (icons in the list), plus a hidden
+ * native <select> kept in sync for keyboard users, screen readers and tests.
+ */
 export function PillSelect({
   label,
   sub,
-  dot,
-  children,
+  icon,
+  options,
+  value,
+  onSelect,
   className = '',
   ...p
-}: SelectHTMLAttributes<HTMLSelectElement> & { label: string; sub?: string; dot?: string }) {
+}: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'value' | 'onChange'> & {
+  label: string
+  sub?: string
+  icon?: ReactNode
+  options: PillOption[]
+  value: string
+  onSelect: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [open])
+
   return (
-    <label className={`relative inline-flex h-[50px] shrink-0 items-center gap-2.5 rounded-full bg-surface-2 pl-2.5 pr-9 text-left hover:bg-line ${className}`}>
-      {dot ? <ChainDot name={dot} /> : <span className="h-8 w-8 shrink-0 rounded-full border-2 border-dashed border-line" aria-hidden />}
-      <span className="flex flex-col leading-tight">
-        <span className="text-[15px] font-semibold text-ink">{label}</span>
-        {sub ? <span className="text-xs text-muted">{sub}</span> : null}
-      </span>
-      <span className="pointer-events-none absolute right-3 text-muted">›</span>
-      <select {...p} className="absolute inset-0 cursor-pointer opacity-0">
-        {children}
+    <div ref={ref} className={`relative shrink-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`relative inline-flex h-[50px] w-full items-center gap-2.5 rounded-full bg-surface-2 pl-2.5 pr-9 text-left hover:bg-line ${focus}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {icon ?? <span className="h-8 w-8 shrink-0 rounded-full border-2 border-dashed border-line" aria-hidden />}
+        <span className="flex flex-col leading-tight">
+          <span className="whitespace-nowrap text-[15px] font-semibold text-ink">{label}</span>
+          {sub ? <span className="text-xs text-muted">{sub}</span> : null}
+        </span>
+        <span className={`pointer-events-none absolute right-3 text-muted transition ${open ? 'rotate-90' : ''}`}>›</span>
+      </button>
+      {open ? (
+        <ul role="listbox" className="absolute right-0 z-20 mt-1.5 max-h-72 w-56 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-xl">
+          {options.map((o) => (
+            <li key={o.value} role="option" aria-selected={o.value === value}>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(o.value)
+                  setOpen(false)
+                }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left hover:bg-surface-2 ${o.value === value ? 'bg-surface-2' : ''}`}
+              >
+                {o.icon ?? <span className="h-7 w-7 shrink-0" />}
+                <span className="flex flex-col leading-tight">
+                  <span className="text-sm font-semibold text-ink">{o.label}</span>
+                  {o.sub ? <span className="text-[11px] text-muted">{o.sub}</span> : null}
+                </span>
+                {o.value === value ? <span className="ml-auto text-ink">✓</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {/* Mirror for assistive tech and automation; visually hidden but focusable. */}
+      <select {...p} value={value} onChange={(e) => onSelect(e.target.value)} className="sr-only" tabIndex={-1}>
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
-    </label>
+    </div>
   )
 }
 
