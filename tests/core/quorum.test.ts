@@ -20,8 +20,8 @@ import { decodeTx } from '@/core/decodeTx'
 
 const A = { tag: 'A' } as unknown as ReadClient
 const B = { tag: 'B' } as unknown as ReadClient
-const pair: Pair = { primary: A, secondary: B }
-const single: Pair = { primary: A, secondary: undefined }
+const pair: Pair = { primary: A, secondaries: [B] }
+const single: Pair = { primary: A, secondaries: [] }
 // Returns a mock implementation that answers differently for client A and client B.
 const byClient = (a: unknown, b: unknown): never =>
   (async (client: ReadClient) => {
@@ -62,6 +62,27 @@ describe('probeOftQuorum', () => {
   it('primary failure propagates', async () => {
     vi.mocked(probeOft).mockImplementation(byClient(new ProbeError('not_contract'), good))
     await expect(probeOftQuorum(pair, TREAD_OFT)).rejects.toMatchObject({ code: 'not_contract' })
+  })
+  it('one secondary down, another agrees → crossChecked; all down → not', async () => {
+    const C = { tag: 'C' } as unknown as ReadClient
+    const three: Pair = { primary: A, secondaries: [B, C] }
+    vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
+      if (client === B) throw new Error('timeout')
+      return good
+    }) as never)
+    expect((await probeOftQuorum(three, TREAD_OFT)).crossChecked).toBe(true)
+    vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
+      if (client !== A) throw new Error('timeout')
+      return good
+    }) as never)
+    expect((await probeOftQuorum(three, TREAD_OFT)).crossChecked).toBe(false)
+    // a disagreeing third provider still blocks even if the second is down
+    vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
+      if (client === B) throw new Error('timeout')
+      if (client === C) return { info: treadOftInfo({ token: OTHER }), flags: [] }
+      return good
+    }) as never)
+    await expect(probeOftQuorum(three, TREAD_OFT)).rejects.toMatchObject({ code: 'rpc_mismatch' })
   })
   it('no secondary → never crossChecked', async () => {
     vi.mocked(probeOft).mockImplementation(byClient(good, good))

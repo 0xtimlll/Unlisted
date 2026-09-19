@@ -10,15 +10,18 @@ import { sameAddress } from './encoding'
 import { probeOft, ProbeError, type ProbeResult } from './probe'
 import type { OftInfo } from './types'
 
-export type Pair = { primary: ReadClient; secondary: ReadClient | undefined }
+export type Pair = { primary: ReadClient; secondaries: ReadClient[] }
 
-/** Primary = user's RPC if set, else registry[0]; secondary = the first registry RPC that differs. */
+/**
+ * Primary = user's RPC if set, else registry[0]. Secondaries = every other registry RPC,
+ * each bound to a single URL so their opinions are independent. All are asked; one definite
+ * answer is enough to cross-check, and any disagreement blocks.
+ */
 export function clientPair(chain: ChainDef, customRpc?: string): Pair {
   const primaryUrl = customRpc ?? chain.rpcUrls[0]!
-  const secondaryUrl = chain.rpcUrls.find((u) => u !== primaryUrl)
   return {
     primary: makeReadClient(chain, customRpc ? customRpc : undefined),
-    secondary: secondaryUrl ? makeReadClientSingle(chain, secondaryUrl) : undefined,
+    secondaries: chain.rpcUrls.filter((u) => u !== primaryUrl).map((u) => makeReadClientSingle(chain, u)),
   }
 }
 
@@ -49,21 +52,22 @@ export function sameOftInfo(a: OftInfo, b: OftInfo): boolean {
   )
 }
 
+type Opinion<T> = { ok: true; r: T } | { ok: false; e: unknown }
+const settle = <T,>(p: Promise<T>): Promise<Opinion<T>> => p.then((r) => ({ ok: true as const, r })).catch((e: unknown) => ({ ok: false as const, e }))
+
 export async function probeOftQuorum(pair: Pair, address: string): Promise<Quorum<ProbeResult>> {
-  const [p, s] = await Promise.all([
-    probeOft(pair.primary, address),
-    pair.secondary ? probeOft(pair.secondary, address).then((r) => ({ ok: true as const, r })).catch((e: unknown) => ({ ok: false as const, e })) : Promise.resolve(undefined),
-  ])
-  if (!s) return { ...p, crossChecked: false }
-  if (!s.ok) {
-    // A definite "not an OFT" from the second provider is a disagreement, not an outage.
-    if (s.e instanceof ProbeError && (s.e.code === 'not_oft' || s.e.code === 'not_contract' || s.e.code === 'rate_mismatch')) {
-      throw new ProbeError('rpc_mismatch', `second RPC: ${s.e.code}`)
+  const [p, ...others] = await Promise.all([probeOft(pair.primary, address), ...pair.secondaries.map((c) => settle(probeOft(c, address)))])
+  let agreed = false
+  for (const s of others) {
+    if (s.ok) {
+      if (!sameOftInfo(p.info, s.r.info)) throw new ProbeError('rpc_mismatch', 'RPC providers disagree about this contract')
+      agreed = true
+    } else if (s.e instanceof ProbeError && (s.e.code === 'not_oft' || s.e.code === 'not_contract' || s.e.code === 'rate_mismatch')) {
+      // A definite "not an OFT" from another provider is a disagreement, not an outage.
+      throw new ProbeError('rpc_mismatch', `another RPC: ${s.e.code}`)
     }
-    return { ...p, crossChecked: false }
   }
-  if (!sameOftInfo(p.info, s.r.info)) throw new ProbeError('rpc_mismatch', 'RPC providers disagree about this contract')
-  return { ...p, crossChecked: true }
+  return { ...p, crossChecked: agreed }
 }
 
 export function sameTx(a: TxPrefill, b: TxPrefill): boolean {
@@ -71,15 +75,15 @@ export function sameTx(a: TxPrefill, b: TxPrefill): boolean {
 }
 
 export async function decodeTxQuorum(pair: Pair, hash: string): Promise<Quorum<TxPrefill>> {
-  const [p, s] = await Promise.all([
-    decodeTx(pair.primary, hash),
-    pair.secondary ? decodeTx(pair.secondary, hash).then((r) => ({ ok: true as const, r })).catch((e: unknown) => ({ ok: false as const, e })) : Promise.resolve(undefined),
-  ])
-  if (!s) return { ...p, crossChecked: false }
-  if (!s.ok) {
-    if (s.e instanceof DecodeTxError && s.e.code === 'not_send') throw new DecodeTxError('rpc_mismatch', 'second RPC returned a different transaction')
-    return { ...p, crossChecked: false }
+  const [p, ...others] = await Promise.all([decodeTx(pair.primary, hash), ...pair.secondaries.map((c) => settle(decodeTx(c, hash)))])
+  let agreed = false
+  for (const s of others) {
+    if (s.ok) {
+      if (!sameTx(p, s.r)) throw new DecodeTxError('rpc_mismatch', 'RPC providers disagree about this transaction')
+      agreed = true
+    } else if (s.e instanceof DecodeTxError && s.e.code === 'not_send') {
+      throw new DecodeTxError('rpc_mismatch', 'another RPC returned a different transaction')
+    }
   }
-  if (!sameTx(p, s.r)) throw new DecodeTxError('rpc_mismatch', 'RPC providers disagree about this transaction')
-  return { ...p, crossChecked: true }
+  return { ...p, crossChecked: agreed }
 }

@@ -66,13 +66,9 @@ export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: nu
   return useQuery({
     queryKey: ['peerBack', srcEid, oft, dstEid, peer],
     queryFn: async () => {
-      const a = await checkPeerBack(pair!.primary, peer!, srcEid, oft!)
-      if (a.status === 'mismatch' || !pair!.secondary) return a
-      // Confirm an "ok" (or an outage) with the second provider; mismatch anywhere wins.
-      const b = await checkPeerBack(pair!.secondary, peer!, srcEid, oft!)
-      if (b.status === 'mismatch') return b
-      if (a.status === 'unavailable') return b
-      return a
+      // Ask every provider; a mismatch anywhere wins, then any definite "ok", else unavailable.
+      const all = await Promise.all([pair!.primary, ...pair!.secondaries].map((c) => checkPeerBack(c, peer!, srcEid, oft!)))
+      return all.find((r) => r.status === 'mismatch') ?? all.find((r) => r.status === 'ok') ?? all[0]!
     },
     enabled: !!pair && !!oft && !!peer && dstEid !== undefined,
     staleTime: 5 * 60_000,
