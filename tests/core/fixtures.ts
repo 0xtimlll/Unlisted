@@ -110,6 +110,8 @@ export function goodInput(over: Partial<GuardInput> = {}): GuardInput {
     selfCheck: { ok: true },
     noExecutorGasAccepted: false,
     flags: [],
+    peerBack: { status: 'ok' },
+    peerBackUnavailableAccepted: false,
     ...over,
   }
 }

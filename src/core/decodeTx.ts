@@ -1,13 +1,15 @@
 /**
  * §5.4: turn someone else's `send` transaction into a form prefill.
- * We copy ONLY the contract, dstEid and extraOptions. Recipient, refund address
- * and fee are never copied — they are always recomputed for the connected wallet.
+ * We copy ONLY the contract, dstEid and a sanitized extraOptions (receive gas only —
+ * see options.ts for why). Recipient, refund address and fee are never copied — they are
+ * always recomputed for the connected wallet.
  */
 import { getAddress, type Address, type Hash, type Hex } from 'viem'
 import type { ReadClient } from './client'
+import { sanitizeOptions, type OptionItem } from './options'
 import { decodeSendCalldata } from './plan'
 
-export type DecodeTxErrorCode = 'invalid_hash' | 'tx_not_found' | 'not_send' | 'no_to'
+export type DecodeTxErrorCode = 'invalid_hash' | 'tx_not_found' | 'not_send' | 'no_to' | 'rpc_mismatch'
 
 export class DecodeTxError extends Error {
   constructor(
@@ -23,7 +25,12 @@ export type TxPrefill = {
   /** tx.to — the OFT contract. Must still pass probeOft(). */
   oft: Address
   dstEid: number
+  /** Sanitized: only an lzReceive gas hint survives, or '0x'. */
   extraOptions: Hex
+  /** Options present in the sample that were NOT copied (nativeDrop, compose, …). */
+  droppedOptions: OptionItem[]
+  /** The sample's options could not even be decoded; nothing was copied. */
+  optionsMalformed: boolean
   /** For display only ("this tx sent X"). Never used to build our plan. */
   observed: {
     from: Address
@@ -58,10 +65,13 @@ export async function decodeTx(client: ReadClient, txHash: string): Promise<TxPr
     throw new DecodeTxError('not_send', e instanceof Error ? e.message : String(e))
   }
 
+  const opts = sanitizeOptions(decoded.sendParam.extraOptions)
   return {
     oft: getAddress(tx.to),
     dstEid: decoded.sendParam.dstEid,
-    extraOptions: decoded.sendParam.extraOptions,
+    extraOptions: opts.options,
+    droppedOptions: opts.dropped,
+    optionsMalformed: opts.malformed,
     observed: {
       from: getAddress(tx.from),
       amountLD: decoded.sendParam.amountLD,

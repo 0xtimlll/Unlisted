@@ -94,7 +94,7 @@ export function Details(p: { src: ChainDef; info: OftInfo; plan: SendPlan | unde
             <div className="grid grid-cols-2 gap-3 pb-2">
               <label className="block text-xs">
                 <span className="text-muted">{d.step2.slippage}</span>
-                <Input type="number" min={0} max={10000} step={1} value={p.state.slippageBps} onChange={(e) => set({ slippageBps: clampInt(e.target.value, 0, 10000) })} className="mono mt-1 h-9" />
+                <Input type="number" min={0} max={500} step={1} value={p.state.slippageBps} onChange={(e) => set({ slippageBps: clampInt(e.target.value, 0, 500) })} className="mono mt-1 h-9" />
               </label>
               <label className="block text-xs">
                 <span className="text-muted">{d.step2.feeBuffer}</span>
@@ -115,14 +115,31 @@ export function Details(p: { src: ChainDef; info: OftInfo; plan: SendPlan | unde
 }
 
 /** The 16 guards, compact. Only failing ones and the six "meaningful" passes are shown. */
-export function Checks(p: { report: GuardReport; noGasAccepted: boolean; onNoGasAccepted: (v: boolean) => void; show: boolean }) {
+export function Checks(p: {
+  report: GuardReport
+  noGasAccepted: boolean
+  onNoGasAccepted: (v: boolean) => void
+  peerBackAccepted: boolean
+  onPeerBackAccepted: (v: boolean) => void
+  show: boolean
+}) {
   const d = useDict()
   const [open, setOpen] = useState(false)
   const failing = p.report.results.filter((r) => !r.ok)
   const passing = p.report.results.filter((r) => r.ok && okLabel(r.id, d))
+  const peerBackUnavailable = p.report.results.some((r) => !r.ok && r.code === 'peer_back_unavailable_unconfirmed') || p.peerBackAccepted
   if (!p.show) return null
   return (
     <div className="px-1">
+      {peerBackUnavailable ? (
+        <div className="mb-2 space-y-2">
+          <Alert kind="warn">{d.step3.warnPeerBack}</Alert>
+          <label className="flex items-start gap-2 text-xs text-ink">
+            <input type="checkbox" className="mt-0.5" checked={p.peerBackAccepted} onChange={(e) => p.onPeerBackAccepted(e.target.checked)} />
+            {d.step3.confirmPeerBack}
+          </label>
+        </div>
+      ) : null}
       {p.report.needsNoGasConfirmation ? (
         <div className="mb-2 space-y-2">
           <Alert kind="warn">{d.step3.warnNoGas}</Alert>
@@ -232,6 +249,10 @@ function okLabel(id: number, d: ReturnType<typeof useDict>): string | null {
       return d.guard.ok_sim
     case 14:
       return d.guard.ok_selfcheck
+    case 17:
+      return d.guard.ok_peer_back
+    case 18:
+      return d.guard.ok_options
     default:
       return null
   }

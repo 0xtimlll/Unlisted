@@ -1,17 +1,17 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Address, type Hash } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import type { ChainDef } from '@/core/chains'
+import { byEid, type ChainDef, type ChainKey } from '@/core/chains'
 import type { ReadClient } from '@/core/client'
-import { decodeTx } from '@/core/decodeTx'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
 import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
-import { probeOft } from '@/core/probe'
+import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
 import { fetchStatus, POLL_INTERVAL_MS, POLL_TIMEOUT_MS, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
+import { checkPeerBack, findVerified } from '@/core/verify'
 
 export function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value)
@@ -27,25 +27,56 @@ export function useReadClient(chain: ChainDef): ReadClient | undefined {
   return usePublicClient({ chainId: chain.chainId }) as ReadClient | undefined
 }
 
-export function useProbe(chain: ChainDef, address: string | null) {
-  const client = useReadClient(chain)
+/**
+ * Probe on two independent RPCs (core/quorum). Adds the "unverified contract" and
+ * "not cross-checked" flags so the UI can show them next to the other yellow flags.
+ */
+export function useProbe(chain: ChainDef, address: string | null, customRpc: string | undefined) {
+  const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
   return useQuery({
-    queryKey: ['probe', chain.key, address?.toLowerCase()],
-    queryFn: () => probeOft(client!, address!),
-    enabled: !!client && !!address,
+    queryKey: ['probe', chain.key, address?.toLowerCase(), customRpc ?? ''],
+    queryFn: async () => {
+      const r = await probeOftQuorum(pair, address!)
+      const flags = [...r.flags]
+      if (!findVerified(chain.key, r.info.oft)) flags.push('not_in_verified_list')
+      if (!r.crossChecked) flags.push('not_cross_checked')
+      return { ...r, flags }
+    },
+    enabled: !!address,
     staleTime: 60_000,
     retry: false,
   })
 }
 
-export function useDecode(chain: ChainDef, hash: string | null) {
-  const client = useReadClient(chain)
+export function useDecode(chain: ChainDef, hash: string | null, customRpc: string | undefined) {
+  const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
   return useQuery({
-    queryKey: ['decode', chain.key, hash?.toLowerCase()],
-    queryFn: () => decodeTx(client!, hash!),
-    enabled: !!client && !!hash,
+    queryKey: ['decode', chain.key, hash?.toLowerCase(), customRpc ?? ''],
+    queryFn: () => decodeTxQuorum(pair, hash!),
+    enabled: !!hash,
     staleTime: Infinity,
     retry: false,
+  })
+}
+
+/** Guard 17: does the destination-side peer name our OFT back? Read on the destination chain. */
+export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: number | undefined, peer: Address | undefined, customRpc: Partial<Record<ChainKey, string>>) {
+  const dst = dstEid !== undefined ? byEid(dstEid) : undefined
+  const pair = useMemo(() => (dst ? clientPair(dst, customRpc[dst.key]) : undefined), [dst, customRpc])
+  return useQuery({
+    queryKey: ['peerBack', srcEid, oft, dstEid, peer],
+    queryFn: async () => {
+      const a = await checkPeerBack(pair!.primary, peer!, srcEid, oft!)
+      if (a.status === 'mismatch' || !pair!.secondary) return a
+      // Confirm an "ok" (or an outage) with the second provider; mismatch anywhere wins.
+      const b = await checkPeerBack(pair!.secondary, peer!, srcEid, oft!)
+      if (b.status === 'mismatch') return b
+      if (a.status === 'unavailable') return b
+      return a
+    },
+    enabled: !!pair && !!oft && !!peer && dstEid !== undefined,
+    staleTime: 5 * 60_000,
+    retry: 1,
   })
 }
 

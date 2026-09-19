@@ -4,6 +4,8 @@ import { oftAbi } from '@/core/abi'
 import { ZERO_ADDRESS } from '@/core/encoding'
 import {
   approvePlan,
+  g17PeerBack,
+  g18Options,
   g1Chain,
   g2Peer,
   g3Recipient,
@@ -19,11 +21,13 @@ import {
   g13Simulation,
   g14SelfCheck,
   g15ExecutorGas,
+  MAX_SLIPPAGE_BPS,
   runGuards,
   selfCheck,
   type GuardInput,
   type GuardResult,
 } from '@/core/guards'
+import { computeAmounts } from '@/core/plan'
 import { assembleSendArgs, encodeSendCalldata } from '@/core/plan'
 import {
   ENDPOINT_HYPER,
@@ -46,8 +50,8 @@ const code = (r: GuardResult) => (r.ok ? 'ok' : r.code)
 describe('runGuards on a good snapshot', () => {
   it('passes everything and enables Send', () => {
     const rep = runGuards(goodInput())
-    expect(rep.results).toHaveLength(16)
-    expect(rep.results.map(code)).toEqual(Array(16).fill('ok'))
+    expect(rep.results).toHaveLength(18)
+    expect(rep.results.map(code)).toEqual(Array(18).fill('ok'))
     expect(rep.canSend).toBe(true)
     expect(rep.warnings).toEqual([])
     expect(rep.needsNoGasConfirmation).toBe(false)
@@ -72,6 +76,7 @@ describe('runGuards on a good snapshot', () => {
         gasCostWei: undefined,
         simulation: undefined,
         selfCheck: undefined,
+        peerBack: undefined,
       }),
     )
     expect(rep.canSend).toBe(false)
@@ -192,6 +197,25 @@ describe('6. minAmountLD <= amountLD, both multiples of rate', () => {
   })
   it('passes for computed amounts', () => {
     expect(code(g6MinAmount(goodInput()))).toBe('ok')
+  })
+})
+
+describe('6b. slippage cap', () => {
+  it('5% passes, 5.01% fails, 100% fails', () => {
+    const info = treadOftInfo()
+    const mk = (bps: number) => {
+      const p = treadPlan()
+      p.amounts = computeAmounts('100', info.decimals, info.conversionRate, bps)
+      return p
+    }
+    expect(code(g6MinAmount(goodInput({ plan: mk(MAX_SLIPPAGE_BPS) })))).toBe('ok')
+    expect(code(g6MinAmount(goodInput({ plan: mk(MAX_SLIPPAGE_BPS + 1) })))).toBe('slippage_too_high')
+    expect(code(g6MinAmount(goodInput({ plan: mk(10000) })))).toBe('slippage_too_high')
+  })
+  it('a hand-built plan with minAmountLD = 0 is rejected', () => {
+    const p = treadPlan()
+    p.amounts = { ...p.amounts, minAmountLD: 0n }
+    expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('slippage_too_high')
   })
 })
 
@@ -370,6 +394,38 @@ describe('15. executor gas warning', () => {
     const info = treadOftInfo({ enforced: {} })
     const plan = treadPlan({ extraOptions: '0x0003010011010000000000000000000000000000ea60' })
     expect(code(g15ExecutorGas(goodInput({ info, plan })))).toBe('ok')
+  })
+})
+
+describe('17. destination peer points back', () => {
+  it('unknown → blocks (still loading)', () => {
+    expect(code(g17PeerBack(goodInput({ peerBack: undefined })))).toBe('peer_back_unknown')
+  })
+  it('mismatch → hard block, no override', () => {
+    const r = g17PeerBack(goodInput({ peerBack: { status: 'mismatch', theirPeer: `0x${'0'.repeat(64)}` }, peerBackUnavailableAccepted: true }))
+    expect(code(r)).toBe('peer_back_mismatch')
+  })
+  it('unavailable → blocks until explicitly accepted', () => {
+    const u = { status: 'unavailable' as const, reason: 'rpc down' }
+    expect(code(g17PeerBack(goodInput({ peerBack: u })))).toBe('peer_back_unavailable_unconfirmed')
+    expect(code(g17PeerBack(goodInput({ peerBack: u, peerBackUnavailableAccepted: true })))).toBe('ok')
+  })
+  it('ok passes; acceptance flag cannot turn a mismatch into ok', () => {
+    expect(code(g17PeerBack(goodInput()))).toBe('ok')
+    expect(runGuards(goodInput({ peerBack: { status: 'mismatch', theirPeer: '0x00' }, peerBackUnavailableAccepted: true })).canSend).toBe(false)
+  })
+})
+
+describe('18. extraOptions carry no value/calls', () => {
+  const NATIVE_DROP = '0x00030100310200000000000000000000000000000001000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0' as const
+  it('empty and plain gas pass', () => {
+    expect(code(g18Options(goodInput()))).toBe('ok')
+    expect(code(g18Options(goodInput({ plan: treadPlan({ extraOptions: '0x0003010011010000000000000000000000000000ea60' }) })))).toBe('ok')
+  })
+  it('nativeDrop, malformed → blocked', () => {
+    expect(code(g18Options(goodInput({ plan: treadPlan({ extraOptions: NATIVE_DROP }) })))).toBe('dangerous_options')
+    expect(code(g18Options(goodInput({ plan: treadPlan({ extraOptions: '0x0003ff' }) })))).toBe('dangerous_options')
+    expect(runGuards(goodInput({ plan: treadPlan({ extraOptions: NATIVE_DROP }) })).canSend).toBe(false)
   })
 })
 

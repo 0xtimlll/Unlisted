@@ -24,4 +24,4 @@ export type OftInfo = {
 }
 
 /** Soft warnings (§6.16). Shown before signing, never block. */
-export type SuspiciousFlag = 'owner_is_eoa' | 'behind_proxy' | 'not_verified'
+export type SuspiciousFlag = 'owner_is_eoa' | 'behind_proxy' | 'not_verified' | 'not_in_verified_list' | 'not_cross_checked'

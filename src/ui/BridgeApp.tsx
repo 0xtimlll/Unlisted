@@ -11,6 +11,7 @@ import { checksum } from '@/core/encoding'
 import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
+import { findVerified } from '@/core/verify'
 import { useDict, type Dict } from '@/i18n'
 import { Footer } from './components/Footer'
 import { FromBox, ToBox, type DestinationState } from './components/FromTo'
@@ -20,7 +21,7 @@ import { Checks, Cta, Details, type CtaState } from './components/Review'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TokenStep, type TokenMode } from './components/TokenStep'
 import { Tracker } from './components/Tracker'
-import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePlan, useProbe, useTokenBalance } from './hooks'
+import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useTokenBalance } from './hooks'
 import { pushHistory, pushRecent, type Stored, type Theme } from './storage'
 
 const EMPTY_DEST: DestinationState = {
@@ -35,7 +36,7 @@ const EMPTY_DEST: DestinationState = {
 }
 
 /** Guards that do not depend on simulation/gas; the check query waits for these. */
-const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15])
+const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15, 17, 18])
 
 type Sent = { txHash: Hash; dstEid: number; startedAt: number }
 
@@ -53,6 +54,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   const [decodeTarget, setDecodeTarget] = useState<Hash | null>(null)
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
   const [noGasAccepted, setNoGasAccepted] = useState(false)
+  const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [sent, setSent] = useState<Sent | null>(null)
   const [txError, setTxError] = useState('')
 
@@ -68,6 +70,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
     setDecodeTarget(null)
     setDest(EMPTY_DEST)
     setNoGasAccepted(false)
+    setPeerBackAccepted(false)
     setSent(null)
     setTxError('')
   }, [])
@@ -78,8 +81,8 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   }
 
   // ---- step 1: probe / decode -------------------------------------------------
-  const probe = useProbe(src, probeTarget)
-  const decode = useDecode(src, decodeTarget)
+  const probe = useProbe(src, probeTarget, stored.customRpc[src.key])
+  const decode = useDecode(src, decodeTarget, stored.customRpc[src.key])
   const info = probe.data?.info
   const flags = useMemo(() => probe.data?.flags ?? [], [probe.data])
 
@@ -124,6 +127,9 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
     extraOptions: dest.extraOptions,
   })
 
+  const route = info && dest.dstEid !== undefined ? info.routes.find((r) => r.eid === dest.dstEid) : undefined
+  const peerBack = usePeerBack(src.eid, info?.oft, dest.dstEid, route?.peer, stored.customRpc)
+
   const tokenBalance = useTokenBalance(src, info?.token, wallet)
   const allowance = useAllowance(src, info?.approvalRequired ? info.token : undefined, wallet, info?.oft)
   const nativeBalance = useNativeBalance(src, wallet)
@@ -148,8 +154,10 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
       selfCheck: undefined,
       noExecutorGasAccepted: noGasAccepted,
       flags,
+      peerBack: peerBack.data,
+      peerBackUnavailableAccepted: peerBackAccepted,
     }),
-    [wallet, walletChainId, src.chainId, info, plan.data, dest.recipientCustom, recipientConfirmed, tokenBalance.data, nativeBalance.data?.value, allowance.data, noGasAccepted, flags],
+    [wallet, walletChainId, src.chainId, info, plan.data, dest.recipientCustom, recipientConfirmed, tokenBalance.data, nativeBalance.data?.value, allowance.data, noGasAccepted, flags, peerBack.data, peerBackAccepted],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -290,6 +298,9 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                 flags={flags}
                 error={probe.error ? describeError(d, probe.error) : decode.error ? describeError(d, decode.error) : ''}
                 decodedHint={!!decode.data}
+                droppedOptions={decode.data?.droppedOptions ?? []}
+                optionsMalformed={decode.data?.optionsMalformed ?? false}
+                verified={info ? findVerified(src.key, info.oft) : undefined}
                 onProbe={(a) => {
                   setDecodeTarget(null)
                   setDest(EMPTY_DEST)
@@ -320,7 +331,14 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                   </div>
                   <ToBox info={info} wallet={wallet} plan={plan.data} state={dest} onChange={setDest} />
                   <Details src={src} info={info} plan={plan.data} state={dest} onChange={setDest} />
-                  <Checks report={report} noGasAccepted={noGasAccepted} onNoGasAccepted={setNoGasAccepted} show={!!plan.data} />
+                  <Checks
+                    report={report}
+                    noGasAccepted={noGasAccepted}
+                    onNoGasAccepted={setNoGasAccepted}
+                    peerBackAccepted={peerBackAccepted}
+                    onPeerBackAccepted={setPeerBackAccepted}
+                    show={!!plan.data}
+                  />
                 </>
               ) : null}
 

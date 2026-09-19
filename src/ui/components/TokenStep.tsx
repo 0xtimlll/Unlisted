@@ -3,8 +3,10 @@ import { useState } from 'react'
 import { isAddress, type Address as Addr } from 'viem'
 import { byEid, type ChainDef } from '@/core/chains'
 import { isTxHash } from '@/core/decodeTx'
+import type { OptionItem } from '@/core/options'
 import type { OftInfo, SuspiciousFlag } from '@/core/types'
-import { useDict } from '@/i18n'
+import type { VerifiedContract } from '@/core/verify'
+import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import { ChainIcon } from './ChainIcon'
 import { Alert, Box, BoxLabel, Button, ChainDot, Disclosure, Row, Spinner, Tabs } from './ui'
@@ -23,6 +25,9 @@ export function TokenStep(p: {
   flags: SuspiciousFlag[]
   error: string
   decodedHint: boolean
+  droppedOptions: OptionItem[]
+  optionsMalformed: boolean
+  verified: VerifiedContract | undefined
 }) {
   const d = useDict()
   const [value, setValue] = useState('')
@@ -102,6 +107,25 @@ export function TokenStep(p: {
           <Alert kind="info">{d.step1.decodedHint}</Alert>
         </div>
       ) : null}
+      {p.optionsMalformed ? (
+        <div className="mt-2">
+          <Alert kind="warn">{d.step3.optionsMalformed}</Alert>
+        </div>
+      ) : null}
+      {p.droppedOptions.length > 0 ? (
+        <div className="mt-2">
+          <Alert kind="error">
+            <div className="font-semibold">{d.step3.droppedOptions}</div>
+            <ul className="list-disc pl-5">
+              {p.droppedOptions.map((o, i) => (
+                <li key={i} className="mono text-xs">
+                  {describeOption(o, d)}
+                </li>
+              ))}
+            </ul>
+          </Alert>
+        </div>
+      ) : null}
 
       {p.info ? (
         <div className="mt-3">
@@ -111,6 +135,13 @@ export function TokenStep(p: {
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold text-ink">{p.info.symbol || '—'}</span>
                 <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-ink">{p.info.kind}</span>
+                {p.verified ? (
+                  <span className="rounded-full bg-ok/15 px-2 py-0.5 text-[11px] font-semibold text-ok" title={p.verified.label}>
+                    ✓ {d.card.verified}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-semibold text-warn">{d.card.unverified}</span>
+                )}
                 {p.info.approvalRequired ? <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-semibold text-warn">approve</span> : null}
               </div>
               <div className="truncate text-xs text-muted">
@@ -136,6 +167,21 @@ export function TokenStep(p: {
       ) : null}
     </Box>
   )
+}
+
+function describeOption(o: OptionItem, d: ReturnType<typeof useDict>): string {
+  switch (o.kind) {
+    case 'nativeDrop':
+      return fmt(d.step3.opt_nativeDrop, { amount: o.amount.toString(), receiver: `0x${o.receiver.slice(-40)}` })
+    case 'lzCompose':
+      return d.step3.opt_lzCompose
+    case 'lzReceive':
+      return d.step3.opt_lzReceiveValue
+    case 'dvn':
+      return d.step3.opt_dvn
+    default:
+      return d.step3.opt_unknown
+  }
 }
 
 function OftDetails({ chain, info }: { chain: ChainDef; info: OftInfo }) {

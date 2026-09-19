@@ -4,10 +4,16 @@
  * returns ok. Text lives in i18n; guards return codes only.
  */
 import { isAddress, type Address, type Hex } from 'viem'
+import { applyBps } from './amounts'
 import { byChainId } from './chains'
 import { isZeroBytes32, sameAddress, ZERO_ADDRESS } from './encoding'
+import { hasDangerousOptions } from './options'
 import { assembleSendArgs, decodeSendCalldata, type SendPlan } from './plan'
 import type { OftInfo, SuspiciousFlag } from './types'
+import type { PeerBackResult } from './verify'
+
+/** Hard cap on slippage: below this floor a high-fee or hostile OFT could keep most of the amount. */
+export const MAX_SLIPPAGE_BPS = 500
 
 export type GuardCode =
   | 'wallet_not_connected'
@@ -23,6 +29,7 @@ export type GuardCode =
   | 'balance_unknown'
   | 'insufficient_balance'
   | 'min_gt_amount'
+  | 'slippage_too_high'
   | 'not_multiple_of_rate'
   | 'fee_mismatch'
   | 'lz_token_fee_nonzero'
@@ -40,6 +47,10 @@ export type GuardCode =
   | 'selfcheck_missing'
   | 'selfcheck_failed'
   | 'no_executor_gas_unconfirmed'
+  | 'peer_back_unknown'
+  | 'peer_back_mismatch'
+  | 'peer_back_unavailable_unconfirmed'
+  | 'dangerous_options'
 
 export type GuardResult =
   | { id: number; ok: true }
@@ -73,6 +84,10 @@ export type GuardInput = {
   /** User confirmed the "executor may get no gas" warning (§6.15). */
   noExecutorGasAccepted: boolean
   flags: readonly SuspiciousFlag[]
+  /** Result of checkPeerBack() for plan.dstEid, once known. */
+  peerBack: PeerBackResult | undefined
+  /** User accepted that the back-link could not be verified (RPC down), see guard 17. */
+  peerBackUnavailableAccepted: boolean
 }
 
 export type GuardReport = {
@@ -148,6 +163,7 @@ export function g6MinAmount(i: GuardInput): GuardResult {
   if (!i.info) return fail(6, 'oft_missing')
   const { amountLD, minAmountLD } = i.plan.amounts
   if (minAmountLD > amountLD) return fail(6, 'min_gt_amount')
+  if (minAmountLD < applyBps(amountLD, 10000 - MAX_SLIPPAGE_BPS)) return fail(6, 'slippage_too_high')
   const rate = i.info.conversionRate
   if (rate <= 0n) return fail(6, 'not_multiple_of_rate', 'rate <= 0')
   if (amountLD % rate !== 0n) return fail(6, 'not_multiple_of_rate', 'amountLD')
@@ -254,6 +270,24 @@ export function g16Suspicious(i: GuardInput): { result: GuardResult; warnings: S
   return { result: ok(16), warnings: [...i.flags] }
 }
 
+// 17. the destination peer names our OFT as its peer (defeats look-alike / fake adapters)
+export function g17PeerBack(i: GuardInput): GuardResult {
+  if (!i.plan) return fail(17, 'plan_missing')
+  if (!i.peerBack) return fail(17, 'peer_back_unknown')
+  if (i.peerBack.status === 'mismatch') return fail(17, 'peer_back_mismatch', i.peerBack.theirPeer)
+  if (i.peerBack.status === 'unavailable' && !i.peerBackUnavailableAccepted) {
+    return fail(17, 'peer_back_unavailable_unconfirmed', i.peerBack.reason)
+  }
+  return ok(17)
+}
+
+// 18. extraOptions never carry value or calls (nativeDrop / compose / receive value)
+export function g18Options(i: GuardInput): GuardResult {
+  if (!i.plan) return fail(18, 'plan_missing')
+  if (hasDangerousOptions(i.plan.extraOptions)) return fail(18, 'dangerous_options')
+  return ok(18)
+}
+
 export function runGuards(i: GuardInput): GuardReport {
   const g16 = g16Suspicious(i)
   const results: GuardResult[] = [
@@ -273,6 +307,8 @@ export function runGuards(i: GuardInput): GuardReport {
     g14SelfCheck(i),
     g15ExecutorGas(i),
     g16.result,
+    g17PeerBack(i),
+    g18Options(i),
   ]
   return {
     results,

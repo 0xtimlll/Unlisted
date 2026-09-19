@@ -53,7 +53,7 @@ async function fullCheck(f: Fork, info: OftInfo, plan: SendPlan, allowance: bigi
     walletAddress: USER, walletChainId: f.chain.chainId, srcChainId: f.chain.chainId, info, plan,
     recipientIsCustom: false, customRecipientConfirmed: false,
     tokenBalance, nativeBalance, allowance, gasCostWei,
-    simulation, selfCheck: sc, noExecutorGasAccepted: true, flags: [],
+    simulation, selfCheck: sc, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
   }
   return { report: runGuards(input), simulation, calldata, args }
 }

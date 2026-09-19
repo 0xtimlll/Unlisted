@@ -40,7 +40,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 1,
     eid: 30101,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://ethereum-rpc.publicnode.com', 'https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'],
+    rpcUrls: ['https://ethereum-rpc.publicnode.com', 'https://cloudflare-eth.com', 'https://eth.drpc.org', 'https://1rpc.io/eth'],
     explorerTxUrl: 'https://etherscan.io/tx/',
     explorerAddrUrl: 'https://etherscan.io/address/',
     feeStepWei: 10n ** 14n, // 0.0001 ETH
@@ -100,7 +100,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 137,
     eid: 30109,
     nativeSymbol: 'POL',
-    rpcUrls: ['https://polygon-rpc.com', 'https://polygon-bor-rpc.publicnode.com'],
+    rpcUrls: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org', 'https://1rpc.io/matic'],
     explorerTxUrl: 'https://polygonscan.com/tx/',
     explorerAddrUrl: 'https://polygonscan.com/address/',
     feeStepWei: 10n ** 16n, // 0.01 POL

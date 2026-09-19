@@ -9,7 +9,11 @@ Anything else claiming to be this app is not this app.
 
 - Probes an OFT contract on-chain (`token`, `approvalRequired`, `sharedDecimals`, `peers`, `enforcedOptions`, …) in one multicall. Contracts that don't answer like an OFT V2 are rejected.
 - Builds `send(SendParam, MessagingFee, refundAddress)` from the quote (`quoteOFT` + `quoteSend`), with a fee buffer that is refunded by the contract.
-- Runs 16 safety checks before the Send button is enabled (chain match, peer exists, balance, allowance, `fee.nativeFee === msg.value`, simulation, and a self-check that decodes the calldata back and compares it with what you see on screen).
+- Runs 18 safety checks before the Send button is enabled (chain match, peer exists, balance, allowance, `fee.nativeFee === msg.value`, simulation, and a self-check that decodes the calldata back and compares it with what you see on screen).
+- **Defends against look-alike contracts:** the destination-side peer must name your contract back (`peers(srcEid)` on the peer, read on the destination chain) — a fake adapter can point at the real OFT, but cannot make the real OFT point at it. Contracts from the projects' official docs get a *Verified* badge ([`src/core/verify.ts`](src/core/verify.ts)); anything else is flagged.
+- **Cross-checks on two RPC providers:** contract facts (`token`, `approvalRequired`, `peers`, …) and the sample transaction's `to`/calldata are read from two independent RPCs; disagreement blocks ([`src/core/quorum.ts`](src/core/quorum.ts)).
+- **Sanitizes sample-transaction options:** only a receive-gas hint is copied from someone else's `extraOptions`; `nativeDrop` (native coin to an arbitrary address), `lzCompose` and anything unknown is dropped and shown in red ([`src/core/options.ts`](src/core/options.ts)).
+- Slippage is capped at 5%; approve is always exact.
 - Tracks delivery via LayerZero Scan.
 
 ## What it does NOT do
@@ -17,13 +21,13 @@ Anything else claiming to be this app is not this app.
 - **Never holds keys, funds or sessions.** No backend, no database, no custom contracts. It is a static site.
 - **Never signs anything but `approve` and `send`.** No `eth_sign`, no `signTypedData`, no `permit`, no arbitrary calldata. Enforced by [`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs), which fails the build if any other write appears in `src/`.
 - **Never sends unlimited approvals.** Approve is always for exactly the amount being sent, to exactly the probed OFT address. Unlimited approve does not exist in this codebase.
-- **Never copies the recipient or refund address from a sample transaction.** Those are always your connected wallet unless you explicitly tick "sending to a different address" and re-type its last 6 characters.
+- **Never copies the recipient, refund address, fee or value-moving options from a sample transaction.** Recipient and refund are always your connected wallet unless you explicitly switch to a different address and re-type its last 6 characters.
 - **Never sends addresses or amounts anywhere** except to the RPC of the chain you're using and (tx hash only) to LayerZero Scan. No analytics. WalletConnect telemetry is disabled.
 - Does not take contract addresses or ABIs from explorers, token lists or any external API.
 
 ## Risks you still carry
 
-- **The contract is what you pasted.** The app verifies it *behaves* like an OFT; it cannot verify it is the *right* OFT. Check the address against the project's official sources.
+- **The contract is what you pasted.** The app verifies it *behaves* like an OFT and that its destination peer points back at it; it still cannot know it is the *right* OFT for the token you mean. Prefer *Verified* contracts and check the address against the project's official sources.
 - **Peers are trusted by the OFT, not by us.** If the OFT's owner points a peer at a malicious contract, tokens go there. The card shows the owner and yellow flags (EOA owner, proxy) — read them.
 - **Cross-chain messages can get stuck** (rate limits, missing executor gas, paused destinations). The app warns when `enforcedOptions` is empty and shows `quoteOFT` limits, but delivery is the contract's and LayerZero's job, not ours.
 - **Transactions are irreversible.** Test with a small amount first.
@@ -55,8 +59,8 @@ Build-time env — public values live in [`.env.production`](.env.production) (c
 
 ### Tests
 
-- `npm run test:unit` — pure logic in `src/core` (amounts, encoding, plan, all 16 guards).
-- `npm run test:integration` — read-only tests against public RPCs (TREAD, USDT0), plus **fork tests** that execute real `approve`/`send` on a local anvil fork. Fork tests need Foundry (`brew install foundry`) and are skipped without it.
+- `npm run test:unit` — pure logic in `src/core` (amounts, encoding, plan, options, quorum, all 18 guards).
+- `npm run test:integration` — read-only tests against public RPCs (TREAD, USDT0, peer back-links, two-RPC quorum, CORS/chainId health of every registry RPC), plus **fork tests** that execute real `approve`/`send` on a local anvil fork. Fork tests need Foundry (`brew install foundry`) and are skipped without it.
 - The `decodeTx` live test uses a real historical TREAD send by default; `OFT_TEST_SEND_TX=0x…` checks another one.
 
 ## Deploy

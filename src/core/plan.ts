@@ -13,6 +13,8 @@ import type { OftInfo } from './types'
 
 export const DEFAULT_SLIPPAGE_BPS = 0
 export const DEFAULT_FEE_BUFFER_BPS = 4000 // +40%
+/** Same cap as guards.MAX_SLIPPAGE_BPS (kept here to avoid an import cycle). */
+export const MAX_SLIPPAGE_BPS_PLAN = 500
 export const EMPTY_BYTES: Hex = '0x'
 
 export type SendParam = {
@@ -141,7 +143,7 @@ export type BuildSendPlanInput = {
 
 export class PlanError extends Error {
   constructor(
-    public readonly code: 'no_route' | 'amount_zero' | 'quote_failed',
+    public readonly code: 'no_route' | 'amount_zero' | 'quote_failed' | 'slippage_too_high',
     message?: string,
   ) {
     super(message ?? code)
@@ -160,6 +162,7 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
 
   const route = p.info.routes.find((r) => r.eid === p.dstEid)
   if (!route) throw new PlanError('no_route', `no peer for eid ${p.dstEid}`)
+  if (slippageBps > MAX_SLIPPAGE_BPS_PLAN) throw new PlanError('slippage_too_high', `${slippageBps} bps > ${MAX_SLIPPAGE_BPS_PLAN}`)
 
   const amounts = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
   if (amounts.amountLD <= 0n) throw new PlanError('amount_zero')

@@ -50,7 +50,7 @@ describe('HyperEVM / TREAD OFT', () => {
       walletAddress: USER, walletChainId: 999, srcChainId: 999, info, plan,
       recipientIsCustom: false, customRecipientConfirmed: false,
       tokenBalance: 10n ** 18n, nativeBalance: plan.value + 10n ** 16n, allowance: 0n, gasCostWei: 10n ** 15n,
-      simulation: { ok: true }, selfCheck: { ok: true }, noExecutorGasAccepted: true, flags: [],
+      simulation: { ok: true }, selfCheck: { ok: true }, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
     })
     expect(rep.results.filter((r) => !r.ok)).toEqual([])
   })
