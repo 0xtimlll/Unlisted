@@ -8,7 +8,7 @@ import { AmountError, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, type ChainKey } from '@/core/chains'
 import { DecodeTxError } from '@/core/decodeTx'
 import { checksum } from '@/core/encoding'
-import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
+import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
 import { findVerified } from '@/core/verify'
@@ -22,7 +22,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { TokenStep, type TokenMode } from './components/TokenStep'
 import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useTokenBalance } from './hooks'
-import { pushHistory, pushRecent, type Stored, type Theme } from './storage'
+import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored, type Theme } from './storage'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -38,7 +38,7 @@ const EMPTY_DEST: DestinationState = {
 /** Guards that do not depend on simulation/gas; the check query waits for these. */
 const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15, 17, 18])
 
-type Sent = { txHash: Hash; dstEid: number; startedAt: number }
+type Sent = { txHash: Hash; dstEid: number; startedAt: number; srcChain: ChainKey; restored: boolean }
 
 export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setStored: (s: Stored) => void; onTheme: (t: Theme) => void }) {
   const d = useDict()
@@ -55,7 +55,11 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
   const [noGasAccepted, setNoGasAccepted] = useState(false)
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
-  const [sent, setSent] = useState<Sent | null>(null)
+  // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
+  const [sent, setSent] = useState<Sent | null>(() => {
+    const a = activeTransfer(stored)
+    return a ? { txHash: a.txHash, dstEid: a.dstEid, startedAt: a.at, srcChain: a.srcChain, restored: true } : null
+  })
   const [txError, setTxError] = useState('')
 
   // Follow the wallet's chain when it is one we support.
@@ -226,7 +230,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
       },
       {
         onSuccess: (hash) => {
-          setSent({ txHash: hash, dstEid: p.dstEid, startedAt: Date.now() })
+          setSent({ txHash: hash, dstEid: p.dstEid, startedAt: Date.now(), srcChain: src.key, restored: false })
           setStored(pushHistory(stored, { srcChain: src.key, dstEid: p.dstEid, oft: p.oft, txHash: hash, at: Date.now() }))
         },
         onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)),
@@ -253,7 +257,9 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                 : { kind: 'quote' }
               : approveIntent
                 ? { kind: 'approve', intent: approveIntent }
-                : { kind: 'send', enabled: report.canSend, ...(firstFailing && !firstFailing.ok ? { reason: d.guard[firstFailing.code] } : {}) }
+                : !report.canSend && report.results.every((r) => r.ok || isPending(r))
+                  ? { kind: 'checking' }
+                  : { kind: 'send', enabled: report.canSend, ...(firstFailing && !firstFailing.ok ? { reason: d.guard[firstFailing.code] } : {}) }
 
   const approving = approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading)
   const busy = switching || approving || sendWrite.isPending
@@ -285,7 +291,15 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
       <main className="flex flex-1 flex-col items-center px-3 py-8 sm:py-14">
         <div className="w-full max-w-[408px] space-y-2">
           {sent ? (
-            <Tracker src={src} dstEid={sent.dstEid} txHash={sent.txHash} startedAt={sent.startedAt} onNew={reset} />
+            <Tracker
+              src={byKey(sent.srcChain)}
+              dstEid={sent.dstEid}
+              txHash={sent.txHash}
+              startedAt={sent.startedAt}
+              restored={sent.restored}
+              onFinal={(phase) => setStored(setHistoryStatus(stored, sent.txHash, phase))}
+              onNew={reset}
+            />
           ) : (
             <>
               <TokenStep
@@ -349,7 +363,11 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
           )}
 
           <div className="pt-4">
-            <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} />
+            <History
+              entries={stored.history}
+              onClear={() => setStored({ ...stored, history: [] })}
+              onTrack={(e: HistoryEntry) => setSent({ txHash: e.txHash, dstEid: e.dstEid, startedAt: e.at, srcChain: e.srcChain, restored: true })}
+            />
           </div>
         </div>
       </main>

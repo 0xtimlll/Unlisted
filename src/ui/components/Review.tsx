@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { formatAmount } from '@/core/amounts'
 import { byEid, type ChainDef } from '@/core/chains'
-import type { ApproveIntent, GuardReport } from '@/core/guards'
+import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
 import type { SendPlan } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
@@ -114,7 +114,7 @@ export function Details(p: { src: ChainDef; info: OftInfo; plan: SendPlan | unde
   )
 }
 
-/** The 16 guards, compact. Only failing ones and the six "meaningful" passes are shown. */
+/** The guards, compact. Real failures in red; reads still in flight in grey; passes in green. */
 export function Checks(p: {
   report: GuardReport
   noGasAccepted: boolean
@@ -125,10 +125,25 @@ export function Checks(p: {
 }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
-  const failing = p.report.results.filter((r) => !r.ok)
-  const passing = p.report.results.filter((r) => r.ok && okLabel(r.id, d))
-  const peerBackUnavailable = p.report.results.some((r) => !r.ok && r.code === 'peer_back_unavailable_unconfirmed') || p.peerBackAccepted
+  const results = p.report.results
+  const failing = results.filter((r) => !r.ok && !isPending(r))
+  const pending = results.filter((r) => isPending(r))
+  const shown = results.filter((r) => (r.ok ? okLabel(r.id, d) : true))
+  const passingShown = shown.filter((r) => r.ok).length
+  const totalShown = shown.length
+  const peerBackUnavailable = results.some((r) => !r.ok && r.code === 'peer_back_unavailable_unconfirmed') || p.peerBackAccepted
   if (!p.show) return null
+
+  const title = failing.length ? (
+    <span className="text-danger">✗ {fmt(d.ui.checksIssues, { n: failing.length })}</span>
+  ) : pending.length ? (
+    <span className="inline-flex items-center gap-2 text-muted">
+      <Spinner /> {fmt(d.ui.checksPending, { done: passingShown, total: totalShown })}
+    </span>
+  ) : (
+    <span className="text-ok">✓ {d.ui.checks}: {passingShown}/{totalShown}</span>
+  )
+
   return (
     <div className="px-1">
       {peerBackUnavailable ? (
@@ -158,23 +173,16 @@ export function Checks(p: {
           </Alert>
         </div>
       ) : null}
-      <Disclosure
-        title={
-          <span className={failing.length ? 'text-danger' : 'text-ok'}>
-            {failing.length ? `✗ ${d.ui.checks}: ${failing.length}` : `✓ ${d.ui.checks}: ${passing.length}/${passing.length}`}
-          </span>
-        }
-        open={open || failing.length > 0}
-        onToggle={() => setOpen(!open)}
-      >
+      <Disclosure title={title} open={open || failing.length > 0} onToggle={() => setOpen(!open)}>
         <ul className="grid gap-x-3 gap-y-0.5 text-xs sm:grid-cols-2">
-          {p.report.results.map((r) => {
+          {results.map((r) => {
             const label = r.ok ? okLabel(r.id, d) : d.guard[r.code]
             if (!label) return null
+            const pend = isPending(r)
             return (
-              <li key={r.id} className={r.ok ? 'text-ok' : 'text-danger'}>
-                {r.ok ? '✓' : '✗'} {label}
-                {!r.ok && r.detail && (r.code === 'simulation_failed' || r.code === 'selfcheck_failed') ? (
+              <li key={r.id} className={r.ok ? 'text-ok' : pend ? 'text-muted' : 'text-danger'}>
+                {r.ok ? '✓' : pend ? '○' : '✗'} {label}
+                {!r.ok && r.detail && (r.code === 'simulation_failed' || r.code === 'selfcheck_failed' || r.code === 'peer_back_mismatch') ? (
                   <span className="mono block pl-4 text-[11px] opacity-80">{r.detail}</span>
                 ) : null}
               </li>
@@ -194,6 +202,7 @@ export type CtaState =
   | { kind: 'amount' }
   | { kind: 'quote' }
   | { kind: 'approve'; intent: ApproveIntent }
+  | { kind: 'checking' }
   | { kind: 'send'; enabled: boolean; reason?: string }
 
 /** One big Relay-style button whose label is the next thing the user must do. */
@@ -213,10 +222,12 @@ export function Cta(p: { state: CtaState; info: OftInfo | undefined; busy: boole
               ? d.ui.cta_amount
               : s.kind === 'quote'
                 ? d.ui.cta_quote
-                : s.kind === 'approve'
+                : s.kind === 'checking'
+                  ? d.ui.cta_checking
+                  : s.kind === 'approve'
                   ? fmt(d.step3.approveBtn, { amount: formatAmount(s.intent.amount, p.info?.decimals ?? 18), symbol: p.info?.symbol ?? '' })
                   : d.ui.cta_send
-  const disabled = p.busy || s.kind === 'check' || s.kind === 'destination' || s.kind === 'amount' || s.kind === 'quote' || (s.kind === 'send' && !s.enabled)
+  const disabled = p.busy || s.kind === 'check' || s.kind === 'destination' || s.kind === 'amount' || s.kind === 'quote' || s.kind === 'checking' || (s.kind === 'send' && !s.enabled)
   return (
     <div className="space-y-2">
       {p.error ? <Alert kind="error">{p.error}</Alert> : null}
@@ -224,6 +235,10 @@ export function Cta(p: { state: CtaState; info: OftInfo | undefined; busy: boole
         {p.busy ? (
           <>
             <Spinner /> {p.busyLabel}
+          </>
+        ) : s.kind === 'checking' || s.kind === 'quote' ? (
+          <>
+            <Spinner /> {label}
           </>
         ) : (
           label

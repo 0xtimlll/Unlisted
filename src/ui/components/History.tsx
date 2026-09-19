@@ -5,7 +5,7 @@ import { useDict } from '@/i18n'
 import type { HistoryEntry } from '../storage'
 import { ChainIcon } from './ChainIcon'
 
-export function History({ entries, onClear }: { entries: HistoryEntry[]; onClear: () => void }) {
+export function History({ entries, onClear, onTrack }: { entries: HistoryEntry[]; onClear: () => void; onTrack: (e: HistoryEntry) => void }) {
   const d = useDict()
   if (entries.length === 0) return null
   return (
@@ -30,8 +30,14 @@ export function History({ entries, onClear }: { entries: HistoryEntry[]; onClear
                 <span className="block truncate text-ink">
                   {src.name} → {dst?.name ?? e.dstEid} <span className="mono text-muted">{e.oft.slice(0, 6)}…{e.oft.slice(-4)}</span>
                 </span>
-                <span className="block text-muted">{new Date(e.at).toLocaleString()}</span>
+                <span className="block text-muted">
+                  {new Date(e.at).toLocaleString()}
+                  {e.status === 'delivered' ? <span className="ml-2 text-ok">✓ {d.tracker.delivered}</span> : e.status === 'failed' ? <span className="ml-2 text-danger">{d.tracker.failed}</span> : null}
+                </span>
               </span>
+              <button type="button" onClick={() => onTrack(e)} className="rounded-full bg-surface-2 px-2 py-0.5 text-ink hover:bg-line">
+                {d.ui.track}
+              </button>
               <a href={src.explorerTxUrl + e.txHash} target="_blank" rel="noopener noreferrer" className="mono text-accent-ink hover:underline">
                 {e.txHash.slice(0, 8)}…
               </a>

@@ -52,6 +52,21 @@ export type GuardCode =
   | 'peer_back_unavailable_unconfirmed'
   | 'dangerous_options'
 
+/** Codes that mean "not known yet" (a read is in flight), not "wrong". The UI shows them muted. */
+export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
+  'plan_missing',
+  'balance_unknown',
+  'native_balance_unknown',
+  'allowance_unknown',
+  'simulation_missing',
+  'selfcheck_missing',
+  'peer_back_unknown',
+])
+
+export function isPending(r: GuardResult): boolean {
+  return !r.ok && PENDING_CODES.has(r.code)
+}
+
 export type GuardResult =
   | { id: number; ok: true }
   | { id: number; ok: false; code: GuardCode; detail?: string }

@@ -15,6 +15,8 @@ export type HistoryEntry = {
   txHash: Hash
   /** ms since epoch */
   at: number
+  /** Final LayerZero status once known; absent while in flight. */
+  status?: 'delivered' | 'failed'
 }
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -69,7 +71,8 @@ export function sanitize(raw: unknown): Stored {
           isKey(srcChain) && typeof dstEid === 'number' && typeof oft === 'string' && isAddress(oft)
           && typeof txHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(txHash) && typeof at === 'number'
         ) {
-          out.history.push({ srcChain, dstEid, oft, txHash: txHash as Hash, at })
+          const status = (e as Record<string, unknown>)['status']
+          out.history.push({ srcChain, dstEid, oft, txHash: txHash as Hash, at, ...(status === 'delivered' || status === 'failed' ? { status } : {}) })
         }
       }
       if (out.history.length >= MAX_HISTORY) break
@@ -115,4 +118,16 @@ export function pushRecent(s: Stored, chain: ChainKey, address: Address): Stored
 export function pushHistory(s: Stored, e: HistoryEntry): Stored {
   const rest = s.history.filter((h) => h.txHash.toLowerCase() !== e.txHash.toLowerCase())
   return { ...s, history: [e, ...rest].slice(0, MAX_HISTORY) }
+}
+
+export function setHistoryStatus(s: Stored, txHash: Hash, status: 'delivered' | 'failed'): Stored {
+  return { ...s, history: s.history.map((h) => (h.txHash.toLowerCase() === txHash.toLowerCase() ? { ...h, status } : h)) }
+}
+
+/** A transfer worth re-opening the tracker for after a reload: recent and not yet final. */
+export const ACTIVE_TRANSFER_MAX_AGE_MS = 45 * 60_000
+export function activeTransfer(s: Stored): HistoryEntry | undefined {
+  const h = s.history[0]
+  if (!h || h.status) return undefined
+  return Date.now() - h.at < ACTIVE_TRANSFER_MAX_AGE_MS ? h : undefined
 }
