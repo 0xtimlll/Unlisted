@@ -86,16 +86,17 @@ export async function probeOft(
   const owner = rOwner?.status === 'success' ? getAddress(rOwner.result) : undefined
   void rVersion // informational only
 
-  // ERC-20 metadata from the token (== oft for plain OFT).
+  // ERC-20 metadata from the token (== oft for plain OFT), plus what the adapter holds.
   const meta = await client.multicall({
     contracts: [
       { address: token, abi: erc20Abi, functionName: 'decimals' },
       { address: token, abi: erc20Abi, functionName: 'symbol' },
       { address: token, abi: erc20Abi, functionName: 'name' },
+      { address: token, abi: erc20Abi, functionName: 'balanceOf', args: [oft] },
     ],
     allowFailure: true,
   })
-  const [mDec, mSym, mName] = meta
+  const [mDec, mSym, mName, mLocked] = meta
   if (!mDec || mDec.status !== 'success') throw new ProbeError('token_unreadable', 'token.decimals() failed')
   const decimals = Number(mDec.result)
   const symbol = sanitizeLabel(mSym?.status === 'success' ? mSym.result : '')
@@ -122,11 +123,15 @@ export async function probeOft(
   })
 
   const flags = await suspiciousFlags(client, oft, owner)
+  // A lock/unlock adapter that holds nothing has never bridged anything — or is not the real one.
+  const lockedInAdapter = kind === 'OFTAdapter' && approvalRequired && mLocked?.status === 'success' ? mLocked.result : undefined
+  if (lockedInAdapter === 0n) flags.push('adapter_empty')
 
   return {
     info: {
       oft, kind, token, symbol, name, decimals, sharedDecimals, conversionRate,
       approvalRequired, endpoint, ...(owner ? { owner } : {}), routes, enforced,
+      ...(lockedInAdapter !== undefined ? { lockedInAdapter } : {}),
     },
     flags,
   }

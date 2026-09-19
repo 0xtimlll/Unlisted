@@ -39,10 +39,10 @@ export const en = {
     flag_owner_is_eoa: 'Owner is an EOA (a single key controls this contract)',
     flag_behind_proxy: 'Contract is behind a proxy (logic can be swapped)',
     flag_not_verified: 'Source not verified on the explorer',
-    flag_not_in_verified_list: 'Not in the verified list — compare the address with the project’s official sources',
+    flag_adapter_empty: 'This adapter holds no locked tokens — it has never bridged anything, or it is not the real one',
     flag_not_cross_checked: 'Could not cross-check on a second RPC provider',
-    verified: 'Verified',
-    unverified: 'Unverified',
+    adapterReminder: 'This is an adapter: your balance belongs to the token, not to the bridge. Make sure the adapter address comes from the project’s official sources.',
+    locked: 'Locked in adapter',
   },
   step2: {
     title: '2. Where and how much',

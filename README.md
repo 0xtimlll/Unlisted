@@ -10,7 +10,7 @@ Anything else claiming to be this app is not this app.
 - Probes an OFT contract on-chain (`token`, `approvalRequired`, `sharedDecimals`, `peers`, `enforcedOptions`, …) in one multicall. Contracts that don't answer like an OFT V2 are rejected.
 - Builds `send(SendParam, MessagingFee, refundAddress)` from the quote (`quoteOFT` + `quoteSend`), with a fee buffer that is refunded by the contract.
 - Runs 18 safety checks before the Send button is enabled (chain match, peer exists, balance, allowance, `fee.nativeFee === msg.value`, simulation, and a self-check that decodes the calldata back and compares it with what you see on screen).
-- **Defends against look-alike contracts:** the destination-side peer must name your contract back (`peers(srcEid)` on the peer, read on the destination chain) — a fake adapter can point at the real OFT, but cannot make the real OFT point at it. Contracts from the projects' official docs get a *Verified* badge ([`src/core/verify.ts`](src/core/verify.ts)); anything else is flagged.
+- **Defends against look-alike contracts:** the destination-side peer must name your contract back (`peers(srcEid)` on the peer, read on the destination chain) — a fake adapter can point at the real OFT, but cannot make the real OFT point at it ([`src/core/verify.ts`](src/core/verify.ts)). For lock/unlock adapters the app also shows how much the adapter holds and flags an empty one. For a plain OFT, seeing your balance under the contract *is* the proof: the contract is the token.
 - **Cross-checks on two RPC providers:** contract facts (`token`, `approvalRequired`, `peers`, …) and the sample transaction's `to`/calldata are read from two independent RPCs; disagreement blocks ([`src/core/quorum.ts`](src/core/quorum.ts)).
 - **Sanitizes sample-transaction options:** only a receive-gas hint is copied from someone else's `extraOptions`; `nativeDrop` (native coin to an arbitrary address), `lzCompose` and anything unknown is dropped and shown in red ([`src/core/options.ts`](src/core/options.ts)).
 - Slippage is capped at 5%; approve is always exact.
@@ -27,7 +27,7 @@ Anything else claiming to be this app is not this app.
 
 ## Risks you still carry
 
-- **The contract is what you pasted.** The app verifies it *behaves* like an OFT and that its destination peer points back at it; it still cannot know it is the *right* OFT for the token you mean. Prefer *Verified* contracts and check the address against the project's official sources.
+- **An adapter is what you pasted.** For a plain OFT your balance proves the contract; for an OFTAdapter your balance belongs to the token, not the bridge — a fake adapter could lock your tokens. The app checks the peer back-link and the adapter's locked balance, but take the adapter address from the project's official sources.
 - **Peers are trusted by the OFT, not by us.** If the OFT's owner points a peer at a malicious contract, tokens go there. The card shows the owner and yellow flags (EOA owner, proxy) — read them.
 - **Cross-chain messages can get stuck** (rate limits, missing executor gas, paused destinations). The app warns when `enforcedOptions` is empty and shows `quoteOFT` limits, but delivery is the contract's and LayerZero's job, not ours.
 - **Transactions are irreversible.** Test with a small amount first.

@@ -11,7 +11,7 @@ import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
 import { fetchStatus, POLL_INTERVAL_MS, POLL_TIMEOUT_MS, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
-import { checkPeerBack, findVerified } from '@/core/verify'
+import { checkPeerBack } from '@/core/verify'
 
 export function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value)
@@ -28,8 +28,8 @@ export function useReadClient(chain: ChainDef): ReadClient | undefined {
 }
 
 /**
- * Probe on two independent RPCs (core/quorum). Adds the "unverified contract" and
- * "not cross-checked" flags so the UI can show them next to the other yellow flags.
+ * Probe on independent RPCs (core/quorum). Adds the "not cross-checked" flag so the UI can
+ * show it next to the other yellow flags.
  */
 export function useProbe(chain: ChainDef, address: string | null, customRpc: string | undefined) {
   const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
@@ -38,7 +38,6 @@ export function useProbe(chain: ChainDef, address: string | null, customRpc: str
     queryFn: async () => {
       const r = await probeOftQuorum(pair, address!)
       const flags = [...r.flags]
-      if (!findVerified(chain.key, r.info.oft)) flags.push('not_in_verified_list')
       if (!r.crossChecked) flags.push('not_cross_checked')
       return { ...r, flags }
     },

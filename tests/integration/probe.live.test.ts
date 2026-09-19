@@ -74,16 +74,21 @@ describe('HyperEVM / USDT0 adapter', () => {
     expect(info.conversionRate).toBe(1n)
     const eids = info.routes.map((r) => r.eid)
     expect(eids).toEqual(expect.arrayContaining([30101, 30110, 30111]))
+    // mint/burn adapter: the locked-balance signal does not apply
+    expect(info.lockedInAdapter).toBeUndefined()
   })
 })
 
 describe('Ethereum / TREAD adapter', () => {
   it('requires approve and peers back to HyperEVM', async () => {
-    const { info } = await probeOft(eth, TREAD_ADAPTER)
+    const { info, flags } = await probeOft(eth, TREAD_ADAPTER)
     expect(info.kind).toBe('OFTAdapter')
     expect(info.approvalRequired).toBe(true)
     expect(info.token).not.toBe(TREAD_ADAPTER)
     expect(info.routes.find((r) => r.eid === 30367)?.peer).toBe(TREAD_OFT)
+    // A real lock/unlock adapter holds everything ever bridged out.
+    expect(info.lockedInAdapter).toBeGreaterThan(0n)
+    expect(flags).not.toContain('adapter_empty')
   })
 })
 

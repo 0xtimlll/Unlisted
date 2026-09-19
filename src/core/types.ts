@@ -21,7 +21,9 @@ export type OftInfo = {
   routes: { eid: number; peer: Address }[]
   /** enforcedOptions(eid, 1) per destination eid. */
   enforced: Record<number, Hex>
+  /** For lock/unlock adapters (approvalRequired): token.balanceOf(oft) — what the bridge holds. */
+  lockedInAdapter?: bigint
 }
 
 /** Soft warnings (§6.16). Shown before signing, never block. */
-export type SuspiciousFlag = 'owner_is_eoa' | 'behind_proxy' | 'not_verified' | 'not_in_verified_list' | 'not_cross_checked'
+export type SuspiciousFlag = 'owner_is_eoa' | 'behind_proxy' | 'not_verified' | 'adapter_empty' | 'not_cross_checked'

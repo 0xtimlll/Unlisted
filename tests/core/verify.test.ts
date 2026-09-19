@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ReadClient } from '@/core/client'
 import { addressToBytes32 } from '@/core/encoding'
-import { checkPeerBack, findVerified, VERIFIED_CONTRACTS } from '@/core/verify'
+import { checkPeerBack } from '@/core/verify'
 import { OTHER, TREAD_ADAPTER, TREAD_OFT } from './fixtures'
 
 const clientReturning = (v: unknown | Error): ReadClient =>
@@ -11,24 +11,6 @@ const clientReturning = (v: unknown | Error): ReadClient =>
       return v
     },
   }) as unknown as ReadClient
-
-describe('verified list', () => {
-  it('knows TREAD and USDT0, case-insensitively', () => {
-    expect(findVerified('hyperevm', TREAD_OFT)?.label).toBe('TREAD (OFT)')
-    expect(findVerified('hyperevm', TREAD_OFT.toLowerCase())?.label).toBe('TREAD (OFT)')
-    expect(findVerified('ethereum', TREAD_ADAPTER)?.label).toBe('TREAD (OFTAdapter)')
-    expect(findVerified('hyperevm', '0x904861a24F30EC96ea7CFC3bE9EA4B476d237e98')?.label).toBe('USDT0 (OFTAdapter)')
-  })
-  it('does not match the same address on another chain, or unknown addresses', () => {
-    expect(findVerified('ethereum', TREAD_OFT)).toBeUndefined()
-    expect(findVerified('hyperevm', OTHER)).toBeUndefined()
-  })
-  it('entries are checksummed and unique', () => {
-    const keys = new Set(VERIFIED_CONTRACTS.map((v) => `${v.chain}:${v.address.toLowerCase()}`))
-    expect(keys.size).toBe(VERIFIED_CONTRACTS.length)
-    for (const v of VERIFIED_CONTRACTS) expect(v.address).toMatch(/^0x[0-9a-fA-F]{40}$/)
-  })
-})
 
 describe('checkPeerBack', () => {
   it('ok when the destination peer names our OFT', async () => {

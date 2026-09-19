@@ -11,7 +11,6 @@ import { checksum } from '@/core/encoding'
 import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
-import { findVerified } from '@/core/verify'
 import { useDict, type Dict } from '@/i18n'
 import { Footer } from './components/Footer'
 import { FromBox, ToBox, type DestinationState } from './components/FromTo'
@@ -314,7 +313,6 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                 decodedHint={!!decode.data}
                 droppedOptions={decode.data?.droppedOptions ?? []}
                 optionsMalformed={decode.data?.optionsMalformed ?? false}
-                verified={info ? findVerified(src.key, info.oft) : undefined}
                 onProbe={(a) => {
                   setDecodeTarget(null)
                   setDest(EMPTY_DEST)
