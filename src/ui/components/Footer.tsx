@@ -3,12 +3,18 @@ import { useDict } from '@/i18n'
 
 const COMMIT = process.env['NEXT_PUBLIC_COMMIT'] ?? 'dev'
 const REPO = process.env['NEXT_PUBLIC_REPO_URL'] ?? ''
+const DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? ''
 
 export function Footer() {
   const d = useDict()
   return (
-    <footer className="mx-auto max-w-[408px] space-y-2 px-2 pb-6 pt-6 text-center text-[11px] text-muted">
+    <footer className="mx-auto w-full max-w-[560px] space-y-2 px-4 pb-8 pt-6 text-center text-[11px] text-muted">
       <p>{d.footer.disclaimer}</p>
+      {DOMAIN ? (
+        <p className="mono">
+          {d.app.domainNotice} <span className="text-ink">{DOMAIN}</span>
+        </p>
+      ) : null}
       <p className="mono">
         {d.footer.build}: {REPO ? (
           <a href={`${REPO}/commit/${COMMIT}`} target="_blank" rel="noopener noreferrer" className="hover:text-ink">

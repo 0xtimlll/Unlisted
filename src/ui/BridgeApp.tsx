@@ -271,10 +271,10 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
 
   // ---- render -------------------------------------------------------------------
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-3 sm:px-6">
+    <div className="flex min-h-screen w-full flex-col">
       <Header theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} />
 
-      <main className="flex flex-1 flex-col items-center py-6 sm:py-10">
+      <main className="flex flex-1 flex-col items-center px-3 py-8 sm:py-14">
         <div className="w-full max-w-[408px] space-y-2">
           {sent ? (
             <Tracker src={src} dstEid={sent.dstEid} txHash={sent.txHash} startedAt={sent.startedAt} onNew={reset} />

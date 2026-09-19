@@ -4,7 +4,6 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { WagmiProvider } from 'wagmi'
-import { LangProvider, type Lang } from '@/i18n'
 import { BridgeApp } from './BridgeApp'
 import { load, save, type Stored, type Theme } from './storage'
 import { makeWagmiConfig } from './wagmi'
@@ -21,7 +20,7 @@ function useSystemDark(): boolean {
   return dark
 }
 
-const RK_ACCENT = { light: '#4615c8', dark: '#6d4aff' }
+const RK_ACCENT = { light: '#0a0a0a', dark: '#fafafa' }
 
 export default function Providers() {
   const [stored, setStoredState] = useState<Stored>(() => load())
@@ -40,22 +39,19 @@ export default function Providers() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const config = useMemo(() => makeWagmiConfig(stored.customRpc), [rpcKey])
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }))
-  const onLang = (l: Lang) => setStored({ ...stored, lang: l })
   const onTheme = (t: Theme) => setStored({ ...stored, theme: t })
 
   const rkTheme = dark
-    ? darkTheme({ accentColor: RK_ACCENT.dark, borderRadius: 'large' })
-    : lightTheme({ accentColor: RK_ACCENT.light, borderRadius: 'large' })
+    ? darkTheme({ accentColor: RK_ACCENT.dark, accentColorForeground: '#0a0a0a', borderRadius: 'large' })
+    : lightTheme({ accentColor: RK_ACCENT.light, accentColorForeground: '#ffffff', borderRadius: 'large' })
 
   return (
-    <LangProvider initial={stored.lang} onChange={onLang}>
-      <WagmiProvider config={config} key={rpcKey}>
-        <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider theme={rkTheme} modalSize="compact">
-            <BridgeApp stored={stored} setStored={setStored} onTheme={onTheme} />
-          </RainbowKitProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
-    </LangProvider>
+    <WagmiProvider config={config} key={rpcKey}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider theme={rkTheme} modalSize="compact">
+          <BridgeApp stored={stored} setStored={setStored} onTheme={onTheme} />
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   )
 }

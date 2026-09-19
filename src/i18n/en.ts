@@ -1,6 +1,6 @@
 export const en = {
   app: {
-    title: 'OFT Bridge',
+    title: 'Unlisted',
     tagline: 'A form on top of LayerZero OFT contracts. Nothing is held, nothing is custodied.',
     domainNotice: 'Canonical domain:',
     wip: 'Work in progress',

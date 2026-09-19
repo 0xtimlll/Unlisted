@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'OFT Bridge',
+  title: 'Unlisted',
   description: 'A form on top of LayerZero OFT contracts. Non-custodial, static, no backend.',
 }
 

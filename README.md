@@ -1,4 +1,4 @@
-# OFT Bridge UI
+# Unlisted — OFT bridge UI
 
 A form on top of LayerZero V2 OFT / OFTAdapter contracts — for tokens whose bridge is deployed and working but has no interface. You paste a contract address (or the hash of someone else's `send` transaction), connect a wallet, pick a destination and an amount. The app reads everything else from the contract, assembles the transaction, shows you exactly what it contains, and hands it to your wallet to sign.
 
@@ -11,7 +11,6 @@ Anything else claiming to be this app is not this app.
 - Builds `send(SendParam, MessagingFee, refundAddress)` from the quote (`quoteOFT` + `quoteSend`), with a fee buffer that is refunded by the contract.
 - Runs 16 safety checks before the Send button is enabled (chain match, peer exists, balance, allowance, `fee.nativeFee === msg.value`, simulation, and a self-check that decodes the calldata back and compares it with what you see on screen).
 - Tracks delivery via LayerZero Scan.
-- EN / RU.
 
 ## What it does NOT do
 
@@ -48,7 +47,7 @@ Build-time env — public values live in [`.env.production`](.env.production) (c
 
 | var | purpose |
 |---|---|
-| `NEXT_PUBLIC_CANONICAL_DOMAIN` | shown in the header so users can spot phishing clones |
+| `NEXT_PUBLIC_CANONICAL_DOMAIN` | shown in the footer so users can spot phishing clones |
 | `NEXT_PUBLIC_REPO_URL` | source link in the footer |
 | `NEXT_PUBLIC_WC_PROJECT_ID` | enables WalletConnect (mobile wallets via QR). **Off in v1** — only browser wallets (MetaMask, Rabby, …). Enabling it also opens the WalletConnect relay in the CSP. Get an id at cloud.reown.com. |
 | `NEXT_PUBLIC_COMMIT` | build id in the footer; defaults to `git rev-parse HEAD` (Cloudflare/Vercel commit env is picked up automatically) |
@@ -94,7 +93,7 @@ Because `connect-src` is strict, a user-supplied RPC in settings only works if i
 ```
 src/core     pure logic, no React: abi, chains, amounts, plan, guards, probe, decodeTx, track
 src/ui       wagmi/RainbowKit providers, hooks, components, localStorage
-src/i18n     en/ru dictionaries
+src/i18n     UI strings (EN)
 scripts      build, headers, write-whitelist check, local server
 tests/core   unit tests (vitest)
 tests/integration   live-RPC + anvil fork tests

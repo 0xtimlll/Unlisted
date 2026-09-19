@@ -5,7 +5,6 @@
 import { isAddress, type Address, type Hash } from 'viem'
 import type { ChainKey } from '@/core/chains'
 import { validateRpcUrl } from '@/core/chains'
-import { isLang, type Lang } from '@/i18n'
 
 const KEY = 'oft-bridge-ui:v1'
 
@@ -21,14 +20,13 @@ export type HistoryEntry = {
 export type Theme = 'system' | 'light' | 'dark'
 
 export type Stored = {
-  lang: Lang
   theme: Theme
   customRpc: Partial<Record<ChainKey, string>>
   recentContracts: { chain: ChainKey; address: Address }[]
   history: HistoryEntry[]
 }
 
-export const EMPTY: Stored = { lang: 'en', theme: 'system', customRpc: {}, recentContracts: [], history: [] }
+export const EMPTY: Stored = { theme: 'system', customRpc: {}, recentContracts: [], history: [] }
 
 const MAX_RECENT = 8
 const MAX_HISTORY = 20
@@ -42,7 +40,6 @@ export function sanitize(raw: unknown): Stored {
   const out: Stored = { ...EMPTY, customRpc: {}, recentContracts: [], history: [] }
   if (!raw || typeof raw !== 'object') return out
   const r = raw as Record<string, unknown>
-  if (isLang(r['lang'])) out.lang = r['lang']
   if (r['theme'] === 'light' || r['theme'] === 'dark' || r['theme'] === 'system') out.theme = r['theme']
   const rpc = r['customRpc']
   if (rpc && typeof rpc === 'object') {

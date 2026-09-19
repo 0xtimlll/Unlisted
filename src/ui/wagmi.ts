@@ -14,7 +14,7 @@ export const WC_PROJECT_ID = process.env['NEXT_PUBLIC_WC_PROJECT_ID'] ?? ''
 export function makeWagmiConfig(customRpc: Partial<Record<ChainKey, string>>): Config {
   const wallets = [injectedWallet, rabbyWallet, ...(WC_PROJECT_ID ? [walletConnectWallet] : [])]
   const connectors = connectorsForWallets([{ groupName: 'Wallets', wallets }], {
-    appName: 'OFT Bridge',
+    appName: 'Unlisted',
     projectId: WC_PROJECT_ID || '00000000000000000000000000000000',
     walletConnectParameters: {
       // No usage events to pulse.walletconnect.org (§0). CSP blocks it as well.

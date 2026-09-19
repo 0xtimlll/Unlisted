@@ -2,7 +2,7 @@
 /** In-house primitives in the Relay-like visual language (§1: no UI kits). */
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 
-const focus = 'outline-none focus-visible:ring-2 focus-visible:ring-accent-ink/40'
+const focus = 'outline-none focus-visible:ring-2 focus-visible:ring-ink/30'
 
 export function Button({
   variant = 'secondary',
@@ -11,9 +11,9 @@ export function Button({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'cta' | 'primary' | 'secondary' | 'ghost' | 'danger' | 'pill' }) {
   const v =
     variant === 'cta'
-      ? 'h-11 w-full rounded-xl bg-accent text-[15px] font-bold uppercase italic tracking-wide text-white hover:bg-accent-hover disabled:bg-accent-soft disabled:text-accent-ink/70 disabled:opacity-100'
+      ? 'h-11 w-full rounded-xl bg-accent text-[15px] font-bold uppercase italic tracking-wide text-page hover:bg-accent-hover disabled:bg-surface-2 disabled:text-faint disabled:opacity-100'
       : variant === 'primary'
-        ? 'h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover'
+        ? 'h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-page hover:bg-accent-hover'
         : variant === 'danger'
           ? 'h-10 rounded-xl bg-danger px-4 text-sm font-semibold text-white hover:opacity-90'
           : variant === 'ghost'
@@ -81,14 +81,13 @@ export function PillSelect({
   )
 }
 
-/** Deterministic two-letter badge; no remote images. */
+/** Deterministic two-letter badge; monochrome, no remote images. */
 export function ChainDot({ name, size = 32 }: { name: string; size?: number }) {
-  const hue = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)
   const initials = name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white"
-      style={{ width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 70% 45%)` }}
+      className="inline-flex shrink-0 items-center justify-center rounded-full bg-ink font-bold text-page"
+      style={{ width: size, height: size, fontSize: size * 0.36 }}
       aria-hidden
     >
       {initials}

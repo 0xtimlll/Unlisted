@@ -1,13 +1,12 @@
 'use client'
 import { useState } from 'react'
 import { CHAINS, validateRpcUrl, type ChainKey } from '@/core/chains'
-import { fmt, LANGS, useDict, useLang } from '@/i18n'
+import { fmt, useDict } from '@/i18n'
 import { clearAll, exportJson, type Stored } from '../storage'
 import { Button, Input } from './ui'
 
 export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; onSave: (rpc: Partial<Record<ChainKey, string>>) => void; onClose: () => void }) {
   const d = useDict()
-  const { lang, setLang } = useLang()
   const [draft, setDraft] = useState<Partial<Record<ChainKey, string>>>({ ...stored.customRpc })
 
   const errors: Partial<Record<ChainKey, string>> = {}
@@ -52,16 +51,6 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
           <Button variant="ghost" onClick={onClose} className="w-9 px-0" aria-label={d.settings.close}>
             ✕
           </Button>
-        </div>
-        <div className="mb-4 flex items-center justify-between text-sm sm:hidden">
-          <span className="text-muted">{d.header.language}</span>
-          <div className="inline-flex rounded-full bg-surface-2 p-0.5">
-            {LANGS.map((l) => (
-              <button key={l} type="button" onClick={() => setLang(l)} className={`h-7 rounded-full px-2.5 text-xs font-semibold uppercase ${lang === l ? 'bg-surface text-ink shadow-sm' : 'text-muted'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
         </div>
         <p className="mb-3 text-xs text-muted">{d.settings.hint}</p>
         <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
