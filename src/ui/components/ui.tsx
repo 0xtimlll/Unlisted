@@ -1,17 +1,27 @@
 'use client'
-/** Tiny in-house primitives (§1: no UI kits). */
+/** In-house primitives in the Relay-like visual language (§1: no UI kits). */
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 
-const base = 'rounded-lg border px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-sky-500 disabled:cursor-not-allowed disabled:opacity-50'
+const focus = 'outline-none focus-visible:ring-2 focus-visible:ring-accent-ink/40'
 
-export function Button({ variant = 'secondary', className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'danger' }) {
+export function Button({
+  variant = 'secondary',
+  className = '',
+  ...p
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'cta' | 'primary' | 'secondary' | 'ghost' | 'danger' | 'pill' }) {
   const v =
-    variant === 'primary'
-      ? 'border-sky-600 bg-sky-600 text-white hover:bg-sky-700'
-      : variant === 'danger'
-        ? 'border-red-600 bg-red-600 text-white hover:bg-red-700'
-        : 'border-neutral-300 bg-white hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800'
-  return <button type="button" {...p} className={`${base} ${v} ${className}`} />
+    variant === 'cta'
+      ? 'h-11 w-full rounded-xl bg-accent text-[15px] font-bold uppercase italic tracking-wide text-white hover:bg-accent-hover disabled:bg-accent-soft disabled:text-accent-ink/70 disabled:opacity-100'
+      : variant === 'primary'
+        ? 'h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover'
+        : variant === 'danger'
+          ? 'h-10 rounded-xl bg-danger px-4 text-sm font-semibold text-white hover:opacity-90'
+          : variant === 'ghost'
+            ? 'h-9 rounded-lg px-3 text-sm text-muted hover:bg-surface-2 hover:text-ink'
+            : variant === 'pill'
+              ? 'h-9 rounded-full bg-surface-2 px-3 text-sm font-medium text-ink hover:bg-line'
+              : 'h-10 rounded-xl border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-2'
+  return <button type="button" {...p} className={`inline-flex items-center justify-center gap-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${focus} ${v} ${className}`} />
 }
 
 export function Input({ className = '', ...p }: InputHTMLAttributes<HTMLInputElement>) {
@@ -20,28 +30,91 @@ export function Input({ className = '', ...p }: InputHTMLAttributes<HTMLInputEle
       {...p}
       spellCheck={false}
       autoComplete="off"
-      className={`${base} w-full border-neutral-300 bg-white dark:border-neutral-700 dark:bg-neutral-900 ${className}`}
+      className={`h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink placeholder:text-faint ${focus} focus-visible:border-accent-ink disabled:opacity-50 ${className}`}
+    />
+  )
+}
+
+/** Big Relay-style amount field. */
+export function AmountInput({ className = '', ...p }: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...p}
+      inputMode="decimal"
+      spellCheck={false}
+      autoComplete="off"
+      className={`amount tnum w-full min-w-0 bg-transparent text-[32px] font-bold leading-none text-ink outline-none disabled:opacity-60 ${className}`}
     />
   )
 }
 
 export function Select({ className = '', ...p }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...p} className={`${base} border-neutral-300 bg-white dark:border-neutral-700 dark:bg-neutral-900 ${className}`} />
+  return (
+    <select
+      {...p}
+      className={`h-10 rounded-xl border border-line bg-surface px-3 text-sm text-ink ${focus} ${className}`}
+    />
+  )
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-950 ${className}`}>{children}</section>
+/** Pill-shaped chain/token selector (a real <select> underneath, for accessibility). */
+export function PillSelect({
+  label,
+  sub,
+  dot,
+  children,
+  className = '',
+  ...p
+}: SelectHTMLAttributes<HTMLSelectElement> & { label: string; sub?: string; dot?: string }) {
+  return (
+    <label className={`relative inline-flex h-[50px] shrink-0 items-center gap-2.5 rounded-full bg-surface-2 pl-2.5 pr-9 text-left hover:bg-line ${className}`}>
+      {dot ? <ChainDot name={dot} /> : <span className="h-8 w-8 shrink-0 rounded-full border-2 border-dashed border-line" aria-hidden />}
+      <span className="flex flex-col leading-tight">
+        <span className="text-[15px] font-semibold text-ink">{label}</span>
+        {sub ? <span className="text-xs text-muted">{sub}</span> : null}
+      </span>
+      <span className="pointer-events-none absolute right-3 text-muted">›</span>
+      <select {...p} className="absolute inset-0 cursor-pointer opacity-0">
+        {children}
+      </select>
+    </label>
+  )
 }
 
-export function H2({ children }: { children: ReactNode }) {
-  return <h2 className="mb-3 text-base font-semibold">{children}</h2>
+/** Deterministic two-letter badge; no remote images. */
+export function ChainDot({ name, size = 32 }: { name: string; size?: number }) {
+  const hue = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)
+  const initials = name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, fontSize: size * 0.38, background: `hsl(${hue} 70% 45%)` }}
+      aria-hidden
+    >
+      {initials}
+    </span>
+  )
+}
+
+/** The white boxes inside the bridge card ("Sell"/"Buy" style). */
+export function Box({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <section className={`rounded-card border border-line bg-surface p-4 ${className}`}>{children}</section>
+}
+
+export function BoxLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="mb-2 flex items-center justify-between text-sm text-muted">
+      <span>{children}</span>
+      {right ? <span>{right}</span> : null}
+    </div>
+  )
 }
 
 export function Row({ label, children, mono = false }: { label: ReactNode; children: ReactNode; mono?: boolean }) {
   return (
-    <div className="grid grid-cols-[minmax(7rem,30%)_1fr] gap-2 py-1 text-sm">
-      <div className="opacity-60">{label}</div>
-      <div className={mono ? 'mono break-all' : 'break-words'}>{children}</div>
+    <div className="flex items-start justify-between gap-3 py-1.5 text-sm">
+      <div className="shrink-0 text-muted">{label}</div>
+      <div className={`min-w-0 text-right ${mono ? 'mono break-all' : 'break-words'}`}>{children}</div>
     </div>
   )
 }
@@ -49,15 +122,44 @@ export function Row({ label, children, mono = false }: { label: ReactNode; child
 export function Alert({ kind, children }: { kind: 'error' | 'warn' | 'info' | 'ok'; children: ReactNode }) {
   const c =
     kind === 'error'
-      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+      ? 'border-danger/30 bg-danger/10 text-danger'
       : kind === 'warn'
-        ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+        ? 'border-warn/30 bg-warn/10 text-warn'
         : kind === 'ok'
-          ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
-          : 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200'
-  return <div className={`rounded-lg border px-3 py-2 text-sm ${c}`}>{children}</div>
+          ? 'border-ok/30 bg-ok/10 text-ok'
+          : 'border-accent-ink/30 bg-accent-soft/50 text-accent-ink'
+  return <div className={`rounded-xl border px-3 py-2 text-sm ${c}`}>{children}</div>
 }
 
 export function Spinner() {
-  return <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent align-middle" aria-hidden />
+  return <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent align-middle" aria-hidden />
+}
+
+export function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: string }[] }) {
+  return (
+    <div className="inline-flex rounded-xl bg-surface-2 p-1">
+      {items.map((it) => (
+        <button
+          key={it.value}
+          type="button"
+          onClick={() => onChange(it.value)}
+          className={`h-8 rounded-lg px-3 text-sm font-medium transition ${value === it.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function Disclosure({ title, open, onToggle, children }: { title: ReactNode; open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <div>
+      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between py-1 text-sm text-muted hover:text-ink">
+        <span>{title}</span>
+        <span className={`transition ${open ? 'rotate-180' : ''}`}>⌄</span>
+      </button>
+      {open ? <div className="pt-1">{children}</div> : null}
+    </div>
+  )
 }

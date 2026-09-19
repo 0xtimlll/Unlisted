@@ -1,4 +1,5 @@
 'use client'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, isAddress, type Address, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
@@ -11,18 +12,16 @@ import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guard
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
 import { useDict, type Dict } from '@/i18n'
-import { DestinationStep, type DestinationState } from './components/DestinationStep'
 import { Footer } from './components/Footer'
+import { FromBox, ToBox, type DestinationState } from './components/FromTo'
 import { Header } from './components/Header'
 import { History } from './components/History'
-import { OftCard } from './components/OftCard'
-import { ReviewStep } from './components/ReviewStep'
+import { Checks, Cta, Details, type CtaState } from './components/Review'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TokenStep, type TokenMode } from './components/TokenStep'
 import { Tracker } from './components/Tracker'
-import { Alert, Button } from './components/ui'
 import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePlan, useProbe, useTokenBalance } from './hooks'
-import { pushHistory, pushRecent, type Stored } from './storage'
+import { pushHistory, pushRecent, type Stored, type Theme } from './storage'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -40,10 +39,11 @@ const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15])
 
 type Sent = { txHash: Hash; dstEid: number; startedAt: number }
 
-export function BridgeApp({ stored, setStored }: { stored: Stored; setStored: (s: Stored) => void }) {
+export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setStored: (s: Stored) => void; onTheme: (t: Theme) => void }) {
   const d = useDict()
   const { address: wallet, chainId: walletChainId } = useAccount()
   const { switchChain, isPending: switching } = useSwitchChain()
+  const { openConnectModal } = useConnectModal()
 
   const [srcKey, setSrcKey] = useState<ChainKey>('ethereum')
   const src = byKey(srcKey)
@@ -226,84 +226,116 @@ export function BridgeApp({ stored, setStored }: { stored: Stored; setStored: (s
     )
   }
 
-  // ---- render -------------------------------------------------------------------
+  // ---- CTA state: the next thing the user has to do ------------------------------
   const chainMismatch = wallet !== undefined && walletChainId !== undefined && walletChainId !== src.chainId
+  const firstFailing = report.results.find((r) => !r.ok)
+  const cta: CtaState = !wallet
+    ? { kind: 'connect' }
+    : chainMismatch
+      ? { kind: 'switch', chain: src }
+      : !info
+        ? { kind: 'check' }
+        : dest.dstEid === undefined
+          ? { kind: 'destination' }
+          : dest.amountInput.trim() === '' || amountError
+            ? { kind: 'amount' }
+            : !plan.data
+              ? plan.error
+                ? { kind: 'send', enabled: false, reason: describeError(d, plan.error) }
+                : { kind: 'quote' }
+              : approveIntent
+                ? { kind: 'approve', intent: approveIntent }
+                : { kind: 'send', enabled: report.canSend, ...(firstFailing && !firstFailing.ok ? { reason: d.guard[firstFailing.code] } : {}) }
 
+  const approving = approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading)
+  const busy = switching || approving || sendWrite.isPending
+  const busyLabel = approving ? d.step3.approving : sendWrite.isPending ? d.step3.sending_ : ''
+  const onCta = () => {
+    switch (cta.kind) {
+      case 'connect':
+        openConnectModal?.()
+        return
+      case 'switch':
+        switchChain({ chainId: src.chainId })
+        return
+      case 'approve':
+        onApprove()
+        return
+      case 'send':
+        onSend()
+        return
+      default:
+        return
+    }
+  }
+
+  // ---- render -------------------------------------------------------------------
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-4 p-4 sm:p-6">
-      <Header srcKey={srcKey} onSrcChange={onSrcChange} onSettings={() => setSettingsOpen(true)} />
-      <p className="text-sm opacity-70">{d.app.tagline}</p>
+    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-3 sm:px-6">
+      <Header theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} />
 
-      {chainMismatch ? (
-        <Alert kind="warn">
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{d.guard.chain_mismatch}</span>
-            <Button className="text-xs" disabled={switching} onClick={() => switchChain({ chainId: src.chainId })}>
-              → {src.name}
-            </Button>
+      <main className="flex flex-1 flex-col items-center py-6 sm:py-10">
+        <div className="w-full max-w-[408px] space-y-2">
+          {sent ? (
+            <Tracker src={src} dstEid={sent.dstEid} txHash={sent.txHash} startedAt={sent.startedAt} onNew={reset} />
+          ) : (
+            <>
+              <TokenStep
+                chain={src}
+                mode={mode}
+                onMode={setMode}
+                busy={probe.isFetching || decode.isFetching}
+                recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
+                info={info}
+                flags={flags}
+                error={probe.error ? describeError(d, probe.error) : decode.error ? describeError(d, decode.error) : ''}
+                decodedHint={!!decode.data}
+                onProbe={(a) => {
+                  setDecodeTarget(null)
+                  setDest(EMPTY_DEST)
+                  setProbeTarget(a)
+                }}
+                onDecode={(h) => {
+                  setProbeTarget(null)
+                  setDest(EMPTY_DEST)
+                  setDecodeTarget(h)
+                }}
+              />
+
+              <FromBox
+                src={src}
+                onSrcChange={onSrcChange}
+                info={info}
+                balance={tokenBalance.data}
+                amountInput={dest.amountInput}
+                onAmount={(v) => setDest({ ...dest, amountInput: v })}
+                amountError={amountError}
+                dustTrimmed={plan.data?.amounts.dustTrimmed}
+              />
+
+              {info ? (
+                <>
+                  <div className="relative z-10 -my-4 flex justify-center">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm">↓</span>
+                  </div>
+                  <ToBox info={info} wallet={wallet} plan={plan.data} state={dest} onChange={setDest} />
+                  <Details src={src} info={info} plan={plan.data} state={dest} onChange={setDest} />
+                  <Checks report={report} noGasAccepted={noGasAccepted} onNoGasAccepted={setNoGasAccepted} show={!!plan.data} />
+                </>
+              ) : null}
+
+              <div className="pt-1">
+                <Cta state={cta} info={info} busy={busy} busyLabel={busyLabel} onClick={onCta} error={txError} />
+              </div>
+            </>
+          )}
+
+          <div className="pt-4">
+            <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} />
           </div>
-        </Alert>
-      ) : null}
+        </div>
+      </main>
 
-      {sent ? (
-        <Tracker src={src} dstEid={sent.dstEid} txHash={sent.txHash} startedAt={sent.startedAt} onNew={reset} />
-      ) : (
-        <>
-          <TokenStep
-            chain={src}
-            mode={mode}
-            onMode={setMode}
-            busy={probe.isFetching || decode.isFetching}
-            recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
-            onProbe={(a) => {
-              setDecodeTarget(null)
-              setDest(EMPTY_DEST)
-              setProbeTarget(a)
-            }}
-            onDecode={(h) => {
-              setProbeTarget(null)
-              setDest(EMPTY_DEST)
-              setDecodeTarget(h)
-            }}
-          />
-          {probe.error ? <Alert kind="error">{describeError(d, probe.error)}</Alert> : null}
-          {decode.error ? <Alert kind="error">{describeError(d, decode.error)}</Alert> : null}
-          {decode.data ? <Alert kind="info">{d.step1.decodedHint}</Alert> : null}
-          {info ? <OftCard chain={src} info={info} flags={flags} /> : null}
-
-          {info ? (
-            <DestinationStep
-              info={info}
-              wallet={wallet}
-              balance={tokenBalance.data}
-              state={dest}
-              onChange={setDest}
-              amountError={amountError}
-              dustTrimmed={plan.data?.amounts.dustTrimmed}
-            />
-          ) : null}
-
-          {info && dest.dstEid !== undefined ? (
-            <ReviewStep
-              src={src}
-              info={info}
-              plan={plan.data}
-              planError={plan.error ? describeError(d, plan.error) : ''}
-              report={report}
-              approve={approveIntent}
-              noGasAccepted={noGasAccepted}
-              onNoGasAccepted={setNoGasAccepted}
-              onApprove={onApprove}
-              onSend={onSend}
-              approving={approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading)}
-              sending={sendWrite.isPending}
-              txError={txError}
-            />
-          ) : null}
-        </>
-      )}
-
-      <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} />
       <Footer />
 
       {settingsOpen ? (

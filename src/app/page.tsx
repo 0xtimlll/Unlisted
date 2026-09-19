@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 const Providers = dynamic(() => import('@/ui/Providers'), {
   ssr: false,
   loading: () => (
-    <main className="mx-auto flex min-h-screen max-w-3xl items-center justify-center p-8 text-sm opacity-60">
+    <main className="mx-auto flex min-h-screen max-w-3xl items-center justify-center p-8 text-sm text-muted">
       OFT Bridge — loading…
     </main>
   ),

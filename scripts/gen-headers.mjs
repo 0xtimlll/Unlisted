@@ -79,6 +79,7 @@ const headers = [
   `  Content-Security-Policy: ${csp}`,
   '  X-Frame-Options: DENY',
   '  X-Content-Type-Options: nosniff',
+  '  X-Robots-Tag: noindex, nofollow, noarchive',
   '  Referrer-Policy: no-referrer',
   '  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()',
   '  Cross-Origin-Opener-Policy: same-origin',

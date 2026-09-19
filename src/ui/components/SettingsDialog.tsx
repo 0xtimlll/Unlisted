@@ -1,12 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { CHAINS, validateRpcUrl, type ChainKey } from '@/core/chains'
-import { fmt, useDict } from '@/i18n'
+import { fmt, LANGS, useDict, useLang } from '@/i18n'
 import { clearAll, exportJson, type Stored } from '../storage'
-import { Button, Card, H2, Input } from './ui'
+import { Button, Input } from './ui'
 
 export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; onSave: (rpc: Partial<Record<ChainKey, string>>) => void; onClose: () => void }) {
   const d = useDict()
+  const { lang, setLang } = useLang()
   const [draft, setDraft] = useState<Partial<Record<ChainKey, string>>>({ ...stored.customRpc })
 
   const errors: Partial<Record<ChainKey, string>> = {}
@@ -44,21 +45,37 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true">
-      <Card className="mt-8 w-full max-w-xl">
-        <H2>{d.settings.title}</H2>
-        <p className="mb-3 text-xs opacity-60">{d.settings.hint}</p>
-        <div className="space-y-2">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="mt-8 w-full max-w-md rounded-card border border-line bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold text-ink">{d.settings.title}</h2>
+          <Button variant="ghost" onClick={onClose} className="w-9 px-0" aria-label={d.settings.close}>
+            ✕
+          </Button>
+        </div>
+        <div className="mb-4 flex items-center justify-between text-sm sm:hidden">
+          <span className="text-muted">{d.header.language}</span>
+          <div className="inline-flex rounded-full bg-surface-2 p-0.5">
+            {LANGS.map((l) => (
+              <button key={l} type="button" onClick={() => setLang(l)} className={`h-7 rounded-full px-2.5 text-xs font-semibold uppercase ${lang === l ? 'bg-surface text-ink shadow-sm' : 'text-muted'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="mb-3 text-xs text-muted">{d.settings.hint}</p>
+        <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
           {CHAINS.map((c) => (
-            <label key={c.key} className="block text-sm">
-              <span className="opacity-60">{fmt(d.settings.customRpc, { chain: c.name })}</span>
+            <label key={c.key} className="block text-xs">
+              <span className="text-muted">{fmt(d.settings.customRpc, { chain: c.name })}</span>
               <Input
                 value={draft[c.key] ?? ''}
                 onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })}
                 placeholder={c.rpcUrls[0]}
                 aria-invalid={!!errors[c.key]}
+                className="mono mt-1 h-9"
               />
-              {errors[c.key] ? <span className="text-xs text-red-600 dark:text-red-400">{errors[c.key]}</span> : null}
+              {errors[c.key] ? <span className="text-danger">{errors[c.key]}</span> : null}
             </label>
           ))}
         </div>
@@ -66,7 +83,6 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
           <Button variant="primary" onClick={save} disabled={hasErrors}>
             {d.settings.save}
           </Button>
-          <Button onClick={onClose}>{d.settings.close}</Button>
           <span className="flex-1" />
           <Button onClick={doExport}>{d.settings.export}</Button>
           <Button
@@ -79,7 +95,7 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
             {d.settings.clearAll}
           </Button>
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

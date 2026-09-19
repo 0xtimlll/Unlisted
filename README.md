@@ -70,6 +70,17 @@ No server, no VPS. The build is a folder of static files; Cloudflare Pages hosts
 3. Every push to `main` deploys. `out/_headers` is applied automatically — verify with `curl -I https://oft-bridge-ui.pages.dev` (look for `Content-Security-Policy`).
 4. Attaching a custom domain? Update `NEXT_PUBLIC_CANONICAL_DOMAIN` in `.env.production`.
 
+### Private deployment (you and a few friends)
+
+The site sends `X-Robots-Tag: noindex` and a `Disallow: /` robots.txt, so search engines stay away — but the URL itself is still public. To require a login without adding any code or server, put **Cloudflare Access** in front of the Pages project (free for up to 50 users):
+
+1. Cloudflare dashboard → Zero Trust → Access → Applications → Add an application → Self-hosted.
+2. Application domain: `oft-bridge-ui.pages.dev` (and your custom domain, if any).
+3. Policy: Action *Allow*, Include → *Emails* → list the addresses of everyone who may use it.
+4. Save. Visitors now get a Cloudflare login page and a one-time code by email; nobody else can even load the HTML.
+
+Access sits in front of the static files; the app, its CSP and its "no backend" property are unchanged. Wallet connections still happen only in the visitor's own browser.
+
 Security headers are generated into `out/_headers` (Cloudflare Pages / Netlify format) and `out/csp.txt` (for nginx & co.) by [`scripts/gen-headers.mjs`](scripts/gen-headers.mjs) after every build. What they contain:
 
 - `script-src 'self'` + SHA-256 hashes of the inline scripts Next.js emits — no `'unsafe-inline'` for scripts.

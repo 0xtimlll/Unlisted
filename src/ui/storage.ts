@@ -18,14 +18,17 @@ export type HistoryEntry = {
   at: number
 }
 
+export type Theme = 'system' | 'light' | 'dark'
+
 export type Stored = {
   lang: Lang
+  theme: Theme
   customRpc: Partial<Record<ChainKey, string>>
   recentContracts: { chain: ChainKey; address: Address }[]
   history: HistoryEntry[]
 }
 
-export const EMPTY: Stored = { lang: 'en', customRpc: {}, recentContracts: [], history: [] }
+export const EMPTY: Stored = { lang: 'en', theme: 'system', customRpc: {}, recentContracts: [], history: [] }
 
 const MAX_RECENT = 8
 const MAX_HISTORY = 20
@@ -40,6 +43,7 @@ export function sanitize(raw: unknown): Stored {
   if (!raw || typeof raw !== 'object') return out
   const r = raw as Record<string, unknown>
   if (isLang(r['lang'])) out.lang = r['lang']
+  if (r['theme'] === 'light' || r['theme'] === 'dark' || r['theme'] === 'system') out.theme = r['theme']
   const rpc = r['customRpc']
   if (rpc && typeof rpc === 'object') {
     for (const [k, v] of Object.entries(rpc as Record<string, unknown>)) {

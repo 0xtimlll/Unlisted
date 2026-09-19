@@ -174,6 +174,26 @@ export const en = {
     source: 'Source',
     build: 'Build',
   },
+  ui: {
+    contractTab: 'Contract',
+    txTab: 'Tx hash',
+    token: 'Token',
+    from: 'From',
+    to: 'To',
+    details: 'Details',
+    checks: 'Checks',
+    edit: 'Edit',
+    useWallet: 'Use my wallet',
+    cta_connect: 'Connect wallet',
+    cta_switch: 'Switch to {chain}',
+    cta_check: 'Check a contract first',
+    cta_destination: 'Select destination',
+    cta_amount: 'Enter amount',
+    cta_quote: 'Getting quote…',
+    cta_send: 'Send',
+    theme: 'Theme',
+    onChain: 'read from the contract',
+  },
 } as const
 
 /** Same shape as `en`, but every leaf is `string` so other languages type-check. */

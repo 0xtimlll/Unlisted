@@ -1,22 +1,52 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Manual theme switch (system by default): `.dark` on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-page: #f7f8ff;
+  --color-frame: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-2: #f8f8f8;
+  --color-line: #ececf3;
+  --color-ink: #171717;
+  --color-muted: #6f6f6f;
+  --color-faint: #7e868c;
+  --color-accent: #4615c8;
+  --color-accent-hover: #3a10a8;
+  --color-accent-soft: #e4e7ff;
+  --color-accent-ink: #5a45df;
+  --color-ok: #1a9c5b;
+  --color-warn: #b7791f;
+  --color-danger: #d13b3b;
+  --radius-card: 16px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --color-page: #0d0d14;
+  --color-frame: #14141d;
+  --color-surface: #1b1b27;
+  --color-surface-2: #23232f;
+  --color-line: #2c2c3a;
+  --color-ink: #f2f2f7;
+  --color-muted: #a0a0b2;
+  --color-faint: #7d7d90;
+  --color-accent: #6d4aff;
+  --color-accent-hover: #5b3be6;
+  --color-accent-soft: #2a2350;
+  --color-accent-ink: #a394ff;
+  --color-ok: #3ccf85;
+  --color-warn: #e2a83a;
+  --color-danger: #ff6b6b;
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-page);
+  color: var(--color-ink);
   /* System fonts only — no third-party font hosts (§7). */
   font-family:
+    ui-sans-serif,
     system-ui,
     -apple-system,
     'Segoe UI',
@@ -24,9 +54,33 @@ body {
     'Helvetica Neue',
     Arial,
     sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Big amount inputs: no spinners, no outline ring. */
+input.amount {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input.amount::-webkit-outer-spin-button,
+input.amount::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+input.amount::placeholder {
+  color: var(--color-faint);
+}
+
+/* RainbowKit modal should follow our accent. */
+:root {
+  --rk-radii-modal: 20px;
 }

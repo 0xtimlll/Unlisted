@@ -3,41 +3,45 @@ import { byEid, byKey } from '@/core/chains'
 import { scanMessageUrl } from '@/core/track'
 import { useDict } from '@/i18n'
 import type { HistoryEntry } from '../storage'
-import { Button, Card, H2 } from './ui'
+import { ChainDot } from './ui'
 
 export function History({ entries, onClear }: { entries: HistoryEntry[]; onClear: () => void }) {
   const d = useDict()
   if (entries.length === 0) return null
   return (
-    <Card>
-      <div className="flex items-center">
-        <H2>{d.history.title}</H2>
-        <span className="flex-1" />
-        <Button className="text-xs" onClick={onClear}>
+    <section className="px-1">
+      <div className="mb-1 flex items-center justify-between text-sm text-muted">
+        <span>{d.history.title}</span>
+        <button type="button" className="text-xs hover:text-ink" onClick={onClear}>
           {d.history.clear}
-        </Button>
+        </button>
       </div>
-      <ul className="space-y-1 text-xs">
+      <ul className="divide-y divide-line rounded-card border border-line bg-surface">
         {entries.map((e) => {
           const src = byKey(e.srcChain)
           const dst = byEid(e.dstEid)
           return (
-            <li key={e.txHash} className="flex flex-wrap items-center gap-2">
-              <span className="opacity-60">{new Date(e.at).toLocaleString()}</span>
-              <span>
-                {src.name} → {dst?.name ?? e.dstEid}
+            <li key={e.txHash} className="flex items-center gap-3 px-3 py-2 text-xs">
+              <span className="flex items-center -space-x-1.5">
+                <ChainDot name={src.name} size={20} />
+                <ChainDot name={dst?.name ?? '?'} size={20} />
               </span>
-              <span className="mono">{e.oft.slice(0, 8)}…{e.oft.slice(-4)}</span>
-              <a href={src.explorerTxUrl + e.txHash} target="_blank" rel="noopener noreferrer" className="mono underline decoration-dotted">
-                {e.txHash.slice(0, 10)}…
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-ink">
+                  {src.name} → {dst?.name ?? e.dstEid} <span className="mono text-muted">{e.oft.slice(0, 6)}…{e.oft.slice(-4)}</span>
+                </span>
+                <span className="block text-muted">{new Date(e.at).toLocaleString()}</span>
+              </span>
+              <a href={src.explorerTxUrl + e.txHash} target="_blank" rel="noopener noreferrer" className="mono text-accent-ink hover:underline">
+                {e.txHash.slice(0, 8)}…
               </a>
-              <a href={scanMessageUrl(e.txHash)} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted">
-                lzscan
+              <a href={scanMessageUrl(e.txHash)} target="_blank" rel="noopener noreferrer" className="text-accent-ink hover:underline">
+                lzscan ↗
               </a>
             </li>
           )
         })}
       </ul>
-    </Card>
+    </section>
   )
 }
