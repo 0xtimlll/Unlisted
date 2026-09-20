@@ -1,7 +1,7 @@
 export const en = {
   app: {
     title: 'Unlisted',
-    tagline: 'A form on top of LayerZero OFT contracts. Nothing is held, nothing is custodied.',
+    tagline: 'Bridge any LayerZero OFT token. Nothing is held, nothing is custodied.',
     domainNotice: 'Canonical domain:',
     wip: 'Work in progress',
   },
