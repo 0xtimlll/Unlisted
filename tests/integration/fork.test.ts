@@ -9,6 +9,7 @@ import { erc20Abi, oftAbi } from '@/core/abi'
 import { evmByKey } from '@/core/chains'
 import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
+import { evmRecipient } from '@/core/recipient'
 import { probeOft } from '@/core/probe'
 import type { OftInfo } from '@/core/types'
 import { fundFromHolder, impersonate, setNativeBalance, setTokenBalance, startFork, USER, type Fork } from './fork'
@@ -86,7 +87,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   it('TREAD: plan → simulate → guards → send succeeds on chain, OFTSent matches the plan', async () => {
     const { info } = await probeOft(f.client, TREAD_OFT)
     await setTokenBalance(f, info.token, USER, 100n * 10n ** 18n)
-    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1.5', sender: USER, recipient: USER })
+    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1.5', sender: USER, recipient: evmRecipient(USER) })
     const { report, simulation } = await fullCheck(f, info, plan, undefined)
     expect(simulation).toEqual({ ok: true })
     expect(report.results.filter((r) => !r.ok)).toEqual([])
@@ -106,7 +107,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   it('TREAD: without token balance the simulation reverts and Send is blocked', async () => {
     const { info } = await probeOft(f.client, TREAD_OFT)
     await setTokenBalance(f, info.token, USER, 0n)
-    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: USER })
+    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })
     const { report, simulation } = await fullCheck(f, info, plan, undefined)
     expect(simulation.ok).toBe(false)
     expect(report.canSend).toBe(false)
@@ -117,7 +118,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   it('TREAD: value below quoted fee is rejected by the contract (fee/value invariant is real)', async () => {
     const { info } = await probeOft(f.client, TREAD_OFT)
     await setTokenBalance(f, info.token, USER, 10n * 10n ** 18n)
-    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: USER })
+    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })
     const bad: SendPlan = { ...plan, value: plan.quote.nativeFee - 1n }
     const { simulation, report } = await fullCheck(f, info, bad, undefined)
     expect(simulation.ok).toBe(false)
@@ -129,7 +130,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
     expect(info.kind).toBe('OFTAdapter')
     expect(info.approvalRequired).toBe(false)
     await setTokenBalance(f, info.token, USER, 50n * 10n ** 6n)
-    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30110, amountInput: '2.5', sender: USER, recipient: USER })
+    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30110, amountInput: '2.5', sender: USER, recipient: evmRecipient(USER) })
     expect(approvePlan(info, plan, 0n)).toBeNull()
     const { report, simulation } = await fullCheck(f, info, plan, 0n)
     expect(simulation).toEqual({ ok: true })
@@ -154,7 +155,7 @@ describe.skipIf(!hasAnvil)('Ethereum fork', () => {
     expect(info.approvalRequired).toBe(true)
     // The token is a proxy with non-trivial balance storage; the adapter holds the locked supply.
     await fundFromHolder(f, info.token, TREAD_ADAPTER, USER, 100n * 10n ** 18n)
-    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30367, amountInput: '3', sender: USER, recipient: USER })
+    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30367, amountInput: '3', sender: USER, recipient: evmRecipient(USER) })
 
     const allowance0 = await f.client.readContract({ address: info.token, abi: erc20Abi, functionName: 'allowance', args: [USER, info.oft] })
     expect(allowance0).toBe(0n)

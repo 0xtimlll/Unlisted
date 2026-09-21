@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { byEid, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
+import { byEid, byKey, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
 import type { ReadClient } from '@/core/client'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
 import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
+import type { Recipient } from '@/core/recipient'
+import type { SvmOftInfo } from '@/core/svm/discover'
+import type { SvmRecipientCheck } from '@/core/svm/recipient'
 import { fetchStatus, POLL_INTERVAL_MS, POLL_TIMEOUT_MS, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
-import { checkPeerBack } from '@/core/verify'
+import { checkPeerBack, type PeerBackResult } from '@/core/verify'
 
 export function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value)
@@ -82,7 +85,7 @@ export type PlanParams = {
   dstEid: number | undefined
   amountInput: string
   sender: Address | undefined
-  recipient: Address | undefined
+  recipient: Recipient | undefined
   slippageBps: number
   feeBufferBps: number
   extraOptions: `0x${string}`
@@ -94,7 +97,7 @@ export function usePlan(p: PlanParams) {
   const enabled = !!client && !!p.info && p.dstEid !== undefined && !!p.sender && !!p.recipient && amount.trim() !== ''
   return useQuery({
     queryKey: [
-      'plan', p.src.key, p.info?.oft, p.dstEid, amount, p.sender, p.recipient, p.slippageBps, p.feeBufferBps, p.extraOptions,
+      'plan', p.src.key, p.info?.oft, p.dstEid, amount, p.sender, p.recipient?.vm, p.recipient?.to, p.slippageBps, p.feeBufferBps, p.extraOptions,
     ],
     queryFn: () =>
       buildSendPlan(client!, {
@@ -220,4 +223,48 @@ export function shortError(e: unknown): string {
 export function isUserRejection(e: unknown): boolean {
   const s = shortError(e).toLowerCase()
   return s.includes('rejected') || s.includes('denied') || (e as { code?: number })?.code === 4001
+}
+
+// ---- Solana destination (read-only). The svm modules are imported on demand so the EVM-only
+// path never downloads base58/ed25519 code. ---------------------------------------------------
+
+function svmRpcUrls(customRpc: string | undefined): string[] {
+  const sol = byKey('solana')
+  return customRpc ? [customRpc, ...sol.rpcUrls] : [...sol.rpcUrls]
+}
+
+export type SvmDestination = {
+  info: SvmOftInfo
+  peerBack: PeerBackResult
+}
+
+/** §4.2 discovery from the raw bytes32 peer, plus the svm form of guard 17. */
+export function useSvmDestination(enabled: boolean, peer: Hex | undefined, srcEid: number, srcOft: Address | undefined, customRpc: string | undefined) {
+  return useQuery({
+    queryKey: ['svmDest', peer, srcEid, srcOft, customRpc ?? ''],
+    queryFn: async (): Promise<SvmDestination> => {
+      const [{ SvmRpc }, { discoverSvmOft, checkPeerBackSvm }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/discover')])
+      const rpc = new SvmRpc(svmRpcUrls(customRpc))
+      const info = await discoverSvmOft(rpc, peer!, srcEid)
+      return { info, peerBack: checkPeerBackSvm(info, srcOft!) }
+    },
+    enabled: enabled && !!peer && !!srcOft,
+    staleTime: 60_000,
+    retry: 1,
+  })
+}
+
+/** §4.4 account class of the pasted recipient + whether its ATA exists. */
+export function useSvmRecipient(info: SvmOftInfo | undefined, recipientBase58: string | undefined, customRpc: string | undefined) {
+  return useQuery({
+    queryKey: ['svmRecipient', info?.tokenMint, info?.tokenProgram, recipientBase58, customRpc ?? ''],
+    queryFn: async (): Promise<SvmRecipientCheck> => {
+      const [{ SvmRpc }, { checkSvmRecipient }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/recipient')])
+      const rpc = new SvmRpc(svmRpcUrls(customRpc))
+      return checkSvmRecipient(rpc, recipientBase58!, info!.tokenMint, info!.tokenProgram)
+    },
+    enabled: !!info && !!recipientBase58,
+    staleTime: 30_000,
+    retry: 1,
+  })
 }

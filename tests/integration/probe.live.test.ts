@@ -8,6 +8,7 @@ import { makeReadClient } from '@/core/client'
 import { runGuards } from '@/core/guards'
 import { buildSendPlan, PlanError } from '@/core/plan'
 import { addressToBytes32 } from '@/core/encoding'
+import { evmRecipient } from '@/core/recipient'
 import { probeOft, ProbeError } from '@/core/probe'
 
 const TREAD_OFT = '0xd5EE1c81fE161e985dce6b90713c965f9979cf80'
@@ -39,7 +40,7 @@ describe('HyperEVM / TREAD OFT', () => {
   it('builds a plan with real quotes and the pure guards agree', async () => {
     const { info } = await probeOft(hyper, TREAD_OFT)
     const plan = await buildSendPlan(hyper, {
-      info, src: evmByKey('hyperevm'), dstEid: 30101, amountInput: '1', sender: USER, recipient: USER,
+      info, src: evmByKey('hyperevm'), dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER),
     })
     expect(plan.amounts.amountLD).toBe(10n ** 18n)
     expect(plan.quote.nativeFee).toBeGreaterThan(0n)
@@ -59,7 +60,7 @@ describe('HyperEVM / TREAD OFT', () => {
   it('refuses a destination without a peer', async () => {
     const { info } = await probeOft(hyper, TREAD_OFT)
     await expect(
-      buildSendPlan(hyper, { info, src: evmByKey('hyperevm'), dstEid: 30184, amountInput: '1', sender: USER, recipient: USER }),
+      buildSendPlan(hyper, { info, src: evmByKey('hyperevm'), dstEid: 30184, amountInput: '1', sender: USER, recipient: evmRecipient(USER) }),
     ).rejects.toMatchObject({ code: 'no_route' } satisfies Partial<PlanError>)
   })
 })

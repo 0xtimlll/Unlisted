@@ -38,8 +38,9 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 | Optimism | 30111 | | HyperEVM | 30367 |
 | Base | 30184 | | Linea | 30183 |
 | BNB Chain | 30102 | | Scroll | 30214 |
+| Solana | 30168 | | | |
 
-Any OFT (LayerZero V2) deployed on these chains works. Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
+Any OFT (LayerZero V2) deployed on these chains works. Solana is currently a **destination only** (the app discovers the Solana side of an OFT from `peers(30168)` and validates the recipient; sending is being enabled in stages). Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
 ## Security model
 

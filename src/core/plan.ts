@@ -6,9 +6,10 @@
 import { decodeFunctionData, encodeFunctionData, type Address, type Hex } from 'viem'
 import { oftAbi } from './abi'
 import { applyBps, ceilToStep, parseAmount, trimDust } from './amounts'
-import type { EvmChainDef } from './chains'
+import { byEid, type EvmChainDef } from './chains'
 import type { ReadClient } from './client'
-import { addressToBytes32, checksum, isBytes32 } from './encoding'
+import { checksum, isBytes32 } from './encoding'
+import type { Recipient } from './recipient'
 import type { OftInfo } from './types'
 
 export const DEFAULT_SLIPPAGE_BPS = 0
@@ -52,6 +53,8 @@ export type SendPlan = {
   recipient: Hex
   /** Human form of `recipient` for the UI only: EIP-55 hex or base58. Never used to build calldata. */
   recipientDisplay: string
+  /** VM the recipient was constructed for; guard 19 requires it to match the destination chain. */
+  recipientVm: 'evm' | 'svm'
   amounts: AmountBreakdown
   slippageBps: number
   feeBufferBps: number
@@ -140,8 +143,8 @@ export type BuildSendPlanInput = {
   dstEid: number
   amountInput: string
   sender: Address
-  /** EVM recipient. (svm destinations get their own input type in a later stage.) */
-  recipient: Address
+  /** Built by evmRecipient() / svmRecipient(); its vm must equal the destination chain's vm. */
+  recipient: Recipient
   slippageBps?: number
   feeBufferBps?: number
   extraOptions?: Hex
@@ -149,7 +152,7 @@ export type BuildSendPlanInput = {
 
 export class PlanError extends Error {
   constructor(
-    public readonly code: 'no_route' | 'amount_zero' | 'quote_failed' | 'slippage_too_high',
+    public readonly code: 'no_route' | 'amount_zero' | 'quote_failed' | 'slippage_too_high' | 'recipient_vm_mismatch',
     message?: string,
   ) {
     super(message ?? code)
@@ -168,12 +171,17 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
 
   const route = p.info.routes.find((r) => r.eid === p.dstEid)
   if (!route) throw new PlanError('no_route', `no peer for eid ${p.dstEid}`)
+  const dst = byEid(p.dstEid)
+  if (!dst) throw new PlanError('no_route', `eid ${p.dstEid} is not in the registry`)
+  // The recipient type carries the VM it was parsed for; a mismatch here means an EVM address
+  // was about to be padded into a Solana pubkey (or vice versa). Refuse before any quote.
+  if (p.recipient.vm !== dst.vm) throw new PlanError('recipient_vm_mismatch', `${p.recipient.vm} recipient for a ${dst.vm} destination`)
   if (slippageBps > MAX_SLIPPAGE_BPS_PLAN) throw new PlanError('slippage_too_high', `${slippageBps} bps > ${MAX_SLIPPAGE_BPS_PLAN}`)
 
   const amounts = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
   if (amounts.amountLD <= 0n) throw new PlanError('amount_zero')
 
-  const to = addressToBytes32(p.recipient)
+  const to = p.recipient.to
   const sendParam = buildSendParam({
     dstEid: p.dstEid,
     to,
@@ -208,7 +216,8 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
     dstEid: p.dstEid,
     sender: checksum(p.sender),
     recipient: to,
-    recipientDisplay: checksum(p.recipient),
+    recipientDisplay: p.recipient.display,
+    recipientVm: p.recipient.vm,
     amounts,
     slippageBps,
     feeBufferBps,

@@ -89,6 +89,7 @@ export function treadPlan(over: Partial<Omit<SendPlan, 'recipient'>> & { recipie
     sender: WALLET,
     recipient: addressToBytes32(recipientAddr),
     recipientDisplay: recipientAddr,
+    recipientVm: 'evm',
     amounts,
     slippageBps: 0,
     feeBufferBps: 4000,

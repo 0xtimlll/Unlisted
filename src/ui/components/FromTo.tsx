@@ -1,7 +1,7 @@
 'use client'
-import { isAddress, type Address as Addr } from 'viem'
+import type { Address as Addr } from 'viem'
 import { formatAmount } from '@/core/amounts'
-import { byEid, CHAINS, type ChainDef, type ChainKey } from '@/core/chains'
+import { byEid, evmChains, type ChainDef, type ChainKey } from '@/core/chains'
 import type { SendPlan } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
 import { useDict } from '@/i18n'
@@ -61,7 +61,7 @@ export function FromBox(p: {
           icon={<ChainIcon chain={p.src.key} />}
           value={p.src.key}
           onSelect={(v) => p.onSrcChange(v as ChainKey)}
-          options={CHAINS.map((c) => ({ value: c.key, label: c.name, sub: c.nativeSymbol, icon: <ChainIcon chain={c.key} size={28} /> }))}
+          options={evmChains().map((c) => ({ value: c.key, label: c.name, sub: c.nativeSymbol, icon: <ChainIcon chain={c.key} size={28} /> }))}
           aria-label={d.header.sourceChain}
         />
       </div>
@@ -85,21 +85,30 @@ export function ToBox(p: {
   plan: SendPlan | undefined
   state: DestinationState
   onChange: (s: DestinationState) => void
+  /** VM of the selected destination; undefined until one is chosen. */
+  dstVm: 'evm' | 'svm' | undefined
+  /** Validation message for the typed recipient (core/recipient.ts), or ''. */
+  recipientError: string
+  /** Error from Solana-side discovery, or ''. */
+  svmError: string
 }) {
   const d = useDict()
   const s = p.state
   const set = (patch: Partial<DestinationState>) => p.onChange({ ...s, ...patch })
   const routes = p.info.routes.filter((r) => byEid(r.eid))
   const dst = s.dstEid !== undefined ? byEid(s.dstEid) : undefined
-  const recipientValid = !s.recipientCustom || isAddress(s.recipientInput.trim(), { strict: false })
-  const last6 = s.recipientCustom && recipientValid ? s.recipientInput.trim().slice(-6).toLowerCase() : ''
-  const confirmed = !s.recipientCustom || (last6 !== '' && s.confirmLast6.trim().toLowerCase() === last6)
+  // On a Solana destination the field is always custom: there is no "use my wallet" (§4.3).
+  const custom = p.dstVm === 'svm' || s.recipientCustom
+  const typed = s.recipientInput.trim()
+  const recipientValid = !custom || (typed !== '' && p.recipientError === '')
+  const last6 = custom && recipientValid ? typed.slice(-6).toLowerCase() : ''
+  const confirmed = !custom || (last6 !== '' && s.confirmLast6.trim().toLowerCase() === last6)
 
   return (
     <Box>
       <BoxLabel
         right={
-          s.recipientCustom ? (
+          p.dstVm === 'svm' ? null : s.recipientCustom ? (
             <button type="button" className="text-accent-ink hover:underline" onClick={() => set({ recipientCustom: false, recipientInput: '', confirmLast6: '' })}>
               {d.ui.useWallet}
             </button>
@@ -133,18 +142,24 @@ export function ToBox(p: {
         />
       </div>
       <div className="mt-2 text-xs text-muted">{d.step3.receiveMin}</div>
+      {p.svmError ? (
+        <div className="mt-2 text-xs text-danger">{p.svmError}</div>
+      ) : null}
 
-      {s.recipientCustom ? (
+      {custom ? (
         <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-          <div className="text-xs text-muted">{d.step2.otherAddress}</div>
+          <div className="text-xs text-muted">{p.dstVm === 'svm' ? d.step2.recipient : d.step2.otherAddress}</div>
           <Input
             value={s.recipientInput}
             onChange={(e) => set({ recipientInput: e.target.value, confirmLast6: '' })}
-            placeholder="0x…"
+            placeholder={p.dstVm === 'svm' ? d.step3.svmRecipientPlaceholder : '0x…'}
             className="mono"
-            aria-invalid={!recipientValid}
+            aria-label={d.step2.recipient}
+            aria-invalid={!recipientValid && typed !== ''}
           />
-          {recipientValid && s.recipientInput.trim() !== '' ? (
+          {p.recipientError && typed !== '' ? <div className="text-xs text-danger">{p.recipientError}</div> : null}
+          {p.dstVm === 'svm' ? <div className="text-xs text-muted">{d.step3.svmRecipientHint}</div> : null}
+          {recipientValid && typed !== '' ? (
             <label className="block text-xs">
               <span className="text-muted">{d.step2.confirmLast6}</span> <span className="mono text-ink">…{last6}</span>
               <Input

@@ -1,14 +1,16 @@
 'use client'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { encodeFunctionData, isAddress, type Address, type Hash } from 'viem'
+import { encodeFunctionData, type Address, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
 import { AmountError, parseAmount } from '@/core/amounts'
-import { byChainId, evmByKey, type ChainKey } from '@/core/chains'
+import { byChainId, byEid, evmByKey, type ChainKey } from '@/core/chains'
 import { DecodeTxError } from '@/core/decodeTx'
-import { checksum } from '@/core/encoding'
 import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
+import { tryRecipient, type Recipient } from '@/core/recipient'
+import { SvmDiscoverError } from '@/core/svm/errors'
+import type { SuspiciousFlag } from '@/core/types'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
 import { useDict, type Dict } from '@/i18n'
@@ -20,7 +22,7 @@ import { Checks, Cta, Details, type CtaState } from './components/Review'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TokenStep, type TokenMode } from './components/TokenStep'
 import { Tracker } from './components/Tracker'
-import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useTokenBalance } from './hooks'
+import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored, type Theme } from './storage'
 
 const EMPTY_DEST: DestinationState = {
@@ -35,7 +37,7 @@ const EMPTY_DEST: DestinationState = {
 }
 
 /** Guards that do not depend on simulation/gas; the check query waits for these. */
-const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15, 17, 18])
+const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15, 17, 18, 19, 20])
 
 type Sent = { txHash: Hash; dstEid: number; startedAt: number; srcChain: ChainKey; restored: boolean }
 
@@ -55,6 +57,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
   const [noGasAccepted, setNoGasAccepted] = useState(false)
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
+  const [pdaAccepted, setPdaAccepted] = useState(false)
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored)
@@ -75,6 +78,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
     setDest(EMPTY_DEST)
     setNoGasAccepted(false)
     setPeerBackAccepted(false)
+    setPdaAccepted(false)
     setSent(null)
     setTxError('')
   }, [])
@@ -102,13 +106,27 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   }, [info?.oft])
 
   // ---- step 2: destination / amount / recipient -------------------------------
-  const recipient: Address | undefined = dest.recipientCustom
-    ? isAddress(dest.recipientInput.trim(), { strict: false })
-      ? checksum(dest.recipientInput.trim())
-      : undefined
-    : wallet
+  const dstChain = dest.dstEid !== undefined ? byEid(dest.dstEid) : undefined
+  const dstVm = dstChain?.vm
+  // §4.3: on a non-EVM destination there is NO default recipient — the wallet address is never
+  // offered, and only svmRecipient() (base58) can produce a Solana recipient (core/recipient.ts).
+  const recipientResult =
+    dstVm === 'svm'
+      ? dest.recipientInput.trim() !== ''
+        ? tryRecipient('svm', dest.recipientInput)
+        : undefined
+      : dest.recipientCustom
+        ? dest.recipientInput.trim() !== ''
+          ? tryRecipient('evm', dest.recipientInput)
+          : undefined
+        : wallet
+          ? tryRecipient('evm', wallet)
+          : undefined
+  const recipient: Recipient | undefined = recipientResult?.ok ? recipientResult.recipient : undefined
+  const recipientError = recipientResult && !recipientResult.ok ? d.errors[`recipient_${recipientResult.code}`] : ''
+  const recipientIsCustom = dstVm === 'svm' || dest.recipientCustom
   const recipientConfirmed =
-    dest.recipientCustom && recipient !== undefined && dest.confirmLast6.trim().toLowerCase() === recipient.slice(-6).toLowerCase()
+    recipientIsCustom && recipient !== undefined && dest.confirmLast6.trim().toLowerCase() === recipient.display.slice(-6).toLowerCase()
 
   let amountError = ''
   if (info && dest.amountInput.trim() !== '') {
@@ -132,7 +150,19 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   })
 
   const route = info && dest.dstEid !== undefined ? info.routes.find((r) => r.eid === dest.dstEid) : undefined
-  const peerBack = usePeerBack(src.eid, info?.oft, dest.dstEid, route?.peer, stored.customRpc)
+  const evmPeerBack = usePeerBack(src.eid, info?.oft, dstVm === 'evm' ? dest.dstEid : undefined, route?.peer, stored.customRpc)
+  const svmDest = useSvmDestination(dstVm === 'svm', route?.peer, src.eid, info?.oft, stored.customRpc['solana'])
+  const svmRecipient = useSvmRecipient(svmDest.data?.info, dstVm === 'svm' && recipient?.vm === 'svm' ? recipient.display : undefined, stored.customRpc['solana'])
+  const peerBack = dstVm === 'svm' ? svmDest.data?.peerBack : evmPeerBack.data
+  const svmFlags = useMemo<SuspiciousFlag[]>(() => {
+    if (dstVm !== 'svm') return []
+    const f: SuspiciousFlag[] = []
+    if (svmDest.data?.info.paused) f.push('svm_paused')
+    if ((svmDest.data?.info.defaultFeeBps ?? 0) > 0) f.push('svm_fee')
+    if (svmRecipient.data?.class === 'missing') f.push('svm_recipient_not_activated')
+    if (!stored.customRpc['solana']) f.push('svm_single_provider')
+    return f
+  }, [dstVm, svmDest.data, svmRecipient.data, stored.customRpc])
 
   const tokenBalance = useTokenBalance(src, info?.token, wallet)
   const allowance = useAllowance(src, info?.approvalRequired ? info.token : undefined, wallet, info?.oft)
@@ -148,7 +178,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
       srcChainId: src.chainId,
       info,
       plan: plan.data,
-      recipientIsCustom: dest.recipientCustom,
+      recipientIsCustom,
       customRecipientConfirmed: recipientConfirmed,
       tokenBalance: tokenBalance.data,
       nativeBalance: nativeBalance.data?.value,
@@ -157,11 +187,13 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
       simulation: undefined,
       selfCheck: undefined,
       noExecutorGasAccepted: noGasAccepted,
-      flags,
-      peerBack: peerBack.data,
+      flags: [...flags, ...svmFlags],
+      peerBack,
       peerBackUnavailableAccepted: peerBackAccepted,
+      svmRecipientClass: svmRecipient.data?.class,
+      svmRecipientPdaAccepted: pdaAccepted,
     }),
-    [wallet, walletChainId, src.chainId, info, plan.data, dest.recipientCustom, recipientConfirmed, tokenBalance.data, nativeBalance.data?.value, allowance.data, noGasAccepted, flags, peerBack.data, peerBackAccepted],
+    [wallet, walletChainId, src.chainId, info, plan.data, recipientIsCustom, recipientConfirmed, tokenBalance.data, nativeBalance.data?.value, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -240,7 +272,8 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
 
   // ---- CTA state: the next thing the user has to do ------------------------------
   const chainMismatch = wallet !== undefined && walletChainId !== undefined && walletChainId !== src.chainId
-  const firstFailing = report.results.find((r) => !r.ok)
+  // Explain the real blocker first; a read still in flight is only shown when nothing else is wrong.
+  const firstFailing = report.results.find((r) => !r.ok && !isPending(r)) ?? report.results.find((r) => !r.ok)
   const cta: CtaState = !wallet
     ? { kind: 'connect' }
     : chainMismatch
@@ -251,7 +284,9 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
           ? { kind: 'destination' }
           : dest.amountInput.trim() === '' || amountError
             ? { kind: 'amount' }
-            : !plan.data
+            : !recipient
+              ? { kind: 'recipient' }
+              : !plan.data
               ? plan.error
                 ? { kind: 'send', enabled: false, reason: describeError(d, plan.error) }
                 : { kind: 'quote' }
@@ -342,7 +377,22 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                   <div className="relative z-10 -my-4 flex justify-center">
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm">↓</span>
                   </div>
-                  <ToBox info={info} wallet={wallet} plan={plan.data} state={dest} onChange={setDest} />
+                  <ToBox
+                    info={info}
+                    wallet={wallet}
+                    plan={plan.data}
+                    state={dest}
+                    onChange={(next) => {
+                      // Switching between an EVM and a Solana destination clears the recipient:
+                      // an address for one VM must never linger into the other.
+                      const nextVm = next.dstEid !== undefined ? byEid(next.dstEid)?.vm : undefined
+                      setDest(nextVm !== dstVm ? { ...next, recipientCustom: false, recipientInput: '', confirmLast6: '' } : next)
+                      setPdaAccepted(false)
+                    }}
+                    dstVm={dstVm}
+                    recipientError={recipientError}
+                    svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
+                  />
                   <Details src={src} info={info} plan={plan.data} state={dest} onChange={setDest} />
                   <Checks
                     report={report}
@@ -350,6 +400,8 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                     onNoGasAccepted={setNoGasAccepted}
                     peerBackAccepted={peerBackAccepted}
                     onPeerBackAccepted={setPeerBackAccepted}
+                    pdaAccepted={pdaAccepted}
+                    onPdaAccepted={setPdaAccepted}
                     show={!!plan.data}
                   />
                 </>
@@ -389,6 +441,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
 
 function describeError(d: Dict, e: unknown): string {
   if (e instanceof ProbeError) return d.errors[`probe_${e.code}`]
+  if (e instanceof SvmDiscoverError) return d.errors[`svm_${e.code}`]
   if (e instanceof DecodeTxError) return d.errors[`decode_${e.code}`]
   if (e instanceof PlanError) return `${d.errors[`plan_${e.code}`]}${e.code === 'quote_failed' ? ` (${e.message.slice(0, 160)})` : ''}`
   if (e instanceof AmountError) return d.errors[`amount_${e.code}`]

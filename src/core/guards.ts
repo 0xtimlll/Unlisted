@@ -5,11 +5,12 @@
  */
 import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
-import { byChainId } from './chains'
+import { byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions } from './options'
 import { assembleSendArgs, decodeSendCalldata, type SendPlan } from './plan'
 import type { OftInfo, SuspiciousFlag } from './types'
+import type { SvmRecipientClass } from './svm/recipient'
 import type { PeerBackResult } from './verify'
 
 /** Hard cap on slippage: below this floor a high-fee or hostile OFT could keep most of the amount. */
@@ -51,6 +52,11 @@ export type GuardCode =
   | 'peer_back_mismatch'
   | 'peer_back_unavailable_unconfirmed'
   | 'dangerous_options'
+  | 'recipient_vm_mismatch'
+  | 'recipient_class_unknown'
+  | 'recipient_token_account'
+  | 'recipient_pda_unconfirmed'
+  | 'svm_send_not_supported'
 
 /** Codes that mean "not known yet" (a read is in flight), not "wrong". The UI shows them muted. */
 export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
@@ -61,6 +67,7 @@ export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
   'simulation_missing',
   'selfcheck_missing',
   'peer_back_unknown',
+  'recipient_class_unknown',
 ])
 
 export function isPending(r: GuardResult): boolean {
@@ -103,6 +110,10 @@ export type GuardInput = {
   peerBack: PeerBackResult | undefined
   /** User accepted that the back-link could not be verified (RPC down), see guard 17. */
   peerBackUnavailableAccepted: boolean
+  /** Solana destinations only: what kind of account the recipient is (svm/recipient.ts). */
+  svmRecipientClass?: SvmRecipientClass | undefined
+  /** User explicitly accepted sending to a program-owned (PDA) Solana account. */
+  svmRecipientPdaAccepted?: boolean
 }
 
 export type GuardReport = {
@@ -303,6 +314,29 @@ export function g18Options(i: GuardInput): GuardResult {
   return ok(18)
 }
 
+// 19. recipient was built for the destination's VM; on Solana it must be a wallet, not a token account
+export function g19RecipientVm(i: GuardInput): GuardResult {
+  if (!i.plan) return fail(19, 'plan_missing')
+  const dst = byEid(i.plan.dstEid)
+  if (!dst) return fail(19, 'peer_missing', `eid ${i.plan.dstEid}`)
+  if (i.plan.recipientVm !== dst.vm) return fail(19, 'recipient_vm_mismatch', `${i.plan.recipientVm} → ${dst.vm}`)
+  if (dst.vm === 'svm') {
+    const cls = i.svmRecipientClass
+    if (cls === undefined) return fail(19, 'recipient_class_unknown')
+    if (cls === 'token_account') return fail(19, 'recipient_token_account')
+    if (cls === 'program_owned' && !i.svmRecipientPdaAccepted) return fail(19, 'recipient_pda_unconfirmed')
+  }
+  return ok(19)
+}
+
+// 20. sending to a Solana destination is not wired yet (stage 3 removes this guard)
+export function g20SvmSend(i: GuardInput): GuardResult {
+  if (!i.plan) return fail(20, 'plan_missing')
+  const dst = byEid(i.plan.dstEid)
+  if (dst?.vm === 'svm') return fail(20, 'svm_send_not_supported')
+  return ok(20)
+}
+
 export function runGuards(i: GuardInput): GuardReport {
   const g16 = g16Suspicious(i)
   const results: GuardResult[] = [
@@ -324,6 +358,8 @@ export function runGuards(i: GuardInput): GuardReport {
     g16.result,
     g17PeerBack(i),
     g18Options(i),
+    g19RecipientVm(i),
+    g20SvmSend(i),
   ]
   return {
     results,

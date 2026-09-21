@@ -50,8 +50,8 @@ const code = (r: GuardResult) => (r.ok ? 'ok' : r.code)
 describe('runGuards on a good snapshot', () => {
   it('passes everything and enables Send', () => {
     const rep = runGuards(goodInput())
-    expect(rep.results).toHaveLength(18)
-    expect(rep.results.map(code)).toEqual(Array(18).fill('ok'))
+    expect(rep.results).toHaveLength(20)
+    expect(rep.results.map(code)).toEqual(Array(20).fill('ok'))
     expect(rep.canSend).toBe(true)
     expect(rep.warnings).toEqual([])
     expect(rep.needsNoGasConfirmation).toBe(false)

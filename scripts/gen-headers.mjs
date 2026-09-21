@@ -7,13 +7,14 @@
  *
  * script-src is 'self' plus SHA-256 hashes of the inline scripts Next.js emits
  * (React flight data). No 'unsafe-inline' for scripts, ever.
- * connect-src is built from the chain registry + LayerZero Scan + WalletConnect relay.
+ * connect-src comes from src/core/rpcPolicy.ts (registry hosts + RPC provider wildcards, the
+ * same list settings validate against) + LayerZero Scan + WalletConnect relay.
  * Extra hosts (e.g. a self-hosted RPC) can be appended via CSP_CONNECT_EXTRA="https://a https://b".
  */
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { allRpcHosts } from '../src/core/chains.ts'
+import { cspConnectSources } from '../src/core/rpcPolicy.ts'
 import { LZ_SCAN_API } from '../src/core/track.ts'
 
 const ROOT = new URL('..', import.meta.url).pathname
@@ -55,7 +56,8 @@ const WALLETCONNECT = process.env.NEXT_PUBLIC_WC_PROJECT_ID
     ]
   : []
 const extra = (process.env.CSP_CONNECT_EXTRA ?? '').split(/\s+/).filter(Boolean)
-const connect = ["'self'", ...allRpcHosts(), LZ_SCAN_API, ...WALLETCONNECT, ...extra]
+// Registry hosts + known RPC providers (wildcards) — the same list validateRpcUrl() enforces.
+const connect = ["'self'", ...cspConnectSources(), LZ_SCAN_API, ...WALLETCONNECT, ...extra]
 
 const csp = [
   "default-src 'self'",

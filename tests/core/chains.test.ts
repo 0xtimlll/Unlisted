@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { allRpcHosts, byChainId, byEid, byKey, CHAINS, evmByKey, evmChains, isEvm, isSvm, requireEvm, validateRpcUrl } from '@/core/chains'
+import { allRpcHosts, byChainId, byEid, byKey, CHAINS, evmByKey, evmChains, isEvm, isSvm, requireEvm } from '@/core/chains'
+import { cspConnectSources, isAllowedRpcHost, validateRpcUrl } from '@/core/rpcPolicy'
 
 describe('chain registry', () => {
   it('has all v1 chains with the right eids', () => {
@@ -15,7 +16,7 @@ describe('chain registry', () => {
       linea: [59144, 30183],
       scroll: [534352, 30214],
     }
-    expect(CHAINS).toHaveLength(Object.keys(expected).length)
+    expect(evmChains()).toHaveLength(Object.keys(expected).length)
     for (const [key, [chainId, eid]] of Object.entries(expected)) {
       const c = evmByKey(key as never)
       expect(c.vm).toBe('evm')
@@ -24,11 +25,21 @@ describe('chain registry', () => {
     }
   })
 
+  it('Solana is an svm chain with eid 30168', () => {
+    const sol = byKey('solana')
+    expect(sol.vm).toBe('svm')
+    expect(sol.eid).toBe(30168)
+    expect(isSvm(sol) && sol.feeStepLamports).toBe(10_000n)
+    expect(byEid(30168)?.key).toBe('solana')
+    expect(() => requireEvm(sol)).toThrow(/not an EVM chain/)
+    expect(() => evmByKey('solana')).toThrow()
+  })
+
   it('has unique chainIds, eids and keys', () => {
     const ids = new Set(evmChains().map((c) => c.chainId))
     const eids = new Set(CHAINS.map((c) => c.eid))
     const keys = new Set(CHAINS.map((c) => c.key))
-    expect(ids.size).toBe(CHAINS.length)
+    expect(ids.size).toBe(evmChains().length)
     expect(eids.size).toBe(CHAINS.length)
     expect(keys.size).toBe(CHAINS.length)
   })
@@ -45,13 +56,11 @@ describe('chain registry', () => {
     }
   })
 
-  it('vm discriminant: every v1 chain is EVM; helpers narrow without casts', () => {
-    expect(CHAINS.every(isEvm)).toBe(true)
-    expect(CHAINS.some(isSvm)).toBe(false)
-    expect(evmChains()).toHaveLength(CHAINS.length)
-    for (const c of CHAINS) expect(requireEvm(c)).toBe(c)
-    const fakeSvm = { ...byKey('ethereum'), vm: 'svm', feeStepLamports: 1n } as unknown as Parameters<typeof requireEvm>[0]
-    expect(() => requireEvm(fakeSvm)).toThrow(/not an EVM chain/)
+  it('vm discriminant: helpers narrow without casts', () => {
+    expect(CHAINS.filter(isEvm)).toHaveLength(evmChains().length)
+    expect(CHAINS.filter(isSvm).map((c) => c.key)).toEqual(['solana'])
+    for (const c of evmChains()) expect(requireEvm(c)).toBe(c)
+    expect(byChainId(30168)).toBeUndefined() // an eid is not a chainId; svm has no chainId at all
   })
 
   it('lookups work', () => {
@@ -71,9 +80,23 @@ describe('chain registry', () => {
 })
 
 describe('validateRpcUrl', () => {
-  it('accepts https', () => {
-    expect(validateRpcUrl('https://rpc.example.com/v1')).toEqual({ ok: true, url: 'https://rpc.example.com/v1' })
-    expect(validateRpcUrl('  https://rpc.example.com  ').ok).toBe(true)
+  it('accepts https on registry hosts and known providers (the CSP allow-list)', () => {
+    expect(validateRpcUrl('https://ethereum-rpc.publicnode.com')).toEqual({ ok: true, url: 'https://ethereum-rpc.publicnode.com/' })
+    expect(validateRpcUrl('  https://mainnet.helius-rpc.com/?api-key=x  ').ok).toBe(true)
+    expect(validateRpcUrl('https://eth-mainnet.g.alchemy.com/v2/key').ok).toBe(true)
+    expect(validateRpcUrl('https://my-node.solana-mainnet.quiknode.pro/abc/').ok).toBe(true)
+  })
+  it('refuses hosts the CSP would block, with a dedicated reason', () => {
+    expect(validateRpcUrl('https://rpc.example.com/v1')).toEqual({ ok: false, reason: 'host_not_allowed' })
+    expect(validateRpcUrl('https://alchemy.com')).toEqual({ ok: false, reason: 'host_not_allowed' }) // apex is not *.alchemy.com
+    expect(validateRpcUrl('https://evil-alchemy.com')).toEqual({ ok: false, reason: 'host_not_allowed' })
+  })
+  it('CSP sources and the validator come from one list', () => {
+    for (const src of cspConnectSources()) {
+      const host = src.replace('https://', '').replace('*.', 'x.')
+      expect(isAllowedRpcHost(host)).toBe(true)
+    }
+    for (const c of CHAINS) for (const u of c.rpcUrls) expect(validateRpcUrl(u).ok).toBe(true)
   })
   it('accepts http only for localhost', () => {
     expect(validateRpcUrl('http://localhost:8545').ok).toBe(true)

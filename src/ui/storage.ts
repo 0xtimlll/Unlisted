@@ -4,7 +4,7 @@
  */
 import { isAddress, type Address, type Hash } from 'viem'
 import type { ChainKey } from '@/core/chains'
-import { validateRpcUrl } from '@/core/chains'
+import { validateRpcUrl } from '@/core/rpcPolicy'
 
 const KEY = 'oft-bridge-ui:v1'
 

@@ -65,7 +65,15 @@ export function Details(p: { src: EvmChainDef; info: OftInfo; plan: SendPlan | u
                 {dst?.name ?? '?'} <span className="text-xs text-muted">(eid {plan.dstEid})</span>
               </Row>
               <Row label={d.step3.recipient} mono>
-                <Address value={plan.recipientDisplay} href={dst ? dst.explorerAddrUrl + plan.recipientDisplay : undefined} short />
+                {plan.recipientVm === 'evm' ? (
+                  <Address value={plan.recipientDisplay} href={dst ? dst.explorerAddrUrl + plan.recipientDisplay : undefined} short />
+                ) : (
+                  <a href={dst ? dst.explorerAddrUrl + plan.recipientDisplay : undefined} target="_blank" rel="noopener noreferrer" className="mono break-all underline decoration-dotted underline-offset-2">
+                    {plan.recipientDisplay.slice(0, 6)}
+                    <span className="opacity-60">{plan.recipientDisplay.slice(6, -6)}</span>
+                    <b>{plan.recipientDisplay.slice(-6)}</b>
+                  </a>
+                )}
               </Row>
               <Row label={d.step3.refund} mono>
                 <Address value={plan.sender} short />
@@ -121,6 +129,8 @@ export function Checks(p: {
   onNoGasAccepted: (v: boolean) => void
   peerBackAccepted: boolean
   onPeerBackAccepted: (v: boolean) => void
+  pdaAccepted: boolean
+  onPdaAccepted: (v: boolean) => void
   show: boolean
 }) {
   const d = useDict()
@@ -132,6 +142,7 @@ export function Checks(p: {
   const passingShown = shown.filter((r) => r.ok).length
   const totalShown = shown.length
   const peerBackUnavailable = results.some((r) => !r.ok && r.code === 'peer_back_unavailable_unconfirmed') || p.peerBackAccepted
+  const pdaRecipient = results.some((r) => !r.ok && r.code === 'recipient_pda_unconfirmed') || p.pdaAccepted
   if (!p.show) return null
 
   const title = failing.length ? (
@@ -152,6 +163,15 @@ export function Checks(p: {
           <label className="flex items-start gap-2 text-xs text-ink">
             <input type="checkbox" className="mt-0.5" checked={p.peerBackAccepted} onChange={(e) => p.onPeerBackAccepted(e.target.checked)} />
             {d.step3.confirmPeerBack}
+          </label>
+        </div>
+      ) : null}
+      {pdaRecipient ? (
+        <div className="mb-2 space-y-2">
+          <Alert kind="warn">{d.guard.recipient_pda_unconfirmed}</Alert>
+          <label className="flex items-start gap-2 text-xs text-ink">
+            <input type="checkbox" className="mt-0.5" checked={p.pdaAccepted} onChange={(e) => p.onPdaAccepted(e.target.checked)} />
+            {d.step3.confirmPda}
           </label>
         </div>
       ) : null}
@@ -200,6 +220,7 @@ export type CtaState =
   | { kind: 'check' }
   | { kind: 'destination' }
   | { kind: 'amount' }
+  | { kind: 'recipient' }
   | { kind: 'quote' }
   | { kind: 'approve'; intent: ApproveIntent }
   | { kind: 'checking' }
@@ -220,14 +241,16 @@ export function Cta(p: { state: CtaState; info: OftInfo | undefined; busy: boole
             ? d.ui.cta_destination
             : s.kind === 'amount'
               ? d.ui.cta_amount
-              : s.kind === 'quote'
-                ? d.ui.cta_quote
+              : s.kind === 'recipient'
+                ? d.ui.cta_recipient
+                : s.kind === 'quote'
+                  ? d.ui.cta_quote
                 : s.kind === 'checking'
                   ? d.ui.cta_checking
                   : s.kind === 'approve'
                   ? fmt(d.step3.approveBtn, { amount: formatAmount(s.intent.amount, p.info?.decimals ?? 18), symbol: p.info?.symbol ?? '' })
                   : d.ui.cta_send
-  const disabled = p.busy || s.kind === 'check' || s.kind === 'destination' || s.kind === 'amount' || s.kind === 'quote' || s.kind === 'checking' || (s.kind === 'send' && !s.enabled)
+  const disabled = p.busy || s.kind === 'check' || s.kind === 'destination' || s.kind === 'amount' || s.kind === 'recipient' || s.kind === 'quote' || s.kind === 'checking' || (s.kind === 'send' && !s.enabled)
   return (
     <div className="space-y-2">
       {p.error ? <Alert kind="error">{p.error}</Alert> : null}
@@ -268,6 +291,8 @@ function okLabel(id: number, d: ReturnType<typeof useDict>): string | null {
       return d.guard.ok_peer_back
     case 18:
       return d.guard.ok_options
+    case 19:
+      return d.guard.ok_recipient_class
     default:
       return null
   }

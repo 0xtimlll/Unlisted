@@ -17,3 +17,4 @@ to identify that network.
 | hyperevm.png | blockchains/hyperevm/info/logo.png |
 | linea.png | blockchains/linea/info/logo.png |
 | scroll.png | blockchains/scroll/info/logo.png |
+| solana.png | blockchains/solana/info/logo.png |

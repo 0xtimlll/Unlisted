@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { CHAINS, validateRpcUrl, type ChainKey } from '@/core/chains'
+import { CHAINS, type ChainKey } from '@/core/chains'
+import { validateRpcUrl } from '@/core/rpcPolicy'
 import { fmt, useDict } from '@/i18n'
 import { clearAll, exportJson, type Stored } from '../storage'
 import { Button, Input } from './ui'
@@ -65,6 +66,7 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
                 className="mono mt-1 h-9"
               />
               {errors[c.key] ? <span className="text-danger">{errors[c.key]}</span> : null}
+              {c.vm === 'svm' ? <span className="block text-muted">{d.settings.solanaHint}</span> : null}
             </label>
           ))}
         </div>

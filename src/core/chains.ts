@@ -1,5 +1,6 @@
 /**
  * Chain registry (§4). `eid` values live ONLY here and are never editable from the UI.
+ * No imports on purpose: scripts/gen-headers.mjs loads this file with plain Node.
  */
 
 export type ChainKey =
@@ -13,6 +14,7 @@ export type ChainKey =
   | 'hyperevm'
   | 'linea'
   | 'scroll'
+  | 'solana'
 
 type ChainCommon = {
   key: ChainKey
@@ -177,6 +179,21 @@ export const CHAINS: readonly ChainDef[] = [
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 20,
   },
+  {
+    vm: 'svm',
+    key: 'solana',
+    name: 'Solana',
+    eid: 30168,
+    nativeSymbol: 'SOL',
+    // Public Solana RPCs that accept browser origins without a key are rare: api.mainnet-beta
+    // rejects requests carrying an Origin header, drpc/ankr/helius need keys. Both entries below
+    // are publicnode, i.e. one provider — the UI recommends a personal RPC for Solana.
+    rpcUrls: ['https://solana-rpc.publicnode.com', 'https://solana.publicnode.com'],
+    explorerTxUrl: 'https://solscan.io/tx/',
+    explorerAddrUrl: 'https://solscan.io/account/',
+    feeStepLamports: 10_000n,
+    srcConfirmationsHint: 1,
+  },
 ] as const
 
 export const ALL_EIDS: readonly number[] = CHAINS.map((c) => c.eid)
@@ -224,29 +241,4 @@ export function allRpcHosts(): string[] {
   const hosts = new Set<string>()
   for (const c of CHAINS) for (const u of c.rpcUrls) hosts.add(new URL(u).origin)
   return [...hosts].sort()
-}
-
-export type RpcValidation = { ok: true; url: string } | { ok: false; reason: 'empty' | 'not_url' | 'insecure' | 'bad_scheme' }
-
-/**
- * Validates a user-supplied RPC URL (§4): `https://` only; `http://` allowed only for localhost.
- * Returns the normalized origin+path (no credentials, no hash).
- */
-export function validateRpcUrl(input: string): RpcValidation {
-  const s = input.trim()
-  if (s === '') return { ok: false, reason: 'empty' }
-  let u: URL
-  try {
-    u = new URL(s)
-  } catch {
-    return { ok: false, reason: 'not_url' }
-  }
-  if (u.username || u.password) return { ok: false, reason: 'not_url' }
-  if (u.protocol === 'https:') return { ok: true, url: u.toString() }
-  if (u.protocol === 'http:') {
-    const h = u.hostname
-    if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') return { ok: true, url: u.toString() }
-    return { ok: false, reason: 'insecure' }
-  }
-  return { ok: false, reason: 'bad_scheme' }
 }

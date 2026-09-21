@@ -30,4 +30,13 @@ export type OftInfo = {
 }
 
 /** Soft warnings (§6.16). Shown before signing, never block. */
-export type SuspiciousFlag = 'owner_is_eoa' | 'behind_proxy' | 'not_verified' | 'adapter_empty' | 'not_cross_checked'
+export type SuspiciousFlag =
+  | 'owner_is_eoa'
+  | 'behind_proxy'
+  | 'not_verified'
+  | 'adapter_empty'
+  | 'not_cross_checked'
+  | 'svm_recipient_not_activated'
+  | 'svm_paused'
+  | 'svm_fee'
+  | 'svm_single_provider'
