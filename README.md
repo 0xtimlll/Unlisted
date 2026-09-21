@@ -40,7 +40,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 | BNB Chain | 30102 | | Scroll | 30214 |
 | Solana | 30168 | | | |
 
-Any OFT (LayerZero V2) deployed on these chains works. Solana is currently a **destination only** (the app discovers the Solana side of an OFT from `peers(30168)` and validates the recipient; sending is being enabled in stages). Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
+Any OFT (LayerZero V2) deployed on these chains works. **EVM → Solana** is supported: the Solana side is discovered from `peers(30168)` (program, mint, token program, PeerConfig), the recipient must be a Solana wallet typed by hand (never your EVM address), and executor options are derived from the contract's enforced options plus token-account rent when the recipient has none. Solana → EVM is the next stage. Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
 ## Security model
 

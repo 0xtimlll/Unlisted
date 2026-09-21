@@ -11,6 +11,7 @@ import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@
 import { tryRecipient, type Recipient } from '@/core/recipient'
 import { SvmDiscoverError } from '@/core/svm/errors'
 import type { SuspiciousFlag } from '@/core/types'
+import { planSvmOptions } from '@/core/options'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
 import { useDict, type Dict } from '@/i18n'
@@ -137,18 +138,6 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
     }
   }
 
-  const plan = usePlan({
-    info,
-    src,
-    dstEid: dest.dstEid,
-    amountInput: amountError ? '' : dest.amountInput,
-    sender: wallet,
-    recipient,
-    slippageBps: dest.slippageBps,
-    feeBufferBps: dest.feeBufferBps,
-    extraOptions: dest.extraOptions,
-  })
-
   const route = info && dest.dstEid !== undefined ? info.routes.find((r) => r.eid === dest.dstEid) : undefined
   const evmPeerBack = usePeerBack(src.eid, info?.oft, dstVm === 'evm' ? dest.dstEid : undefined, route?.peer, stored.customRpc)
   const svmDest = useSvmDestination(dstVm === 'svm', route?.peer, src.eid, info?.oft, stored.customRpc['solana'])
@@ -163,6 +152,26 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
     if (!stored.customRpc['solana']) f.push('svm_single_provider')
     return f
   }, [dstVm, svmDest.data, svmRecipient.data, stored.customRpc])
+
+  // §5.1 Solana destination: extraOptions are derived from the contract's enforced options and
+  // the recipient's token-account state, never typed by hand (a sample tx only contributes a hint).
+  const svmOptions = useMemo(() => {
+    if (dstVm !== 'svm' || !info || dest.dstEid === undefined || !svmRecipient.data) return undefined
+    return planSvmOptions({ enforced: info.enforced[dest.dstEid] ?? '0x', ataExists: svmRecipient.data.ataExists, sample: dest.extraOptions })
+  }, [dstVm, info, dest.dstEid, dest.extraOptions, svmRecipient.data])
+
+  const plan = usePlan({
+    info,
+    src,
+    dstEid: dest.dstEid,
+    // For Solana, wait until the options are known: the quoted SendParam must be the one we send.
+    amountInput: amountError || (dstVm === 'svm' && !svmOptions) ? '' : dest.amountInput,
+    sender: wallet,
+    recipient,
+    slippageBps: dest.slippageBps,
+    feeBufferBps: dest.feeBufferBps,
+    extraOptions: dstVm === 'svm' ? (svmOptions?.extraOptions ?? '0x') : dest.extraOptions,
+  })
 
   const tokenBalance = useTokenBalance(src, info?.token, wallet)
   const allowance = useAllowance(src, info?.approvalRequired ? info.token : undefined, wallet, info?.oft)
@@ -192,8 +201,9 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
       peerBackUnavailableAccepted: peerBackAccepted,
       svmRecipientClass: svmRecipient.data?.class,
       svmRecipientPdaAccepted: pdaAccepted,
+      svmDestinationKnown: dstVm !== 'svm' || !!svmDest.data,
     }),
-    [wallet, walletChainId, src.chainId, info, plan.data, recipientIsCustom, recipientConfirmed, tokenBalance.data, nativeBalance.data?.value, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted],
+    [wallet, walletChainId, src.chainId, info, plan.data, recipientIsCustom, recipientConfirmed, tokenBalance.data, nativeBalance.data?.value, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, dstVm, svmDest.data],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -393,7 +403,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
                     recipientError={recipientError}
                     svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
                   />
-                  <Details src={src} info={info} plan={plan.data} state={dest} onChange={setDest} />
+                  <Details src={src} info={info} plan={plan.data} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDest.data?.info} />
                   <Checks
                     report={report}
                     noGasAccepted={noGasAccepted}

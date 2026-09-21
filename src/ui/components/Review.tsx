@@ -1,9 +1,12 @@
 'use client'
 import { useState } from 'react'
 import { formatAmount } from '@/core/amounts'
+import { receiveTotals } from '@/core/options'
 import { byEid, type ChainDef, type EvmChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
 import type { SendPlan } from '@/core/plan'
+import type { SvmOptionsPlan } from '@/core/options'
+import type { SvmOftInfo } from '@/core/svm/discover'
 import type { OftInfo } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
@@ -11,7 +14,15 @@ import type { DestinationState } from './FromTo'
 import { Alert, Button, Disclosure, Input, Row, Spinner } from './ui'
 
 /** Quote breakdown + advanced settings. Collapsed by default, like Relay's fee row. */
-export function Details(p: { src: EvmChainDef; info: OftInfo; plan: SendPlan | undefined; state: DestinationState; onChange: (s: DestinationState) => void }) {
+export function Details(p: {
+  src: EvmChainDef
+  info: OftInfo
+  plan: SendPlan | undefined
+  state: DestinationState
+  onChange: (s: DestinationState) => void
+  svmOptions?: SvmOptionsPlan | undefined
+  svmInfo?: SvmOftInfo | undefined
+}) {
   const d = useDict()
   const [open, setOpen] = useState(false)
   const [adv, setAdv] = useState(false)
@@ -87,6 +98,19 @@ export function Details(p: { src: EvmChainDef; info: OftInfo; plan: SendPlan | u
                       </li>
                     ))}
                   </ul>
+                </Row>
+              ) : null}
+              {plan.recipientVm === 'svm' && p.svmOptions ? (
+                <Row label={d.step3.executorOptions}>
+                  <div className="text-xs">
+                    {fmt(d.step3.svmCuNote, { cu: (p.svmOptions.total.gas - receiveTotals(plan.extraOptions).gas).toString(), extra: receiveTotals(plan.extraOptions).gas > 0n ? fmt(d.step3.svmCuExtra, { cu: receiveTotals(plan.extraOptions).gas.toString() }) : '' })}
+                  </div>
+                  {p.svmOptions.addedLamports > 0n ? (
+                    <div className="text-xs text-warn">{fmt(d.step3.svmAtaLamports, { sol: formatAmount(p.svmOptions.addedLamports, 9, { maxFraction: 6 }) })}</div>
+                  ) : p.svmInfo && p.svmOptions.total.value > 0n ? (
+                    <div className="text-xs text-muted">{d.step3.svmAtaCovered}</div>
+                  ) : null}
+                  {p.svmOptions.dropped.length > 0 ? <div className="text-xs text-danger">{d.step3.droppedOptions} {p.svmOptions.dropped.map((o) => o.kind).join(', ')}</div> : null}
                 </Row>
               ) : null}
               {plan.quote.limitMaxLD < 2n ** 128n ? (

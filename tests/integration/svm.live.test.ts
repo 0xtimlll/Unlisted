@@ -7,7 +7,10 @@ import { describe, expect, it } from 'vitest'
 import { byKey, evmByKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
 import { addressToBytes32, peerToAddress } from '@/core/encoding'
+import { planSvmOptions } from '@/core/options'
+import { buildSendPlan } from '@/core/plan'
 import { probeOft } from '@/core/probe'
+import { svmRecipient } from '@/core/recipient'
 import { decodeBase58, encodeBase58 } from '@/core/svm/base58'
 import { checkPeerBackSvm, discoverSvmOft } from '@/core/svm/discover'
 import { PROGRAM, pubkeyFromHex } from '@/core/svm/pubkey'
@@ -65,4 +68,32 @@ describe('PENGU: HyperEVM OFT with a Solana peer', () => {
     expect(f.class).toBe('missing')
     expect(f.ataExists).toBe(false)
   }, 60_000)
+})
+
+describe('EVM → Solana plan on the live HyperEVM contract', () => {
+  it('quotes a send to a fresh Solana wallet; enforced options already fund the ATA, so extra is empty', async () => {
+    const hyper = makeReadClient(evmByKey('hyperevm'))
+    const { info } = await probeOft(hyper, PENGU_HYPEREVM)
+    const fresh = encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 13 + 7) & 0xff))
+    const opts = planSvmOptions({ enforced: info.enforced[SOLANA_EID] ?? '0x', ataExists: false })
+    expect(opts.error).toBeUndefined()
+    expect(opts.extraOptions).toBe('0x')
+    expect(opts.total.gas).toBeGreaterThan(0n)
+    expect(opts.total.value).toBeGreaterThanOrEqual(2_039_280n)
+    const plan = await buildSendPlan(hyper, {
+      info, src: evmByKey('hyperevm'), dstEid: SOLANA_EID, amountInput: '1.5', sender: '0x1111111111111111111111111111111111111111',
+      recipient: svmRecipient(fresh), extraOptions: opts.extraOptions,
+    })
+    expect(plan.recipientVm).toBe('svm')
+    expect(plan.recipient).toBe(svmRecipient(fresh).to)
+    expect(plan.quote.nativeFee).toBeGreaterThan(0n)
+    expect(plan.value).toBeGreaterThanOrEqual(plan.quote.nativeFee)
+    // Solana shared decimals: dust below ld2sd is trimmed on the EVM side too (18 → 6)
+    const dusty = await buildSendPlan(hyper, {
+      info, src: evmByKey('hyperevm'), dstEid: SOLANA_EID, amountInput: '1.1234567891', sender: '0x1111111111111111111111111111111111111111',
+      recipient: svmRecipient(fresh),
+    })
+    expect(dusty.amounts.dustTrimmed).toBeGreaterThan(0n)
+    expect(dusty.amounts.amountLD % info.conversionRate).toBe(0n)
+  }, 90_000)
 })

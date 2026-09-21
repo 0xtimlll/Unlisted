@@ -15,8 +15,24 @@
  */
 import type { Hex } from 'viem'
 
-/** Anything above this is not a real receive; it only inflates the fee. Typical OFT: 60k–300k. */
-export const MAX_LZ_RECEIVE_GAS = 2_000_000n
+export type Vm = 'evm' | 'svm'
+
+/**
+ * Per-VM ceilings for what a sample transaction may hand us. On EVM `gas` is gas and `value`
+ * is wei delivered to the receiver contract (almost never wanted). On Solana `gas` is COMPUTE
+ * UNITS (hard chain limit 1.4M per transaction) and `value` is LAMPORTS the executor drops on
+ * the destination — legitimately used to fund a token account, so it is allowed up to a cap.
+ */
+export const LIMITS: Record<Vm, { maxGas: bigint; maxValue: bigint }> = {
+  evm: { maxGas: 2_000_000n, maxValue: 10n ** 16n }, // 0.01 native
+  svm: { maxGas: 1_400_000n, maxValue: 10_000_000n }, // 0.01 SOL
+}
+
+/** Kept for EVM callers/tests: the EVM gas ceiling. */
+export const MAX_LZ_RECEIVE_GAS = LIMITS.evm.maxGas
+
+/** Rent-exempt minimum for an SPL token account (165 bytes). What a receive must carry if the ATA is missing. */
+export const ATA_RENT_LAMPORTS = 2_039_280n
 
 export type OptionItem =
   | { kind: 'lzReceive'; gas: bigint; value: bigint }
@@ -96,18 +112,29 @@ export function decodeOptions(options: Hex): DecodedOptions {
   return { type: 3, items }
 }
 
-/** Encodes plain lzReceive(gas) executor options as type 3. gas = 0 -> '0x'. */
-export function encodeLzReceiveGas(gas: bigint): Hex {
-  if (gas <= 0n) return '0x'
-  if (gas >= 1n << 128n) throw new OptionsError('gas does not fit u128')
+/** Encodes a single executor lzReceive(gas[, value]) as type-3 options. Both zero -> '0x'. */
+export function encodeLzReceive(gas: bigint, value = 0n): Hex {
+  if (gas < 0n || value < 0n) throw new OptionsError('negative option field')
+  if (gas === 0n && value === 0n) return '0x'
+  if (gas >= 1n << 128n || value >= 1n << 128n) throw new OptionsError('option field does not fit u128')
   const g = gas.toString(16).padStart(32, '0')
-  // type 0003 | workerId 01 | size 0011 (1 type byte + 16 gas bytes) | optionType 01 | gas u128
-  return `0x000301001101${g}` as Hex
+  if (value === 0n) {
+    // type 0003 | workerId 01 | size 0011 (1 type byte + 16 gas bytes) | optionType 01 | gas u128
+    return `0x000301001101${g}` as Hex
+  }
+  const v = value.toString(16).padStart(32, '0')
+  // size 0021 = 1 type byte + 16 gas bytes + 16 value bytes
+  return `0x000301002101${g}${v}` as Hex
 }
 
+/** Back-compat name. */
+export const encodeLzReceiveGas = (gas: bigint): Hex => encodeLzReceive(gas, 0n)
+
 export type SanitizedOptions = {
-  /** What we will actually send. Only lzReceive gas, capped, or '0x'. */
+  /** What we will actually send: at most one lzReceive(gas, value) within the VM's caps, or '0x'. */
   options: Hex
+  gas: bigint
+  value: bigint
   /** Items that were removed from the sample; non-empty means "show a red warning". */
   dropped: OptionItem[]
   /** True when the sample was malformed and ignored entirely. */
@@ -115,37 +142,100 @@ export type SanitizedOptions = {
 }
 
 /**
- * Reduces someone else's options to the only thing that is safe to reuse: a receive-gas hint.
- * nativeDrop, lzCompose, lzReceive value, DVN and unknown options are dropped and reported.
+ * Reduces someone else's options to the only thing that is safe to reuse: one lzReceive with
+ * gas/value inside the destination VM's caps. nativeDrop, lzCompose, DVN, unknown options and
+ * over-cap receives are dropped and reported.
  */
-export function sanitizeOptions(sample: Hex): SanitizedOptions {
+export function sanitizeOptions(sample: Hex, dstVm: Vm = 'evm'): SanitizedOptions {
   let decoded: DecodedOptions
   try {
     decoded = decodeOptions(sample)
   } catch {
-    return { options: '0x', dropped: [], malformed: true }
+    return { options: '0x', gas: 0n, value: 0n, dropped: [], malformed: true }
   }
+  const lim = LIMITS[dstVm]
   const dropped: OptionItem[] = []
   let gas = 0n
+  let value = 0n
   for (const it of decoded.items) {
-    if (it.kind === 'lzReceive' && it.value === 0n && it.gas <= MAX_LZ_RECEIVE_GAS) {
+    if (it.kind === 'lzReceive' && it.gas <= lim.maxGas && it.value <= lim.maxValue) {
       gas = it.gas > gas ? it.gas : gas
+      value = it.value > value ? it.value : value
     } else if (it.kind === 'ordered') {
       // harmless, but not needed for an OFT transfer; drop silently
     } else {
       dropped.push(it)
     }
   }
-  return { options: encodeLzReceiveGas(gas), dropped, malformed: false }
+  return { options: encodeLzReceive(gas, value), gas, value, dropped, malformed: false }
 }
 
-/** True when options carry anything that moves value or calls code beyond a plain receive. */
-export function hasDangerousOptions(options: Hex): boolean {
+/** True when options carry anything beyond a plain receive within the VM's caps. */
+export function hasDangerousOptions(options: Hex, dstVm: Vm = 'evm'): boolean {
+  const lim = LIMITS[dstVm]
   try {
     return decodeOptions(options).items.some(
-      (it) => it.kind === 'nativeDrop' || it.kind === 'lzCompose' || (it.kind === 'lzReceive' && it.value > 0n) || it.kind === 'unknown',
+      (it) => it.kind === 'nativeDrop' || it.kind === 'lzCompose' || it.kind === 'unknown' || (it.kind === 'lzReceive' && (it.gas > lim.maxGas || it.value > lim.maxValue)),
     )
   } catch {
     return true
   }
+}
+
+/** The single lzReceive(gas, value) a set of options amounts to (executor sums repeated ones). */
+export function receiveTotals(options: Hex): { gas: bigint; value: bigint } {
+  let gas = 0n
+  let value = 0n
+  try {
+    for (const it of decodeOptions(options).items) {
+      if (it.kind === 'lzReceive') {
+        gas += it.gas
+        value += it.value
+      }
+    }
+  } catch {
+    /* malformed → zero */
+  }
+  return { gas, value }
+}
+
+export type SvmOptionsPlan = {
+  /** extraOptions to put in SendParam (on top of the contract's enforced options). */
+  extraOptions: Hex
+  /** Lamports we add so a missing token account can be created (0 when enforced already covers it). */
+  addedLamports: bigint
+  /** Items dropped from the sample, for the UI. */
+  dropped: OptionItem[]
+  sampleMalformed: boolean
+  /** Totals the executor will see: enforced + extra. */
+  total: { gas: bigint; value: bigint }
+  /** Neither enforced nor extra carries compute units: the message would be undeliverable. */
+  error?: 'no_executor_options'
+}
+
+/**
+ * §5.1 for a Solana destination. Options are ADDED to the contract's enforced options, so:
+ *   - never add our own CU when enforced already carries some (they would sum and overpay);
+ *   - add lamports for the recipient's token account only if it does not exist AND enforced does
+ *     not already carry enough value;
+ *   - with nothing enforced and nothing to add, refuse: quoteSend would under-quote and delivery fail.
+ */
+export function planSvmOptions(p: { enforced: Hex; ataExists: boolean; sample?: Hex }): SvmOptionsPlan {
+  const enf = receiveTotals(p.enforced)
+  const s = p.sample && p.sample !== '0x' ? sanitizeOptions(p.sample, 'svm') : undefined
+  const dropped = s?.dropped ?? []
+  const sampleMalformed = s?.malformed ?? false
+
+  // CU: only when the contract enforces none; take the sample's hint if any.
+  const gas = enf.gas > 0n ? 0n : (s?.gas ?? 0n)
+  // Lamports: rent for a missing ATA, minus what enforced already delivers; never above the cap.
+  let value = 0n
+  if (!p.ataExists && enf.value < ATA_RENT_LAMPORTS) value = ATA_RENT_LAMPORTS - enf.value
+  if (value > LIMITS.svm.maxValue) value = LIMITS.svm.maxValue
+
+  const extraOptions = encodeLzReceive(gas, value)
+  const total = { gas: enf.gas + gas, value: enf.value + value }
+  const out: SvmOptionsPlan = { extraOptions, addedLamports: value, dropped, sampleMalformed, total }
+  if (total.gas === 0n) out.error = 'no_executor_options'
+  return out
 }

@@ -7,7 +7,7 @@ import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
 import { byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
-import { hasDangerousOptions } from './options'
+import { hasDangerousOptions, receiveTotals } from './options'
 import { assembleSendArgs, decodeSendCalldata, type SendPlan } from './plan'
 import type { OftInfo, SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
@@ -56,7 +56,8 @@ export type GuardCode =
   | 'recipient_class_unknown'
   | 'recipient_token_account'
   | 'recipient_pda_unconfirmed'
-  | 'svm_send_not_supported'
+  | 'no_executor_options_svm'
+  | 'svm_dest_unknown'
 
 /** Codes that mean "not known yet" (a read is in flight), not "wrong". The UI shows them muted. */
 export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
@@ -68,6 +69,7 @@ export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
   'selfcheck_missing',
   'peer_back_unknown',
   'recipient_class_unknown',
+  'svm_dest_unknown',
 ])
 
 export function isPending(r: GuardResult): boolean {
@@ -114,6 +116,8 @@ export type GuardInput = {
   svmRecipientClass?: SvmRecipientClass | undefined
   /** User explicitly accepted sending to a program-owned (PDA) Solana account. */
   svmRecipientPdaAccepted?: boolean
+  /** Solana destinations only: discovery of the Solana side finished (mint, program, PeerConfig known). */
+  svmDestinationKnown?: boolean
 }
 
 export type GuardReport = {
@@ -274,20 +278,21 @@ export function g14SelfCheck(i: GuardInput): GuardResult {
   return ok(14)
 }
 
-/** True when neither enforced nor extra options carry executor gas (§6.15). */
+/** True when neither enforced nor extra options carry executor gas / compute units (§6.15). */
 export function needsNoGasConfirmation(info: OftInfo | undefined, plan: SendPlan | undefined): boolean {
   if (!info || !plan) return false
   const enforced: Hex = info.enforced[plan.dstEid] ?? '0x'
-  return enforced === '0x' && plan.extraOptions === '0x'
+  return receiveTotals(enforced).gas + receiveTotals(plan.extraOptions).gas === 0n
 }
 
-// 15. no executor gas -> requires explicit confirmation
+// 15. no executor gas -> EVM: requires explicit confirmation; Solana: hard block, no override
+//     (a stuck message on Solana cannot simply be retried).
 export function g15ExecutorGas(i: GuardInput): GuardResult {
   if (!i.plan) return fail(15, 'plan_missing')
   if (!i.info) return fail(15, 'oft_missing')
-  if (needsNoGasConfirmation(i.info, i.plan) && !i.noExecutorGasAccepted) {
-    return fail(15, 'no_executor_gas_unconfirmed')
-  }
+  if (!needsNoGasConfirmation(i.info, i.plan)) return ok(15)
+  if (byEid(i.plan.dstEid)?.vm === 'svm') return fail(15, 'no_executor_options_svm')
+  if (!i.noExecutorGasAccepted) return fail(15, 'no_executor_gas_unconfirmed')
   return ok(15)
 }
 
@@ -307,10 +312,10 @@ export function g17PeerBack(i: GuardInput): GuardResult {
   return ok(17)
 }
 
-// 18. extraOptions never carry value or calls (nativeDrop / compose / receive value)
+// 18. extraOptions never carry calls or over-cap value (nativeDrop / compose / receive beyond the VM caps)
 export function g18Options(i: GuardInput): GuardResult {
   if (!i.plan) return fail(18, 'plan_missing')
-  if (hasDangerousOptions(i.plan.extraOptions)) return fail(18, 'dangerous_options')
+  if (hasDangerousOptions(i.plan.extraOptions, byEid(i.plan.dstEid)?.vm ?? 'evm')) return fail(18, 'dangerous_options')
   return ok(18)
 }
 
@@ -329,11 +334,12 @@ export function g19RecipientVm(i: GuardInput): GuardResult {
   return ok(19)
 }
 
-// 20. sending to a Solana destination is not wired yet (stage 3 removes this guard)
+// 20. Solana destination: the on-chain discovery (program, mint, token program, PeerConfig) must
+//     have completed — the plan's options and recipient checks depend on it.
 export function g20SvmSend(i: GuardInput): GuardResult {
   if (!i.plan) return fail(20, 'plan_missing')
   const dst = byEid(i.plan.dstEid)
-  if (dst?.vm === 'svm') return fail(20, 'svm_send_not_supported')
+  if (dst?.vm === 'svm' && !i.svmDestinationKnown) return fail(20, 'svm_dest_unknown')
   return ok(20)
 }
 

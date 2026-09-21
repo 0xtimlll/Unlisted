@@ -34,7 +34,8 @@ export type TrackState = {
   srcEid?: number
   dstEid?: number
   srcTxHash?: Hash
-  dstTxHash?: Hash
+  /** 0x-hex on EVM destinations, a base58 signature on Solana. */
+  dstTxHash?: string
   /** ISO timestamp from the API. */
   updated?: string
 }
@@ -54,6 +55,8 @@ export function scanApiUrl(txHash: Hash): string {
 }
 
 const isHash = (v: unknown): v is Hash => typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
+/** A Solana transaction signature: 64 bytes in base58 (87–88 chars). */
+const isSolanaSig = (v: unknown): v is string => typeof v === 'string' && /^[1-9A-HJ-NP-Za-km-z]{86,88}$/.test(v)
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v.slice(0, 256) : undefined)
 
@@ -95,7 +98,7 @@ export function parseScanResponse(json: unknown): TrackState {
   const srcHash = srcTx?.['txHash']
   if (isHash(srcHash)) out.srcTxHash = srcHash
   const dstHash = dstTx?.['txHash']
-  if (isHash(dstHash)) out.dstTxHash = dstHash
+  if (isHash(dstHash) || isSolanaSig(dstHash)) out.dstTxHash = dstHash
   const updated = str(m['updated'])
   if (updated) out.updated = updated
   return out

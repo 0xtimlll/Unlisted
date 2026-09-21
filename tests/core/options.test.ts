@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Hex } from 'viem'
-import { decodeOptions, encodeLzReceiveGas, hasDangerousOptions, MAX_LZ_RECEIVE_GAS, OptionsError, sanitizeOptions } from '@/core/options'
+import { ATA_RENT_LAMPORTS, decodeOptions, encodeLzReceive, encodeLzReceiveGas, hasDangerousOptions, LIMITS, MAX_LZ_RECEIVE_GAS, OptionsError, planSvmOptions, receiveTotals, sanitizeOptions } from '@/core/options'
 
 const ATTACKER = '0x000000000000000000000000badbadbadbadbadbadbadbadbadbadbadbadbad0' as Hex
 
@@ -72,7 +72,7 @@ describe('encodeLzReceiveGas', () => {
 
 describe('sanitizeOptions — the sample-tx attack', () => {
   it('keeps a plain receive-gas hint', () => {
-    expect(sanitizeOptions(TREAD_ENFORCED)).toEqual({ options: TREAD_ENFORCED, dropped: [], malformed: false })
+    expect(sanitizeOptions(TREAD_ENFORCED)).toEqual({ options: TREAD_ENFORCED, gas: 60000n, value: 0n, dropped: [], malformed: false })
   })
   it('DROPS a nativeDrop to a stranger and reports it', () => {
     const sample = t3(exec(1, u128(200000n)), exec(2, u128(10n ** 18n) + ATTACKER.slice(2)))
@@ -82,11 +82,17 @@ describe('sanitizeOptions — the sample-tx attack', () => {
     expect(hasDangerousOptions(s.options)).toBe(false)
     expect(hasDangerousOptions(sample)).toBe(true)
   })
-  it('drops compose, receive-with-value, DVN and unknown options', () => {
+  it('drops compose, DVN and unknown options; a small receive value is kept within the EVM cap', () => {
     const sample = t3(exec(1, u128(100000n) + u128(1n)), exec(3, u16(0) + u128(50000n)), `0200030000aa`, exec(9, 'ff'))
     const s = sanitizeOptions(sample)
-    expect(s.options).toBe('0x') // nothing safe left
-    expect(s.dropped.map((d) => d.kind)).toEqual(['lzReceive', 'lzCompose', 'dvn', 'unknown'])
+    expect(s.gas).toBe(100000n)
+    expect(s.value).toBe(1n)
+    expect(s.dropped.map((d) => d.kind)).toEqual(['lzCompose', 'dvn', 'unknown'])
+  })
+  it('EVM: a receive value above 0.01 native is dropped like a native drop', () => {
+    const s = sanitizeOptions(t3(exec(1, u128(100000n) + u128(LIMITS.evm.maxValue + 1n))))
+    expect(s.options).toBe('0x')
+    expect(s.dropped).toHaveLength(1)
   })
   it('drops absurd gas (fee inflation)', () => {
     const s = sanitizeOptions(t3(exec(1, u128(MAX_LZ_RECEIVE_GAS + 1n))))
@@ -101,7 +107,7 @@ describe('sanitizeOptions — the sample-tx attack', () => {
     expect(s.dropped[0]?.kind).toBe('nativeDrop')
   })
   it('malformed sample → nothing copied, flagged', () => {
-    expect(sanitizeOptions('0x0003ff' as Hex)).toEqual({ options: '0x', dropped: [], malformed: true })
+    expect(sanitizeOptions('0x0003ff' as Hex)).toEqual({ options: '0x', gas: 0n, value: 0n, dropped: [], malformed: true })
   })
   it('output is always plain or empty', () => {
     for (const sample of [TREAD_ENFORCED, '0x', t3(exec(2, u128(1n) + ATTACKER.slice(2))), '0xdeadbeef'] as Hex[]) {
@@ -117,5 +123,63 @@ describe('hasDangerousOptions', () => {
   it('plain gas and empty are safe', () => {
     expect(hasDangerousOptions('0x')).toBe(false)
     expect(hasDangerousOptions(TREAD_ENFORCED)).toBe(false)
+  })
+})
+
+describe('Solana (svm) options', () => {
+  const PENGU_ENFORCED: Hex = '0x00030100210100000000000000000000000000030d40000000000000000000000000002625a0' // 200k CU + 2.5M lamports (real)
+  const GAS_ONLY: Hex = encodeLzReceive(150000n)
+
+  it('encodeLzReceive with value round-trips and matches the real enforced-options wire format', () => {
+    expect(encodeLzReceive(200000n, 2500000n)).toBe(PENGU_ENFORCED)
+    expect(decodeOptions(PENGU_ENFORCED).items).toEqual([{ kind: 'lzReceive', gas: 200000n, value: 2500000n }])
+    expect(receiveTotals(PENGU_ENFORCED)).toEqual({ gas: 200000n, value: 2500000n })
+    expect(receiveTotals('0x')).toEqual({ gas: 0n, value: 0n })
+  })
+  it('caps: 1.4M CU and 0.01 SOL; above either the receive is dropped', () => {
+    expect(sanitizeOptions(t3(exec(1, u128(1_400_000n))), 'svm').gas).toBe(1_400_000n)
+    expect(sanitizeOptions(t3(exec(1, u128(1_400_001n))), 'svm').dropped).toHaveLength(1)
+    expect(sanitizeOptions(t3(exec(1, u128(100n) + u128(10_000_000n))), 'svm').value).toBe(10_000_000n)
+    expect(sanitizeOptions(t3(exec(1, u128(100n) + u128(10_000_001n))), 'svm').options).toBe('0x')
+    expect(hasDangerousOptions(t3(exec(1, u128(100n) + u128(10_000_000n))), 'svm')).toBe(false)
+    expect(hasDangerousOptions(t3(exec(1, u128(100n) + u128(10_000_001n))), 'svm')).toBe(true)
+    expect(hasDangerousOptions(t3(exec(1, u128(2_000_000n))), 'svm')).toBe(true) // fine on EVM, over the CU limit on svm
+    expect(hasDangerousOptions(t3(exec(1, u128(2_000_000n))), 'evm')).toBe(false)
+  })
+  it('planSvmOptions: enforced already funds the ATA → nothing added, even when the ATA is missing', () => {
+    const p = planSvmOptions({ enforced: PENGU_ENFORCED, ataExists: false })
+    expect(p.extraOptions).toBe('0x')
+    expect(p.addedLamports).toBe(0n)
+    expect(p.total).toEqual({ gas: 200000n, value: 2500000n })
+    expect(p.error).toBeUndefined()
+  })
+  it('planSvmOptions: enforced has CU only and the ATA is missing → add exactly the rent, no CU', () => {
+    const p = planSvmOptions({ enforced: GAS_ONLY, ataExists: false })
+    expect(p.extraOptions).toBe(encodeLzReceive(0n, ATA_RENT_LAMPORTS))
+    expect(p.addedLamports).toBe(ATA_RENT_LAMPORTS)
+    expect(p.total).toEqual({ gas: 150000n, value: ATA_RENT_LAMPORTS })
+    // partial coverage: top up only the difference
+    const q = planSvmOptions({ enforced: encodeLzReceive(150000n, 1_000_000n), ataExists: false })
+    expect(q.addedLamports).toBe(ATA_RENT_LAMPORTS - 1_000_000n)
+  })
+  it('planSvmOptions: ATA exists → extra options empty', () => {
+    expect(planSvmOptions({ enforced: GAS_ONLY, ataExists: true }).extraOptions).toBe('0x')
+    expect(planSvmOptions({ enforced: PENGU_ENFORCED, ataExists: true }).extraOptions).toBe('0x')
+  })
+  it('planSvmOptions: nothing enforced → CU must come from the sample, else refuse', () => {
+    const none = planSvmOptions({ enforced: '0x', ataExists: true })
+    expect(none.error).toBe('no_executor_options')
+    const fromSample = planSvmOptions({ enforced: '0x', ataExists: false, sample: t3(exec(1, u128(120000n))) })
+    expect(fromSample.error).toBeUndefined()
+    expect(fromSample.extraOptions).toBe(encodeLzReceive(120000n, ATA_RENT_LAMPORTS))
+    // a sample with a native drop contributes nothing but a red flag
+    const bad = planSvmOptions({ enforced: '0x', ataExists: true, sample: t3(exec(2, u128(1n) + ATTACKER.slice(2))) })
+    expect(bad.error).toBe('no_executor_options')
+    expect(bad.dropped[0]?.kind).toBe('nativeDrop')
+  })
+  it('planSvmOptions: enforced CU present → a sample never adds CU (would sum and overpay)', () => {
+    const p = planSvmOptions({ enforced: GAS_ONLY, ataExists: true, sample: t3(exec(1, u128(900000n))) })
+    expect(p.extraOptions).toBe('0x')
+    expect(p.total.gas).toBe(150000n)
   })
 })

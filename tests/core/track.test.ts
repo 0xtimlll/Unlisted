@@ -57,6 +57,12 @@ describe('parseScanResponse', () => {
     expect(s.dstEid).toBe(30101)
     expect(s.guid).toBeUndefined()
   })
+  it('accepts a Solana (base58) destination signature and rejects junk', () => {
+    const sig = '5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW'
+    expect(parseScanResponse(msg('DELIVERED', { destination: { tx: { txHash: sig } } })).dstTxHash).toBe(sig)
+    expect(parseScanResponse(msg('DELIVERED', { destination: { tx: { txHash: 'javascript:alert(1)' } } })).dstTxHash).toBeUndefined()
+    expect(parseScanResponse(msg('DELIVERED', { destination: { tx: { txHash: '0OIl' + sig } } })).dstTxHash).toBeUndefined()
+  })
   it('truncates long strings', () => {
     const s = parseScanResponse(msg('INFLIGHT', { status: { name: 'INFLIGHT', message: 'x'.repeat(1000) } }))
     expect(s.message).toHaveLength(256)

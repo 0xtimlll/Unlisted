@@ -96,7 +96,7 @@ describe('guard 19/20 on a Solana destination', () => {
     const p = treadPlan({ dstEid: SOLANA_EID })
     return { ...p, recipient: svmRecipient(SOL_WALLET).to, recipientDisplay: SOL_WALLET, recipientVm: 'svm' as const }
   }
-  const base = () => goodInput({ info, plan: svmPlan(), recipientIsCustom: true, customRecipientConfirmed: true, svmRecipientClass: 'wallet' })
+  const base = () => goodInput({ info, plan: svmPlan(), recipientIsCustom: true, customRecipientConfirmed: true, svmRecipientClass: 'wallet', svmDestinationKnown: true })
   const codeOf = (id: number, i: Parameters<typeof runGuards>[0]) => {
     const r = runGuards(i).results.find((x) => x.id === id)!
     return r.ok ? 'ok' : r.code
@@ -117,11 +117,26 @@ describe('guard 19/20 on a Solana destination', () => {
   it('19: EVM destination ignores the Solana classification', () => {
     expect(codeOf(19, goodInput({ svmRecipientClass: undefined }))).toBe('ok')
   })
-  it('20: sending to Solana is disabled at this stage; EVM unaffected', () => {
-    expect(codeOf(20, base())).toBe('svm_send_not_supported')
-    expect(runGuards(base()).canSend).toBe(false)
+  it('20: Solana side must be discovered before sending; EVM unaffected', () => {
+    expect(codeOf(20, { ...base(), svmDestinationKnown: false })).toBe('svm_dest_unknown')
+    expect(codeOf(20, base())).toBe('ok')
     expect(codeOf(20, goodInput())).toBe('ok')
-    expect(runGuards(goodInput()).canSend).toBe(true)
+  })
+  it('15: with no CU anywhere a Solana send is a hard block, no checkbox; EVM keeps the checkbox', () => {
+    const noEnforced = treadOftInfo({ routes: info.routes, enforced: {} })
+    const i = { ...base(), info: noEnforced }
+    expect(codeOf(15, i)).toBe('no_executor_options_svm')
+    expect(codeOf(15, { ...i, noExecutorGasAccepted: true })).toBe('no_executor_options_svm')
+    const evm = goodInput({ info: treadOftInfo({ enforced: {} }) })
+    expect(codeOf(15, evm)).toBe('no_executor_gas_unconfirmed')
+    expect(codeOf(15, { ...evm, noExecutorGasAccepted: true })).toBe('ok')
+    // enforced CU on the EVM side satisfies 15 for the Solana route
+    const withEnforced = treadOftInfo({ routes: info.routes, enforced: { [SOLANA_EID]: '0x00030100210100000000000000000000000000030d40000000000000000000000000002625a0' } })
+    expect(codeOf(15, { ...base(), info: withEnforced })).toBe('ok')
+  })
+  it('a fully discovered, funded Solana plan can send (canSend true)', () => {
+    const withEnforced = treadOftInfo({ routes: info.routes, enforced: { [SOLANA_EID]: '0x00030100210100000000000000000000000000030d40000000000000000000000000002625a0' } })
+    expect(runGuards({ ...base(), info: withEnforced }).canSend).toBe(true)
   })
   it('the golden EVM plan is untouched by the new fields', () => {
     expect(treadPlan().recipientVm).toBe('evm')

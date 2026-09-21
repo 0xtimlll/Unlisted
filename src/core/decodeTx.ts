@@ -6,6 +6,7 @@
  */
 import { getAddress, type Address, type Hash, type Hex } from 'viem'
 import type { ReadClient } from './client'
+import { byEid } from './chains'
 import { sanitizeOptions, type OptionItem } from './options'
 import { decodeSendCalldata } from './plan'
 
@@ -65,7 +66,7 @@ export async function decodeTx(client: ReadClient, txHash: string): Promise<TxPr
     throw new DecodeTxError('not_send', e instanceof Error ? e.message : String(e))
   }
 
-  const opts = sanitizeOptions(decoded.sendParam.extraOptions)
+  const opts = sanitizeOptions(decoded.sendParam.extraOptions, byEid(decoded.sendParam.dstEid)?.vm ?? 'evm')
   return {
     oft: getAddress(tx.to),
     dstEid: decoded.sendParam.dstEid,

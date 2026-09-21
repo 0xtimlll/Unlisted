@@ -9,7 +9,9 @@ import { erc20Abi, oftAbi } from '@/core/abi'
 import { evmByKey } from '@/core/chains'
 import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
-import { evmRecipient } from '@/core/recipient'
+import { encodeLzReceive, planSvmOptions } from '@/core/options'
+import { evmRecipient, svmRecipient } from '@/core/recipient'
+import { encodeBase58 } from '@/core/svm/base58'
 import { probeOft } from '@/core/probe'
 import type { OftInfo } from '@/core/types'
 import { fundFromHolder, impersonate, setNativeBalance, setTokenBalance, startFork, USER, type Fork } from './fork'
@@ -32,7 +34,7 @@ const oftSentEvent = parseAbi([
 ])
 
 /** Runs the whole app-side pipeline against the fork: simulate + gas + self-check + guards. */
-async function fullCheck(f: Fork, info: OftInfo, plan: SendPlan, allowance: bigint | undefined) {
+async function fullCheck(f: Fork, info: OftInfo, plan: SendPlan, allowance: bigint | undefined, svm?: Partial<GuardInput>) {
   const args = assembleSendArgs(plan)
   const calldata = encodeFunctionData({ abi: oftAbi, functionName: 'send', args: [args[0], args[1], args[2]] })
   const sc = selfCheck(plan, calldata)
@@ -55,6 +57,7 @@ async function fullCheck(f: Fork, info: OftInfo, plan: SendPlan, allowance: bigi
     recipientIsCustom: false, customRecipientConfirmed: false,
     tokenBalance, nativeBalance, allowance, gasCostWei,
     simulation, selfCheck: sc, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
+    ...svm,
   }
   return { report: runGuards(input), simulation, calldata, args }
 }
@@ -140,6 +143,53 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
     expect(sent?.args.dstEid).toBe(30110)
     expect(sent?.args.amountSentLD).toBe(2_500000n)
   }, 120_000)
+})
+
+describe.skipIf(!hasAnvil)('HyperEVM fork → Solana (PENGU)', () => {
+  const PENGU: Address = '0xfa44c2634ff17cbe26dc3007d36bd61c79068c14'
+  const SOLANA_EID = 30168
+  const FRESH = encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 13 + 7) & 0xff))
+  let f: Fork
+  beforeAll(async () => {
+    f = await startFork(evmByKey('hyperevm'))
+    await setNativeBalance(f, USER, 10n * 10n ** 18n)
+  }, 90_000)
+  afterAll(() => f?.stop())
+
+  it('send to a Solana wallet succeeds on chain with empty extraOptions (enforced covers CU + rent)', async () => {
+    const { info } = await probeOft(f.client, PENGU)
+    await setTokenBalance(f, info.token, USER, 100n * 10n ** 18n)
+    const opts = planSvmOptions({ enforced: info.enforced[SOLANA_EID] ?? '0x', ataExists: false })
+    expect(opts.extraOptions).toBe('0x')
+    const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '2.5', sender: USER, recipient: svmRecipient(FRESH), extraOptions: opts.extraOptions })
+    const { report, simulation } = await fullCheck(f, info, plan, undefined, { recipientIsCustom: true, customRecipientConfirmed: true, svmRecipientClass: 'missing', svmDestinationKnown: true })
+    expect(simulation).toEqual({ ok: true })
+    expect(report.results.filter((r) => !r.ok)).toEqual([])
+    expect(report.canSend).toBe(true)
+    const { receipt, sent } = await sendOnFork(f, plan)
+    expect(receipt.status).toBe('success')
+    expect(sent?.args.dstEid).toBe(SOLANA_EID)
+    expect(sent?.args.amountSentLD).toBe(2_500000000000000000n)
+    expect(sent?.args.amountReceivedLD).toBe(plan.quote.amountReceivedLD)
+  }, 120_000)
+
+  it('extra lzReceive value (ATA rent on top of enforced) is accepted by the contract and raises the fee', async () => {
+    const { info } = await probeOft(f.client, PENGU)
+    await setTokenBalance(f, info.token, USER, 100n * 10n ** 18n)
+    const base = await buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '1', sender: USER, recipient: svmRecipient(FRESH) })
+    const withRent = await buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '1', sender: USER, recipient: svmRecipient(FRESH), extraOptions: encodeLzReceive(0n, 2_039_280n) })
+    expect(withRent.quote.nativeFee).toBeGreaterThan(base.quote.nativeFee)
+    const { simulation, report } = await fullCheck(f, info, withRent, undefined, { recipientIsCustom: true, customRecipientConfirmed: true, svmRecipientClass: 'missing', svmDestinationKnown: true })
+    expect(simulation).toEqual({ ok: true })
+    expect(report.canSend).toBe(true)
+    const { receipt } = await sendOnFork(f, withRent)
+    expect(receipt.status).toBe('success')
+  }, 120_000)
+
+  it('an EVM recipient can never be sent to Solana — refused before quoting', async () => {
+    const { info } = await probeOft(f.client, PENGU)
+    await expect(buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })).rejects.toMatchObject({ code: 'recipient_vm_mismatch' })
+  }, 60_000)
 })
 
 describe.skipIf(!hasAnvil)('Ethereum fork', () => {
