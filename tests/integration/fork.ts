@@ -5,7 +5,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createPublicClient, createWalletClient, encodeAbiParameters, http, keccak256, pad, parseAbi, toHex, type Address, type Hex } from 'viem'
 import { erc20Abi } from '@/core/abi'
-import type { ChainDef } from '@/core/chains'
+import type { EvmChainDef } from '@/core/chains'
 import { toViemChain, type ReadClient } from '@/core/client'
 
 export const USER: Address = '0x1111111111111111111111111111111111111111'
@@ -15,7 +15,7 @@ const OZ_ERC20_NS: Hex = '0x52c63247e1f47db19d5ce0460030c497f067ca4cebf71ba98eeb
 
 export type Fork = {
   url: string
-  chain: ChainDef
+  chain: EvmChainDef
   client: ReadClient
   rpc: (method: string, params: unknown[]) => Promise<unknown>
   stop: () => void
@@ -23,7 +23,7 @@ export type Fork = {
 
 let nextPort = 8600 + Math.floor(Math.random() * 200)
 
-export async function startFork(chain: ChainDef): Promise<Fork> {
+export async function startFork(chain: EvmChainDef): Promise<Fork> {
   const port = nextPort++
   const url = `http://127.0.0.1:${port}`
   const proc: ChildProcess = spawn('anvil', ['--fork-url', chain.rpcUrls[0]!, '--port', String(port), '--silent'], { stdio: 'ignore' })

@@ -1,5 +1,6 @@
 /** Shared fixtures modelled on the TREAD OFT on HyperEVM -> Ethereum route (§9). */
 import type { Address } from 'viem'
+import { addressToBytes32 } from '@/core/encoding'
 import type { GuardInput } from '@/core/guards'
 import { computeAmounts, computeValue, type SendPlan, type SendQuote } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
@@ -31,7 +32,7 @@ export function treadOftInfo(over: Partial<OftInfo> = {}): OftInfo {
     approvalRequired: false,
     endpoint: ENDPOINT_HYPER,
     owner: OWNER,
-    routes: [{ eid: ETH_EID, peer: TREAD_ADAPTER }],
+    routes: [{ eid: ETH_EID, peer: addressToBytes32(TREAD_ADAPTER) }],
     enforced: { [ETH_EID]: '0x0003010011010000000000000000000000000000ea60' },
     ...over,
   }
@@ -51,7 +52,7 @@ export function treadAdapterInfo(over: Partial<OftInfo> = {}): OftInfo {
     approvalRequired: true,
     endpoint: ENDPOINT_HYPER,
     owner: OWNER,
-    routes: [{ eid: HYPER_EID, peer: TREAD_OFT }],
+    routes: [{ eid: HYPER_EID, peer: addressToBytes32(TREAD_OFT) }],
     enforced: { [HYPER_EID]: '0x0003010011010000000000000000000000000000ea60' },
     ...over,
   }
@@ -71,16 +72,23 @@ export function quoteFor(amountLD: bigint, over: Partial<SendQuote> = {}): SendQ
   }
 }
 
-export function treadPlan(over: Partial<SendPlan> = {}, amountInput = '19.82'): SendPlan {
+/**
+ * `over.recipient` may be given as a plain EVM address (tests read better that way);
+ * it is stored the way the app stores it: bytes32 + display form.
+ */
+export function treadPlan(over: Partial<Omit<SendPlan, 'recipient'>> & { recipient?: Address } = {}, amountInput = '19.82'): SendPlan {
   const info = treadOftInfo()
   const amounts = computeAmounts(amountInput, info.decimals, info.conversionRate, 0)
   const quote = quoteFor(amounts.amountLD)
+  const { recipient: recipientOver, ...rest } = over
+  const recipientAddr = recipientOver ?? WALLET
   const base: SendPlan = {
     oft: TREAD_OFT,
     srcEid: HYPER_EID,
     dstEid: ETH_EID,
     sender: WALLET,
-    recipient: WALLET,
+    recipient: addressToBytes32(recipientAddr),
+    recipientDisplay: recipientAddr,
     amounts,
     slippageBps: 0,
     feeBufferBps: 4000,
@@ -88,7 +96,7 @@ export function treadPlan(over: Partial<SendPlan> = {}, amountInput = '19.82'): 
     quote,
     value: computeValue(quote.nativeFee, 4000, HYPER_FEE_STEP),
   }
-  return { ...base, ...over }
+  return { ...base, ...rest }
 }
 
 /** A fully valid snapshot: every guard passes. */

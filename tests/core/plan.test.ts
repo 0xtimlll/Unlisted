@@ -97,8 +97,12 @@ describe('buildSendParam / assembleSendArgs', () => {
     expect(refund.toLowerCase()).toBe(WALLET.toLowerCase())
   })
 
+  it('rejects a `to` that is not bytes32 (a bare address must be padded by the caller)', () => {
+    expect(() => buildSendParam({ dstEid: 1, to: WALLET, amountLD: 1n, minAmountLD: 1n })).toThrow(/bytes32/)
+  })
+
   it('carries extraOptions through when set', () => {
-    const sp = buildSendParam({ dstEid: 1, recipient: WALLET, amountLD: 1n, minAmountLD: 1n, extraOptions: '0xdead' })
+    const sp = buildSendParam({ dstEid: 1, to: addressToBytes32(WALLET), amountLD: 1n, minAmountLD: 1n, extraOptions: '0xdead' })
     expect(sp.extraOptions).toBe('0xdead')
   })
 })

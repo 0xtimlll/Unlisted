@@ -6,7 +6,7 @@
 import { connectorsForWallets } from '@rainbow-me/rainbowkit'
 import { injectedWallet, rabbyWallet, walletConnectWallet } from '@rainbow-me/rainbowkit/wallets'
 import { createConfig, fallback, http, type Config } from 'wagmi'
-import { CHAINS, type ChainKey } from '@/core/chains'
+import { evmChains, type ChainKey } from '@/core/chains'
 import { toViemChain } from '@/core/client'
 
 export const WC_PROJECT_ID = process.env['NEXT_PUBLIC_WC_PROJECT_ID'] ?? ''
@@ -22,9 +22,9 @@ export function makeWagmiConfig(customRpc: Partial<Record<ChainKey, string>>): C
     },
   })
 
-  const chains = CHAINS.map(toViemChain) as [ReturnType<typeof toViemChain>, ...ReturnType<typeof toViemChain>[]]
+  const chains = evmChains().map(toViemChain) as [ReturnType<typeof toViemChain>, ...ReturnType<typeof toViemChain>[]]
   const transports = Object.fromEntries(
-    CHAINS.map((c) => {
+    evmChains().map((c) => {
       const custom = customRpc[c.key]
       const urls = custom ? [custom, ...c.rpcUrls] : [...c.rpcUrls]
       return [c.chainId, fallback(urls.map((u) => http(u, { timeout: 15_000, retryCount: 1 })), { rank: false })]

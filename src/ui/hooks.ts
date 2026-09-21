@@ -1,10 +1,10 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { encodeFunctionData, type Address, type Hash } from 'viem'
+import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { byEid, type ChainDef, type ChainKey } from '@/core/chains'
+import { byEid, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
 import type { ReadClient } from '@/core/client'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
 import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
@@ -23,7 +23,7 @@ export function useDebounced<T>(value: T, ms: number): T {
 }
 
 /** wagmi's client for the source chain, typed as our read client. */
-export function useReadClient(chain: ChainDef): ReadClient | undefined {
+export function useReadClient(chain: EvmChainDef): ReadClient | undefined {
   return usePublicClient({ chainId: chain.chainId }) as ReadClient | undefined
 }
 
@@ -31,7 +31,7 @@ export function useReadClient(chain: ChainDef): ReadClient | undefined {
  * Probe on independent RPCs (core/quorum). Adds the "not cross-checked" flag so the UI can
  * show it next to the other yellow flags.
  */
-export function useProbe(chain: ChainDef, address: string | null, customRpc: string | undefined) {
+export function useProbe(chain: EvmChainDef, address: string | null, customRpc: string | undefined) {
   const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
   return useQuery({
     queryKey: ['probe', chain.key, address?.toLowerCase(), customRpc ?? ''],
@@ -47,7 +47,7 @@ export function useProbe(chain: ChainDef, address: string | null, customRpc: str
   })
 }
 
-export function useDecode(chain: ChainDef, hash: string | null, customRpc: string | undefined) {
+export function useDecode(chain: EvmChainDef, hash: string | null, customRpc: string | undefined) {
   const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
   return useQuery({
     queryKey: ['decode', chain.key, hash?.toLowerCase(), customRpc ?? ''],
@@ -59,9 +59,10 @@ export function useDecode(chain: ChainDef, hash: string | null, customRpc: strin
 }
 
 /** Guard 17: does the destination-side peer name our OFT back? Read on the destination chain. */
-export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: number | undefined, peer: Address | undefined, customRpc: Partial<Record<ChainKey, string>>) {
+export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: number | undefined, peer: Hex | undefined, customRpc: Partial<Record<ChainKey, string>>) {
   const dst = dstEid !== undefined ? byEid(dstEid) : undefined
-  const pair = useMemo(() => (dst ? clientPair(dst, customRpc[dst.key]) : undefined), [dst, customRpc])
+  // Only EVM destinations can be verified this way; other VMs get their own check later.
+  const pair = useMemo(() => (dst && isEvm(dst) ? clientPair(dst, customRpc[dst.key]) : undefined), [dst, customRpc])
   return useQuery({
     queryKey: ['peerBack', srcEid, oft, dstEid, peer],
     queryFn: async () => {
@@ -77,7 +78,7 @@ export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: nu
 
 export type PlanParams = {
   info: OftInfo | undefined
-  src: ChainDef
+  src: EvmChainDef
   dstEid: number | undefined
   amountInput: string
   sender: Address | undefined
@@ -123,7 +124,7 @@ export type CheckResult = {
  * §6.13 + §6.14: simulate `send` and decode our own calldata back. Only runs once the
  * pure guards (chain, peer, balance, allowance…) already pass, so failures here are real.
  */
-export function useCheck(src: ChainDef, plan: SendPlan | undefined, ready: boolean) {
+export function useCheck(src: EvmChainDef, plan: SendPlan | undefined, ready: boolean) {
   const client = useReadClient(src)
   return useQuery({
     queryKey: ['check', src.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions],
@@ -166,7 +167,7 @@ export function useCheck(src: ChainDef, plan: SendPlan | undefined, ready: boole
   })
 }
 
-export function useTokenBalance(chain: ChainDef, token: Address | undefined, owner: Address | undefined) {
+export function useTokenBalance(chain: EvmChainDef, token: Address | undefined, owner: Address | undefined) {
   return useReadContract({
     abi: erc20Abi,
     address: token,
@@ -177,7 +178,7 @@ export function useTokenBalance(chain: ChainDef, token: Address | undefined, own
   })
 }
 
-export function useAllowance(chain: ChainDef, token: Address | undefined, owner: Address | undefined, spender: Address | undefined) {
+export function useAllowance(chain: EvmChainDef, token: Address | undefined, owner: Address | undefined, spender: Address | undefined) {
   return useReadContract({
     abi: erc20Abi,
     address: token,
@@ -188,7 +189,7 @@ export function useAllowance(chain: ChainDef, token: Address | undefined, owner:
   })
 }
 
-export function useNativeBalance(chain: ChainDef, owner: Address | undefined) {
+export function useNativeBalance(chain: EvmChainDef, owner: Address | undefined) {
   return useBalance({ address: owner, chainId: chain.chainId, query: { enabled: !!owner, refetchInterval: 15_000 } })
 }
 

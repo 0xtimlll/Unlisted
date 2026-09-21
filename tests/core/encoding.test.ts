@@ -3,7 +3,9 @@ import {
   addressToBytes32,
   bytes32ToAddress,
   checksum,
+  isBytes32,
   isZeroBytes32,
+  peerToAddress,
   sameAddress,
   ZERO_ADDRESS,
   ZERO_BYTES32,
@@ -58,5 +60,28 @@ describe('checksum / sameAddress', () => {
   it('sameAddress ignores case', () => {
     expect(sameAddress(TREAD_OFT, TREAD_OFT.toLowerCase())).toBe(true)
     expect(sameAddress(TREAD_OFT, TREAD_ADAPTER)).toBe(false)
+  })
+})
+
+describe('peerToAddress / isBytes32 (raw peers from peers())', () => {
+  const SOLANA_LIKE = `0x${'ab'.repeat(32)}` as const // no leading zero bytes: an ed25519 pubkey / PDA
+  it('EVM-shaped bytes32 → checksummed address', () => {
+    expect(peerToAddress(addressToBytes32(TREAD_OFT))).toBe(TREAD_OFT)
+  })
+  it('a 32-byte value with non-zero upper bytes is NOT an address (never truncated)', () => {
+    expect(peerToAddress(SOLANA_LIKE)).toBeUndefined()
+    expect(() => bytes32ToAddress(SOLANA_LIKE)).toThrow()
+  })
+  it('zero bytes32 maps to the zero address; garbage maps to undefined', () => {
+    expect(peerToAddress(ZERO_BYTES32)).toBe(ZERO_ADDRESS)
+    expect(peerToAddress('0x1234' as never)).toBeUndefined()
+    expect(peerToAddress(TREAD_OFT as never)).toBeUndefined() // a bare address is not bytes32
+  })
+  it('isBytes32', () => {
+    expect(isBytes32(SOLANA_LIKE)).toBe(true)
+    expect(isBytes32(ZERO_BYTES32)).toBe(true)
+    expect(isBytes32(TREAD_OFT)).toBe(false)
+    expect(isBytes32(`0x${'ab'.repeat(33)}`)).toBe(false)
+    expect(isBytes32(42)).toBe(false)
   })
 })

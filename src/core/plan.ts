@@ -6,9 +6,9 @@
 import { decodeFunctionData, encodeFunctionData, type Address, type Hex } from 'viem'
 import { oftAbi } from './abi'
 import { applyBps, ceilToStep, parseAmount, trimDust } from './amounts'
-import type { ChainDef } from './chains'
+import type { EvmChainDef } from './chains'
 import type { ReadClient } from './client'
-import { addressToBytes32, checksum } from './encoding'
+import { addressToBytes32, checksum, isBytes32 } from './encoding'
 import type { OftInfo } from './types'
 
 export const DEFAULT_SLIPPAGE_BPS = 0
@@ -48,7 +48,10 @@ export type SendPlan = {
   dstEid: number
   /** Connected wallet. Always also the refund address. */
   sender: Address
-  recipient: Address
+  /** The wire value of SendParam.to: bytes32. EVM = left-padded address; Solana = full pubkey. */
+  recipient: Hex
+  /** Human form of `recipient` for the UI only: EIP-55 hex or base58. Never used to build calldata. */
+  recipientDisplay: string
   amounts: AmountBreakdown
   slippageBps: number
   feeBufferBps: number
@@ -91,14 +94,16 @@ export function computeValue(nativeFee: bigint, feeBufferBps: number, feeStepWei
 
 export function buildSendParam(p: {
   dstEid: number
-  recipient: Address
+  /** Already bytes32 — the caller decides how an address becomes 32 bytes. */
+  to: Hex
   amountLD: bigint
   minAmountLD: bigint
   extraOptions?: Hex
 }): SendParam {
+  if (!isBytes32(p.to)) throw new Error('to must be bytes32')
   return {
     dstEid: p.dstEid,
-    to: addressToBytes32(p.recipient),
+    to: p.to,
     amountLD: p.amountLD,
     minAmountLD: p.minAmountLD,
     extraOptions: p.extraOptions ?? EMPTY_BYTES,
@@ -111,7 +116,7 @@ export function buildSendParam(p: {
 export function assembleSendArgs(plan: SendPlan): SendArgs {
   const sendParam = buildSendParam({
     dstEid: plan.dstEid,
-    recipient: plan.recipient,
+    to: plan.recipient,
     amountLD: plan.amounts.amountLD,
     minAmountLD: plan.amounts.minAmountLD,
     extraOptions: plan.extraOptions,
@@ -131,10 +136,11 @@ export function encodeSendCalldata(args: SendArgs): Hex {
 
 export type BuildSendPlanInput = {
   info: OftInfo
-  src: ChainDef
+  src: EvmChainDef
   dstEid: number
   amountInput: string
   sender: Address
+  /** EVM recipient. (svm destinations get their own input type in a later stage.) */
   recipient: Address
   slippageBps?: number
   feeBufferBps?: number
@@ -167,9 +173,10 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
   const amounts = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
   if (amounts.amountLD <= 0n) throw new PlanError('amount_zero')
 
+  const to = addressToBytes32(p.recipient)
   const sendParam = buildSendParam({
     dstEid: p.dstEid,
-    recipient: p.recipient,
+    to,
     amountLD: amounts.amountLD,
     minAmountLD: amounts.minAmountLD,
     extraOptions,
@@ -200,7 +207,8 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
     srcEid: p.src.eid,
     dstEid: p.dstEid,
     sender: checksum(p.sender),
-    recipient: checksum(p.recipient),
+    recipient: to,
+    recipientDisplay: checksum(p.recipient),
     amounts,
     slippageBps,
     feeBufferBps,

@@ -3,10 +3,11 @@
  * Run: npm run test:integration
  */
 import { describe, expect, it } from 'vitest'
-import { byKey } from '@/core/chains'
+import { evmByKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
 import { runGuards } from '@/core/guards'
 import { buildSendPlan, PlanError } from '@/core/plan'
+import { addressToBytes32 } from '@/core/encoding'
 import { probeOft, ProbeError } from '@/core/probe'
 
 const TREAD_OFT = '0xd5EE1c81fE161e985dce6b90713c965f9979cf80'
@@ -17,8 +18,8 @@ const WHYPE = '0x5555555555555555555555555555555555555555' // plain ERC-20, not 
 const SOME_EOA = '0x000000000000000000000000000000000000dEaD'
 const USER = '0x1111111111111111111111111111111111111111'
 
-const hyper = makeReadClient(byKey('hyperevm'))
-const eth = makeReadClient(byKey('ethereum'))
+const hyper = makeReadClient(evmByKey('hyperevm'))
+const eth = makeReadClient(evmByKey('ethereum'))
 
 describe('HyperEVM / TREAD OFT', () => {
   it('probes as plain OFT, no approve, 18/6, peer on Ethereum', async () => {
@@ -31,19 +32,19 @@ describe('HyperEVM / TREAD OFT', () => {
     expect(info.conversionRate).toBe(10n ** 12n)
     expect(info.symbol.length).toBeGreaterThan(0)
     const eth = info.routes.find((r) => r.eid === 30101)
-    expect(eth?.peer).toBe(TREAD_ADAPTER)
+    expect(eth?.peer).toBe(addressToBytes32(TREAD_ADAPTER)) // raw bytes32 from peers()
     expect(Array.isArray(flags)).toBe(true)
   })
 
   it('builds a plan with real quotes and the pure guards agree', async () => {
     const { info } = await probeOft(hyper, TREAD_OFT)
     const plan = await buildSendPlan(hyper, {
-      info, src: byKey('hyperevm'), dstEid: 30101, amountInput: '1', sender: USER, recipient: USER,
+      info, src: evmByKey('hyperevm'), dstEid: 30101, amountInput: '1', sender: USER, recipient: USER,
     })
     expect(plan.amounts.amountLD).toBe(10n ** 18n)
     expect(plan.quote.nativeFee).toBeGreaterThan(0n)
     expect(plan.value).toBeGreaterThanOrEqual(plan.quote.nativeFee)
-    expect(plan.value % byKey('hyperevm').feeStepWei).toBe(0n)
+    expect(plan.value % evmByKey('hyperevm').feeStepWei).toBe(0n)
     expect(plan.quote.amountReceivedLD).toBe(plan.amounts.amountLD) // no OFT fee on this route
     // Guards that do not need a wallet/simulation should all pass.
     const rep = runGuards({
@@ -58,7 +59,7 @@ describe('HyperEVM / TREAD OFT', () => {
   it('refuses a destination without a peer', async () => {
     const { info } = await probeOft(hyper, TREAD_OFT)
     await expect(
-      buildSendPlan(hyper, { info, src: byKey('hyperevm'), dstEid: 30184, amountInput: '1', sender: USER, recipient: USER }),
+      buildSendPlan(hyper, { info, src: evmByKey('hyperevm'), dstEid: 30184, amountInput: '1', sender: USER, recipient: USER }),
     ).rejects.toMatchObject({ code: 'no_route' } satisfies Partial<PlanError>)
   })
 })
@@ -85,7 +86,7 @@ describe('Ethereum / TREAD adapter', () => {
     expect(info.kind).toBe('OFTAdapter')
     expect(info.approvalRequired).toBe(true)
     expect(info.token).not.toBe(TREAD_ADAPTER)
-    expect(info.routes.find((r) => r.eid === 30367)?.peer).toBe(TREAD_OFT)
+    expect(info.routes.find((r) => r.eid === 30367)?.peer).toBe(addressToBytes32(TREAD_OFT))
     // A real lock/unlock adapter holds everything ever bridged out.
     expect(info.lockedInAdapter).toBeGreaterThan(0n)
     expect(flags).not.toContain('adapter_empty')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allRpcHosts, byChainId, byEid, byKey, CHAINS, validateRpcUrl } from '@/core/chains'
+import { allRpcHosts, byChainId, byEid, byKey, CHAINS, evmByKey, evmChains, isEvm, isSvm, requireEvm, validateRpcUrl } from '@/core/chains'
 
 describe('chain registry', () => {
   it('has all v1 chains with the right eids', () => {
@@ -17,14 +17,15 @@ describe('chain registry', () => {
     }
     expect(CHAINS).toHaveLength(Object.keys(expected).length)
     for (const [key, [chainId, eid]] of Object.entries(expected)) {
-      const c = byKey(key as never)
+      const c = evmByKey(key as never)
+      expect(c.vm).toBe('evm')
       expect(c.chainId).toBe(chainId)
       expect(c.eid).toBe(eid)
     }
   })
 
   it('has unique chainIds, eids and keys', () => {
-    const ids = new Set(CHAINS.map((c) => c.chainId))
+    const ids = new Set(evmChains().map((c) => c.chainId))
     const eids = new Set(CHAINS.map((c) => c.eid))
     const keys = new Set(CHAINS.map((c) => c.key))
     expect(ids.size).toBe(CHAINS.length)
@@ -38,9 +39,19 @@ describe('chain registry', () => {
       for (const u of c.rpcUrls) expect(u.startsWith('https://')).toBe(true)
       expect(c.explorerTxUrl.startsWith('https://')).toBe(true)
       expect(c.explorerAddrUrl.startsWith('https://')).toBe(true)
-      expect(c.feeStepWei > 0n).toBe(true)
+      if (isEvm(c)) expect(c.feeStepWei > 0n).toBe(true)
+      else expect(c.feeStepLamports > 0n).toBe(true)
       expect(c.srcConfirmationsHint).toBeGreaterThan(0)
     }
+  })
+
+  it('vm discriminant: every v1 chain is EVM; helpers narrow without casts', () => {
+    expect(CHAINS.every(isEvm)).toBe(true)
+    expect(CHAINS.some(isSvm)).toBe(false)
+    expect(evmChains()).toHaveLength(CHAINS.length)
+    for (const c of CHAINS) expect(requireEvm(c)).toBe(c)
+    const fakeSvm = { ...byKey('ethereum'), vm: 'svm', feeStepLamports: 1n } as unknown as Parameters<typeof requireEvm>[0]
+    expect(() => requireEvm(fakeSvm)).toThrow(/not an EVM chain/)
   })
 
   it('lookups work', () => {

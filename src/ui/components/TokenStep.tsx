@@ -4,6 +4,7 @@ import { isAddress, type Address as Addr } from 'viem'
 import { byEid, type ChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { isTxHash } from '@/core/decodeTx'
+import { peerToAddress } from '@/core/encoding'
 import type { OptionItem } from '@/core/options'
 import type { OftInfo, SuspiciousFlag } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
@@ -213,13 +214,14 @@ function OftDetails({ chain, info }: { chain: ChainDef; info: OftInfo }) {
           <ul className="space-y-0.5">
             {known.map((r) => {
               const c = byEid(r.eid)!
+              const addr = peerToAddress(r.peer)
               return (
                 <li key={r.eid} className="flex items-center justify-end gap-2">
                   <ChainIcon chain={c.key} size={16} />
                   <span>{c.name}</span>
                   <span className="text-xs text-muted">eid {r.eid}</span>
                   <span className="text-xs">
-                    <Address value={r.peer} href={c.explorerAddrUrl + r.peer} short />
+                    {addr ? <Address value={addr} href={c.explorerAddrUrl + addr} short /> : <span className="mono">{r.peer.slice(0, 10)}…{r.peer.slice(-6)}</span>}
                   </span>
                 </li>
               )

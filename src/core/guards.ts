@@ -3,10 +3,10 @@
  * snapshot of app state. The Send button is enabled only when every guard
  * returns ok. Text lives in i18n; guards return codes only.
  */
-import { isAddress, type Address, type Hex } from 'viem'
+import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
 import { byChainId } from './chains'
-import { isZeroBytes32, sameAddress, ZERO_ADDRESS } from './encoding'
+import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions } from './options'
 import { assembleSendArgs, decodeSendCalldata, type SendPlan } from './plan'
 import type { OftInfo, SuspiciousFlag } from './types'
@@ -135,29 +135,29 @@ export function g2Peer(i: GuardInput): GuardResult {
   if (!i.plan) return fail(2, 'plan_missing')
   if (!sameAddress(i.plan.oft, i.info.oft)) return fail(2, 'oft_missing', 'plan.oft != info.oft')
   const route = i.info.routes.find((r) => r.eid === i.plan!.dstEid)
-  if (!route || sameAddress(route.peer, ZERO_ADDRESS)) return fail(2, 'peer_missing', `eid ${i.plan.dstEid}`)
+  if (!route || isZeroBytes32(route.peer)) return fail(2, 'peer_missing', `eid ${i.plan.dstEid}`)
   return ok(2)
 }
 
-// 3. recipient valid; custom recipient requires explicit confirmation
+// 3. recipient valid (bytes32); custom recipient requires explicit confirmation
 export function g3Recipient(i: GuardInput): GuardResult {
   if (!i.plan) return fail(3, 'plan_missing')
-  if (!isAddress(i.plan.recipient, { strict: false })) return fail(3, 'recipient_invalid')
-  if (i.walletAddress && !sameAddress(i.plan.recipient, i.walletAddress)) {
+  if (!isBytes32(i.plan.recipient)) return fail(3, 'recipient_invalid')
+  if (i.walletAddress && !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress))) {
     // Recipient differs from wallet: must be flagged as custom AND confirmed.
     if (!i.recipientIsCustom || !i.customRecipientConfirmed) return fail(3, 'recipient_unconfirmed')
   }
   return ok(3)
 }
 
-// 4. recipient != 0 and not token/oft/endpoint
+// 4. recipient != 0 and not token/oft/endpoint (compared in bytes32 form)
 export function g4RecipientNotContract(i: GuardInput): GuardResult {
   if (!i.plan) return fail(4, 'plan_missing')
   if (!i.info) return fail(4, 'oft_missing')
   const r = i.plan.recipient
-  if (sameAddress(r, ZERO_ADDRESS)) return fail(4, 'recipient_zero')
+  if (isZeroBytes32(r)) return fail(4, 'recipient_zero')
   for (const c of [i.info.token, i.info.oft, i.info.endpoint]) {
-    if (sameAddress(r, c)) return fail(4, 'recipient_is_contract', c)
+    if (sameAddress(r, addressToBytes32(c))) return fail(4, 'recipient_is_contract', c)
   }
   return ok(4)
 }

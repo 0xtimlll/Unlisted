@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { Hash } from 'viem'
-import { byKey } from '@/core/chains'
+import { evmByKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
 import { decodeTx } from '@/core/decodeTx'
 import { probeOft } from '@/core/probe'
@@ -16,7 +16,7 @@ const DEFAULT_TX: Hash = '0x59443176b832dcf3b19aa54ce815089d7951496903bedd59174c
 const HASH = (process.env['OFT_TEST_SEND_TX'] as Hash | undefined) ?? DEFAULT_TX
 
 describe('decodeTx + track on a real HyperEVM send', () => {
-  const hyper = makeReadClient(byKey('hyperevm'))
+  const hyper = makeReadClient(evmByKey('hyperevm'))
 
   it('prefills contract + dstEid, and the contract probes as an OFT with that route', async () => {
     const p = await decodeTx(hyper, HASH)

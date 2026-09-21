@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { formatAmount } from '@/core/amounts'
-import { byEid, type ChainDef } from '@/core/chains'
+import { byEid, type ChainDef, type EvmChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
 import type { SendPlan } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
@@ -11,7 +11,7 @@ import type { DestinationState } from './FromTo'
 import { Alert, Button, Disclosure, Input, Row, Spinner } from './ui'
 
 /** Quote breakdown + advanced settings. Collapsed by default, like Relay's fee row. */
-export function Details(p: { src: ChainDef; info: OftInfo; plan: SendPlan | undefined; state: DestinationState; onChange: (s: DestinationState) => void }) {
+export function Details(p: { src: EvmChainDef; info: OftInfo; plan: SendPlan | undefined; state: DestinationState; onChange: (s: DestinationState) => void }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
   const [adv, setAdv] = useState(false)
@@ -65,7 +65,7 @@ export function Details(p: { src: ChainDef; info: OftInfo; plan: SendPlan | unde
                 {dst?.name ?? '?'} <span className="text-xs text-muted">(eid {plan.dstEid})</span>
               </Row>
               <Row label={d.step3.recipient} mono>
-                <Address value={plan.recipient} href={dst ? dst.explorerAddrUrl + plan.recipient : undefined} short />
+                <Address value={plan.recipientDisplay} href={dst ? dst.explorerAddrUrl + plan.recipientDisplay : undefined} short />
               </Row>
               <Row label={d.step3.refund} mono>
                 <Address value={plan.sender} short />

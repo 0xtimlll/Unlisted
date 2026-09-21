@@ -14,10 +14,9 @@ export type ChainKey =
   | 'linea'
   | 'scroll'
 
-export type ChainDef = {
+type ChainCommon = {
   key: ChainKey
   name: string
-  chainId: number
   /** LayerZero V2 endpoint id. */
   eid: number
   nativeSymbol: string
@@ -27,14 +26,29 @@ export type ChainDef = {
   explorerTxUrl: string
   /** Prefix; append the address. */
   explorerAddrUrl: string
-  /** Fee rounding step (wei). `value` is rounded UP to a multiple of this so the wallet shows a clean number. */
-  feeStepWei: bigint
   /** Rough number of source confirmations before LZ DVNs verify — for the "usually ~N min" hint only. */
   srcConfirmationsHint: number
 }
 
+export type EvmChainDef = ChainCommon & {
+  vm: 'evm'
+  chainId: number
+  /** Fee rounding step (wei). `value` is rounded UP to a multiple of this so the wallet shows a clean number. */
+  feeStepWei: bigint
+}
+
+export type SvmChainDef = ChainCommon & {
+  vm: 'svm'
+  /** Fee rounding step in lamports (same role as feeStepWei). */
+  feeStepLamports: bigint
+}
+
+/** Discriminated by `vm`. Everything that needs a chainId or wei must narrow with isEvm() first. */
+export type ChainDef = EvmChainDef | SvmChainDef
+
 export const CHAINS: readonly ChainDef[] = [
   {
+    vm: 'evm',
     key: 'ethereum',
     name: 'Ethereum',
     chainId: 1,
@@ -47,6 +61,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 32,
   },
   {
+    vm: 'evm',
     key: 'arbitrum',
     name: 'Arbitrum',
     chainId: 42161,
@@ -59,6 +74,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 20,
   },
   {
+    vm: 'evm',
     key: 'optimism',
     name: 'Optimism',
     chainId: 10,
@@ -71,6 +87,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 20,
   },
   {
+    vm: 'evm',
     key: 'base',
     name: 'Base',
     chainId: 8453,
@@ -83,6 +100,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 10,
   },
   {
+    vm: 'evm',
     key: 'bsc',
     name: 'BNB Chain',
     chainId: 56,
@@ -95,6 +113,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 20,
   },
   {
+    vm: 'evm',
     key: 'polygon',
     name: 'Polygon',
     chainId: 137,
@@ -107,6 +126,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 512,
   },
   {
+    vm: 'evm',
     key: 'avalanche',
     name: 'Avalanche',
     chainId: 43114,
@@ -119,6 +139,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 12,
   },
   {
+    vm: 'evm',
     key: 'hyperevm',
     name: 'HyperEVM',
     chainId: 999,
@@ -131,6 +152,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 20,
   },
   {
+    vm: 'evm',
     key: 'linea',
     name: 'Linea',
     chainId: 59144,
@@ -143,6 +165,7 @@ export const CHAINS: readonly ChainDef[] = [
     srcConfirmationsHint: 20,
   },
   {
+    vm: 'evm',
     key: 'scroll',
     name: 'Scroll',
     chainId: 534352,
@@ -158,18 +181,42 @@ export const CHAINS: readonly ChainDef[] = [
 
 export const ALL_EIDS: readonly number[] = CHAINS.map((c) => c.eid)
 
+export function isEvm(c: ChainDef): c is EvmChainDef {
+  return c.vm === 'evm'
+}
+
+export function isSvm(c: ChainDef): c is SvmChainDef {
+  return c.vm === 'svm'
+}
+
+export function evmChains(): readonly EvmChainDef[] {
+  return CHAINS.filter(isEvm)
+}
+
+/** For code that only works on EVM (wagmi, viem, wei math). Throws instead of casting. */
+export function requireEvm(c: ChainDef): EvmChainDef {
+  if (!isEvm(c)) throw new Error(`${c.name} is not an EVM chain`)
+  return c
+}
+
 export function byEid(eid: number): ChainDef | undefined {
   return CHAINS.find((c) => c.eid === eid)
 }
 
-export function byChainId(chainId: number): ChainDef | undefined {
-  return CHAINS.find((c) => c.chainId === chainId)
+/** EVM chain ids only — an svm chain has no chainId, so it can never match. */
+export function byChainId(chainId: number): EvmChainDef | undefined {
+  return evmChains().find((c) => c.chainId === chainId)
 }
 
 export function byKey(key: ChainKey): ChainDef {
   const c = CHAINS.find((x) => x.key === key)
   if (!c) throw new Error(`unknown chain key: ${key}`)
   return c
+}
+
+/** byKey + requireEvm, for EVM-only call sites. */
+export function evmByKey(key: ChainKey): EvmChainDef {
+  return requireEvm(byKey(key))
 }
 
 /** Every RPC the app may talk to — feeds the CSP `connect-src` list (§7). */

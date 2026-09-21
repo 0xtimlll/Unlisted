@@ -4,6 +4,7 @@ import { DecodeTxError } from '@/core/decodeTx'
 import { ProbeError } from '@/core/probe'
 import { decodeTxQuorum, probeOftQuorum, sameOftInfo, sameTx, type Pair } from '@/core/quorum'
 import { assembleSendArgs, encodeSendCalldata } from '@/core/plan'
+import { addressToBytes32 } from '@/core/encoding'
 import { OTHER, TREAD_ADAPTER, TREAD_OFT, treadOftInfo, treadPlan } from './fixtures'
 
 // probeOft / decodeTx are exercised elsewhere; here we mock them to test the quorum logic.
@@ -42,7 +43,7 @@ describe('probeOftQuorum', () => {
     for (const lie of [
       treadOftInfo({ token: OTHER }),
       treadOftInfo({ approvalRequired: true }),
-      treadOftInfo({ routes: [{ eid: 30101, peer: OTHER }] }),
+      treadOftInfo({ routes: [{ eid: 30101, peer: addressToBytes32(OTHER) }] }),
       treadOftInfo({ routes: [] }),
       treadOftInfo({ conversionRate: 1n }),
     ]) {

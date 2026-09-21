@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import type { Hash } from 'viem'
 import { useWaitForTransactionReceipt } from 'wagmi'
-import { byEid, type ChainDef } from '@/core/chains'
+import { byEid, type EvmChainDef } from '@/core/chains'
 import { scanMessageUrl, type TrackPhase } from '@/core/track'
 import { fmt, useDict } from '@/i18n'
 import { useTrack } from '../hooks'
@@ -20,7 +20,7 @@ function useElapsed(since: number): string {
 }
 
 export function Tracker(p: {
-  src: ChainDef
+  src: EvmChainDef
   dstEid: number
   txHash: Hash
   startedAt: number

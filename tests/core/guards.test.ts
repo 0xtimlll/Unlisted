@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { encodeFunctionData, type Hex } from 'viem'
 import { oftAbi } from '@/core/abi'
-import { ZERO_ADDRESS } from '@/core/encoding'
+import { addressToBytes32, ZERO_ADDRESS, ZERO_BYTES32 } from '@/core/encoding'
 import {
   approvePlan,
   g17PeerBack,
@@ -55,6 +55,12 @@ describe('runGuards on a good snapshot', () => {
     expect(rep.canSend).toBe(true)
     expect(rep.warnings).toEqual([])
     expect(rep.needsNoGasConfirmation).toBe(false)
+  })
+
+  it('recipient is stored as bytes32 and equals SendParam.to', () => {
+    const plan = treadPlan()
+    expect(plan.recipient).toBe(addressToBytes32(WALLET))
+    expect(plan.recipientDisplay).toBe(WALLET)
   })
 
   it('a single failing guard disables Send', () => {
@@ -111,7 +117,7 @@ describe('2. peer exists', () => {
     expect(code(g2Peer(goodInput({ plan: treadPlan({ dstEid: 30110 }) })))).toBe('peer_missing')
   })
   it('fails when peer is zero', () => {
-    const info = treadOftInfo({ routes: [{ eid: ETH_EID, peer: ZERO_ADDRESS }] })
+    const info = treadOftInfo({ routes: [{ eid: ETH_EID, peer: ZERO_BYTES32 }] })
     expect(code(g2Peer(goodInput({ info })))).toBe('peer_missing')
   })
   it('fails when plan.oft != info.oft', () => {
@@ -133,8 +139,11 @@ describe('3. recipient', () => {
     expect(code(g3Recipient(goodInput({ plan, customRecipientConfirmed: true })))).toBe('recipient_unconfirmed')
     expect(code(g3Recipient(goodInput({ plan, recipientIsCustom: true, customRecipientConfirmed: true })))).toBe('ok')
   })
-  it('invalid address fails', () => {
-    expect(code(g3Recipient(goodInput({ plan: treadPlan({ recipient: '0x123' as never }) })))).toBe('recipient_invalid')
+  it('invalid (non-bytes32) recipient fails', () => {
+    const plan = { ...treadPlan(), recipient: '0x123' as never }
+    expect(code(g3Recipient(goodInput({ plan })))).toBe('recipient_invalid')
+    const padded20 = { ...treadPlan(), recipient: OTHER as never } // a bare 20-byte address is not bytes32
+    expect(code(g3Recipient(goodInput({ plan: padded20 })))).toBe('recipient_invalid')
   })
   it('wallet address in different case is still "self"', () => {
     const plan = treadPlan({ recipient: WALLET.toUpperCase().replace('0X', '0x') as never })

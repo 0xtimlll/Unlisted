@@ -3,14 +3,14 @@
  * A user-supplied RPC (already validated by validateRpcUrl) goes first, then public fallbacks.
  */
 import { createPublicClient, fallback, http, type Chain, type PublicClient } from 'viem'
-import type { ChainDef } from './chains'
+import type { EvmChainDef } from './chains'
 
 /** Canonical Multicall3 address; deployed at the same address on every v1 chain. */
 export const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
 
 export type ReadClient = PublicClient
 
-export function toViemChain(c: ChainDef): Chain {
+export function toViemChain(c: EvmChainDef): Chain {
   return {
     id: c.chainId,
     name: c.name,
@@ -20,7 +20,7 @@ export function toViemChain(c: ChainDef): Chain {
   }
 }
 
-export function makeReadClient(c: ChainDef, customRpc?: string): ReadClient {
+export function makeReadClient(c: EvmChainDef, customRpc?: string): ReadClient {
   const urls = customRpc ? [customRpc, ...c.rpcUrls] : [...c.rpcUrls]
   return createPublicClient({
     chain: toViemChain(c),

@@ -23,6 +23,21 @@ export function isZeroBytes32(b: Hex): boolean {
   return /^0x0{64}$/.test(b)
 }
 
+export function isBytes32(b: unknown): b is Hex {
+  return typeof b === 'string' && /^0x[0-9a-fA-F]{64}$/.test(b)
+}
+
+/**
+ * bytes32 → EIP-55 address when the value is EVM-shaped (12 leading zero bytes), else undefined.
+ * For display and EVM-only lookups; a Solana peer is NOT an address and must not be shortened.
+ */
+export function peerToAddress(peer: Hex): Address | undefined {
+  if (!isBytes32(peer)) return undefined
+  const hex = peer.slice(2)
+  if (hex.slice(0, 24) !== '0'.repeat(24)) return undefined
+  return getAddress(`0x${hex.slice(24)}`)
+}
+
 /** EIP-55 checksum, or throws. Accepts lowercase/uppercase/mixed-valid input. */
 export function checksum(addr: string): Address {
   if (!isAddress(addr, { strict: false })) throw new Error(`invalid address: ${addr}`)

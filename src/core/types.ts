@@ -17,8 +17,12 @@ export type OftInfo = {
   approvalRequired: boolean
   endpoint: Address
   owner?: Address
-  /** Destinations with peers(eid) != 0, across the chain registry. */
-  routes: { eid: number; peer: Address }[]
+  /**
+   * Destinations with peers(eid) != 0, across the chain registry. `peer` is the raw bytes32 from
+   * the contract: an EVM address left-padded to 32 bytes, or a Solana OFT Store pubkey where all
+   * 32 bytes matter. Use peerToAddress() for display on EVM destinations only.
+   */
+  routes: { eid: number; peer: Hex }[]
   /** enforcedOptions(eid, 1) per destination eid. */
   enforced: Record<number, Hex>
   /** For lock/unlock adapters (approvalRequired): token.balanceOf(oft) — what the bridge holds. */

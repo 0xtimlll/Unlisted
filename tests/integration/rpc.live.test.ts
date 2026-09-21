@@ -3,7 +3,7 @@
  * origins (CORS) — a public RPC that only works from curl silently weakens the two-RPC quorum.
  */
 import { describe, expect, it } from 'vitest'
-import { CHAINS } from '@/core/chains'
+import { CHAINS, isEvm } from '@/core/chains'
 
 const ORIGIN = 'https://oft-bridge-ui.pages.dev'
 
@@ -22,10 +22,10 @@ async function probe(url: string) {
 describe('registry RPCs', () => {
   for (const c of CHAINS) {
     for (const url of c.rpcUrls) {
-      it(`${c.key}: ${url} answers with chainId ${c.chainId} and allows browser origins`, async () => {
+      it(`${c.key}: ${url} answers with the right chain id and allows browser origins`, async () => {
         const p = await probe(url)
         expect(p.status).toBe(200)
-        expect(p.chainId).toBe(c.chainId)
+        if (isEvm(c)) expect(p.chainId).toBe(c.chainId)
         expect(p.acao === '*' || p.acao === ORIGIN).toBe(true)
       }, 30_000)
     }

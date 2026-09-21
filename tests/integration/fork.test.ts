@@ -6,7 +6,7 @@ import { execSync } from 'node:child_process'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } from 'viem'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { byKey } from '@/core/chains'
+import { evmByKey } from '@/core/chains'
 import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
 import { probeOft } from '@/core/probe'
@@ -78,7 +78,7 @@ async function sendOnFork(f: Fork, plan: SendPlan) {
 describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   let f: Fork
   beforeAll(async () => {
-    f = await startFork(byKey('hyperevm'))
+    f = await startFork(evmByKey('hyperevm'))
     await setNativeBalance(f, USER, 10n * 10n ** 18n)
   }, 90_000)
   afterAll(() => f?.stop())
@@ -144,7 +144,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
 describe.skipIf(!hasAnvil)('Ethereum fork', () => {
   let f: Fork
   beforeAll(async () => {
-    f = await startFork(byKey('ethereum'))
+    f = await startFork(evmByKey('ethereum'))
     await setNativeBalance(f, USER, 10n * 10n ** 18n)
   }, 90_000)
   afterAll(() => f?.stop())

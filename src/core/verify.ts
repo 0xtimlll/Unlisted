@@ -6,7 +6,7 @@
 import { type Address, type Hex } from 'viem'
 import { oftAbi } from './abi'
 import type { ReadClient } from './client'
-import { addressToBytes32 } from './encoding'
+import { addressToBytes32, peerToAddress } from './encoding'
 
 export type PeerBackResult =
   | { status: 'ok' }
@@ -15,12 +15,15 @@ export type PeerBackResult =
 
 /**
  * Reads `peers(srcEid)` on the destination-side peer and compares it with our OFT.
- * `dstClient` must be a client for the destination chain.
+ * `dstClient` must be a client for the (EVM) destination chain; `peer` is the raw bytes32 from
+ * routes[]. A peer that is not EVM-shaped cannot be the right contract on an EVM chain.
  */
-export async function checkPeerBack(dstClient: ReadClient, peer: Address, srcEid: number, oft: Address): Promise<PeerBackResult> {
+export async function checkPeerBack(dstClient: ReadClient, peer: Hex, srcEid: number, oft: Address): Promise<PeerBackResult> {
+  const peerAddress = peerToAddress(peer)
+  if (!peerAddress) return { status: 'mismatch', theirPeer: peer }
   let theirPeer: Hex
   try {
-    theirPeer = await dstClient.readContract({ address: peer, abi: oftAbi, functionName: 'peers', args: [srcEid] })
+    theirPeer = await dstClient.readContract({ address: peerAddress, abi: oftAbi, functionName: 'peers', args: [srcEid] })
   } catch (e) {
     return { status: 'unavailable', reason: e instanceof Error ? e.message.split('\n')[0] ?? '' : String(e) }
   }

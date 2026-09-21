@@ -3,7 +3,7 @@
  * contract look legitimate (and "simulate" it successfully); two unrelated providers agreeing
  * is a much higher bar. Disagreement blocks; a second provider being down only warns.
  */
-import type { ChainDef } from './chains'
+import type { EvmChainDef } from './chains'
 import { makeReadClient, type ReadClient } from './client'
 import { decodeTx, DecodeTxError, type TxPrefill } from './decodeTx'
 import { sameAddress } from './encoding'
@@ -17,7 +17,7 @@ export type Pair = { primary: ReadClient; secondaries: ReadClient[] }
  * each bound to a single URL so their opinions are independent. All are asked; one definite
  * answer is enough to cross-check, and any disagreement blocks.
  */
-export function clientPair(chain: ChainDef, customRpc?: string): Pair {
+export function clientPair(chain: EvmChainDef, customRpc?: string): Pair {
   const primaryUrl = customRpc ?? chain.rpcUrls[0]!
   return {
     primary: makeReadClient(chain, customRpc ? customRpc : undefined),
@@ -26,7 +26,7 @@ export function clientPair(chain: ChainDef, customRpc?: string): Pair {
 }
 
 /** A client bound to exactly one URL (no fallback), so the two opinions stay independent. */
-function makeReadClientSingle(chain: ChainDef, url: string): ReadClient {
+function makeReadClientSingle(chain: EvmChainDef, url: string): ReadClient {
   return makeReadClient({ ...chain, rpcUrls: [url] })
 }
 

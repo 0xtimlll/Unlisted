@@ -6,7 +6,7 @@ import { getAddress, isAddress, type Address, type Hex } from 'viem'
 import { erc20Abi, MSG_TYPE_SEND, oftAbi } from './abi'
 import { ALL_EIDS } from './chains'
 import type { ReadClient } from './client'
-import { bytes32ToAddress, isZeroBytes32, sameAddress } from './encoding'
+import { isZeroBytes32, sameAddress } from './encoding'
 import type { OftInfo, SuspiciousFlag } from './types'
 
 export type ProbeErrorCode = 'invalid_address' | 'not_contract' | 'not_oft' | 'token_unreadable' | 'rate_mismatch' | 'rpc_mismatch'
@@ -111,13 +111,8 @@ export async function probeOft(
   const enforced: Record<number, Hex> = {}
   eids.forEach((eid, i) => {
     const p = peerRes[i]
-    if (p?.status === 'success' && !isZeroBytes32(p.result)) {
-      try {
-        routes.push({ eid, peer: bytes32ToAddress(p.result) })
-      } catch {
-        // Non-EVM peer (e.g. Solana): not supported in v1, skip silently.
-      }
-    }
+    // Keep the raw bytes32: an EVM peer is a padded address, a Solana peer is a 32-byte pubkey.
+    if (p?.status === 'success' && !isZeroBytes32(p.result)) routes.push({ eid, peer: p.result })
     const e = enforcedRes[i]
     enforced[eid] = e?.status === 'success' ? e.result : '0x'
   })

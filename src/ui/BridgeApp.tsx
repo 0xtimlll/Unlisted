@@ -5,7 +5,7 @@ import { encodeFunctionData, isAddress, type Address, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
 import { AmountError, parseAmount } from '@/core/amounts'
-import { byChainId, byKey, type ChainKey } from '@/core/chains'
+import { byChainId, evmByKey, type ChainKey } from '@/core/chains'
 import { DecodeTxError } from '@/core/decodeTx'
 import { checksum } from '@/core/encoding'
 import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
@@ -46,7 +46,8 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
   const { openConnectModal } = useConnectModal()
 
   const [srcKey, setSrcKey] = useState<ChainKey>('ethereum')
-  const src = byKey(srcKey)
+  // Source chains are EVM until the Solana source stage; svm sources get their own wallet stack then.
+  const src = evmByKey(srcKey)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [mode, setMode] = useState<TokenMode>('address')
   const [probeTarget, setProbeTarget] = useState<Address | null>(null)
@@ -291,7 +292,7 @@ export function BridgeApp({ stored, setStored, onTheme }: { stored: Stored; setS
         <div className="w-full max-w-[408px] space-y-2">
           {sent ? (
             <Tracker
-              src={byKey(sent.srcChain)}
+              src={evmByKey(sent.srcChain)}
               dstEid={sent.dstEid}
               txHash={sent.txHash}
               startedAt={sent.startedAt}
