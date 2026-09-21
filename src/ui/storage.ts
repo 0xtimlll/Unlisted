@@ -2,17 +2,24 @@
  * localStorage (§7): settings and public identifiers only — language, custom RPCs,
  * recent contract addresses, transfer hashes. Every read/write is guarded.
  */
-import { isAddress, type Address, type Hash } from 'viem'
+import { isAddress } from 'viem'
 import type { ChainKey } from '@/core/chains'
 import { validateRpcUrl } from '@/core/rpcPolicy'
 
 const KEY = 'oft-bridge-ui:v1'
 
+/** An EVM 0x address or a Solana base58 public key. */
+const isAccount = (v: unknown): v is string => typeof v === 'string' && (isAddress(v, { strict: false }) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v))
+/** An EVM tx hash or a Solana signature. */
+const isTx = (v: unknown): v is string => typeof v === 'string' && (/^0x[0-9a-fA-F]{64}$/.test(v) || /^[1-9A-HJ-NP-Za-km-z]{86,88}$/.test(v))
+
 export type HistoryEntry = {
   srcChain: ChainKey
   dstEid: number
-  oft: Address
-  txHash: Hash
+  /** The OFT contract (EVM) or OFT Store (Solana). */
+  oft: string
+  /** 0x hash (EVM) or base58 signature (Solana). */
+  txHash: string
   /** ms since epoch */
   at: number
   /** Final LayerZero status once known; absent while in flight. */
@@ -24,7 +31,7 @@ export type Theme = 'system' | 'light' | 'dark'
 export type Stored = {
   theme: Theme
   customRpc: Partial<Record<ChainKey, string>>
-  recentContracts: { chain: ChainKey; address: Address }[]
+  recentContracts: { chain: ChainKey; address: string }[]
   history: HistoryEntry[]
 }
 
@@ -56,7 +63,7 @@ export function sanitize(raw: unknown): Stored {
     for (const e of r['recentContracts'] as unknown[]) {
       if (e && typeof e === 'object') {
         const { chain, address } = e as Record<string, unknown>
-        if (isKey(chain) && typeof address === 'string' && isAddress(address)) {
+        if (isKey(chain) && isAccount(address)) {
           out.recentContracts.push({ chain, address })
         }
       }
@@ -67,12 +74,9 @@ export function sanitize(raw: unknown): Stored {
     for (const e of r['history'] as unknown[]) {
       if (e && typeof e === 'object') {
         const { srcChain, dstEid, oft, txHash, at } = e as Record<string, unknown>
-        if (
-          isKey(srcChain) && typeof dstEid === 'number' && typeof oft === 'string' && isAddress(oft)
-          && typeof txHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(txHash) && typeof at === 'number'
-        ) {
+        if (isKey(srcChain) && typeof dstEid === 'number' && isAccount(oft) && isTx(txHash) && typeof at === 'number') {
           const status = (e as Record<string, unknown>)['status']
-          out.history.push({ srcChain, dstEid, oft, txHash: txHash as Hash, at, ...(status === 'delivered' || status === 'failed' ? { status } : {}) })
+          out.history.push({ srcChain, dstEid, oft, txHash, at, ...(status === 'delivered' || status === 'failed' ? { status } : {}) })
         }
       }
       if (out.history.length >= MAX_HISTORY) break
@@ -110,7 +114,7 @@ export function exportJson(): string {
   return JSON.stringify(load(), null, 2)
 }
 
-export function pushRecent(s: Stored, chain: ChainKey, address: Address): Stored {
+export function pushRecent(s: Stored, chain: ChainKey, address: string): Stored {
   const rest = s.recentContracts.filter((e) => !(e.chain === chain && e.address.toLowerCase() === address.toLowerCase()))
   return { ...s, recentContracts: [{ chain, address }, ...rest].slice(0, MAX_RECENT) }
 }
@@ -120,7 +124,7 @@ export function pushHistory(s: Stored, e: HistoryEntry): Stored {
   return { ...s, history: [e, ...rest].slice(0, MAX_HISTORY) }
 }
 
-export function setHistoryStatus(s: Stored, txHash: Hash, status: 'delivered' | 'failed'): Stored {
+export function setHistoryStatus(s: Stored, txHash: string, status: 'delivered' | 'failed'): Stored {
   return { ...s, history: s.history.map((h) => (h.txHash.toLowerCase() === txHash.toLowerCase() ? { ...h, status } : h)) }
 }
 

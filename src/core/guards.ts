@@ -8,8 +8,8 @@ import { applyBps } from './amounts'
 import { byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions, receiveTotals } from './options'
-import { assembleSendArgs, decodeSendCalldata, type SendPlan } from './plan'
-import type { OftInfo, SuspiciousFlag } from './types'
+import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type SendPlan } from './plan'
+import type { SourceInfo, SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
 import type { PeerBackResult } from './verify'
 
@@ -87,11 +87,14 @@ export type SelfCheckResult = { ok: true } | { ok: false; mismatches: string[] }
 export type ApproveIntent = { spender: Address; amount: bigint }
 
 export type GuardInput = {
+  /** EVM wallet (wagmi). Undefined when no EVM wallet is connected or the source is Solana. */
   walletAddress: Address | undefined
   walletChainId: number | undefined
-  /** Chain the user selected as source. */
+  /** Chain the user selected as source: its chainId for EVM, or the Solana wallet for svm. */
   srcChainId: number
-  info: OftInfo | undefined
+  /** Solana source only: the connected Solana wallet (base58). */
+  svmWalletAddress?: string | undefined
+  info: SourceInfo | undefined
   plan: SendPlan | undefined
   /** User typed a recipient different from the wallet. */
   recipientIsCustom: boolean
@@ -100,7 +103,7 @@ export type GuardInput = {
   tokenBalance: bigint | undefined
   nativeBalance: bigint | undefined
   allowance: bigint | undefined
-  /** Estimated gas * gas price for the send tx. */
+  /** Estimated cost of the send tx in the source chain's native unit (wei, or lamports on Solana). */
   gasCostWei: bigint | undefined
   approveIntent?: ApproveIntent
   simulation: SimulationResult | undefined
@@ -134,8 +137,20 @@ const ok = (id: number): GuardResult => ({ id, ok: true })
 const fail = (id: number, code: GuardCode, detail?: string): GuardResult =>
   detail === undefined ? { id, ok: false, code } : { id, ok: false, code, detail }
 
-// 1. wallet chain == selected source chain
+/** Same OFT on both sides of the plan: the address the user checked is the one the tx names. */
+function samePlanOft(plan: SendPlan, info: SourceInfo): boolean {
+  if (plan.vm === 'evm') return info.vm === 'evm' && sameAddress(plan.oft, info.oft)
+  return info.vm === 'svm' && plan.oftStore === info.oftStore
+}
+
+// 1. wallet chain == selected source chain (Solana: the Solana wallet is connected and is the plan's sender)
 export function g1Chain(i: GuardInput): GuardResult {
+  if (i.plan?.vm === 'svm' || (i.plan === undefined && i.info?.vm === 'svm')) {
+    if (!i.svmWalletAddress) return fail(1, 'wallet_not_connected')
+    if (i.plan && i.plan.sender !== i.svmWalletAddress) return fail(1, 'chain_mismatch', 'plan.sender != wallet')
+    if (i.plan && byEid(i.plan.srcEid)?.vm !== 'svm') return fail(1, 'chain_mismatch', `plan.srcEid ${i.plan.srcEid}`)
+    return ok(1)
+  }
   if (i.walletAddress === undefined || i.walletChainId === undefined) return fail(1, 'wallet_not_connected')
   if (i.walletChainId !== i.srcChainId) return fail(1, 'chain_mismatch', `${i.walletChainId} != ${i.srcChainId}`)
   const src = byChainId(i.srcChainId)
@@ -148,7 +163,7 @@ export function g1Chain(i: GuardInput): GuardResult {
 export function g2Peer(i: GuardInput): GuardResult {
   if (!i.info) return fail(2, 'oft_missing')
   if (!i.plan) return fail(2, 'plan_missing')
-  if (!sameAddress(i.plan.oft, i.info.oft)) return fail(2, 'oft_missing', 'plan.oft != info.oft')
+  if (!samePlanOft(i.plan, i.info)) return fail(2, 'oft_missing', 'plan.oft != info.oft')
   const route = i.info.routes.find((r) => r.eid === i.plan!.dstEid)
   if (!route || isZeroBytes32(route.peer)) return fail(2, 'peer_missing', `eid ${i.plan.dstEid}`)
   return ok(2)
@@ -158,7 +173,9 @@ export function g2Peer(i: GuardInput): GuardResult {
 export function g3Recipient(i: GuardInput): GuardResult {
   if (!i.plan) return fail(3, 'plan_missing')
   if (!isBytes32(i.plan.recipient)) return fail(3, 'recipient_invalid')
-  if (i.walletAddress && !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress))) {
+  // From Solana the recipient is an EVM address: it can never be "my wallet", so it is always custom.
+  const differsFromWallet = i.plan.vm === 'svm' || (i.walletAddress !== undefined && !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress)))
+  if (differsFromWallet) {
     // Recipient differs from wallet: must be flagged as custom AND confirmed.
     if (!i.recipientIsCustom || !i.customRecipientConfirmed) return fail(3, 'recipient_unconfirmed')
   }
@@ -171,9 +188,14 @@ export function g4RecipientNotContract(i: GuardInput): GuardResult {
   if (!i.info) return fail(4, 'oft_missing')
   const r = i.plan.recipient
   if (isZeroBytes32(r)) return fail(4, 'recipient_zero')
-  for (const c of [i.info.token, i.info.oft, i.info.endpoint]) {
-    if (sameAddress(r, addressToBytes32(c))) return fail(4, 'recipient_is_contract', c)
+  if (i.info.vm === 'evm') {
+    for (const c of [i.info.token, i.info.oft, i.info.endpoint]) {
+      if (sameAddress(r, addressToBytes32(c))) return fail(4, 'recipient_is_contract', c)
+    }
   }
+  // The destination-side OFT itself (the peer) is a contract on every VM.
+  const route = i.info.routes.find((x) => x.eid === i.plan!.dstEid)
+  if (route && sameAddress(r, route.peer)) return fail(4, 'recipient_is_contract', route.peer)
   return ok(4)
 }
 
@@ -204,7 +226,7 @@ export function g6MinAmount(i: GuardInput): GuardResult {
 // 7. fee.nativeFee === value, lzTokenFee === 0
 export function g7Fee(i: GuardInput): GuardResult {
   if (!i.plan) return fail(7, 'plan_missing')
-  const [, fee] = assembleSendArgs(i.plan)
+  const fee = planFee(i.plan)
   if (fee.nativeFee !== i.plan.value) return fail(7, 'fee_mismatch')
   if (fee.lzTokenFee !== 0n) return fail(7, 'lz_token_fee_nonzero')
   if (i.plan.value < i.plan.quote.nativeFee) return fail(7, 'fee_mismatch', 'value < quoted nativeFee')
@@ -258,7 +280,7 @@ export function g11NoApprove(i: GuardInput): GuardResult {
 // 12. approve spender == probeOft().oft
 export function g12Spender(i: GuardInput): GuardResult {
   if (!i.info) return fail(12, 'oft_missing')
-  if (i.approveIntent && !sameAddress(i.approveIntent.spender, i.info.oft)) {
+  if (i.approveIntent && (i.info.vm !== 'evm' || !sameAddress(i.approveIntent.spender, i.info.oft))) {
     return fail(12, 'approve_wrong_spender', i.approveIntent.spender)
   }
   return ok(12)
@@ -279,7 +301,7 @@ export function g14SelfCheck(i: GuardInput): GuardResult {
 }
 
 /** True when neither enforced nor extra options carry executor gas / compute units (§6.15). */
-export function needsNoGasConfirmation(info: OftInfo | undefined, plan: SendPlan | undefined): boolean {
+export function needsNoGasConfirmation(info: SourceInfo | undefined, plan: SendPlan | undefined): boolean {
   if (!info || !plan) return false
   const enforced: Hex = info.enforced[plan.dstEid] ?? '0x'
   return receiveTotals(enforced).gas + receiveTotals(plan.extraOptions).gas === 0n
@@ -379,8 +401,8 @@ export function runGuards(i: GuardInput): GuardReport {
  * The approve this app is allowed to send, or null. Amount is EXACTLY amountLD;
  * spender is EXACTLY info.oft. Unlimited approve does not exist in this codebase.
  */
-export function approvePlan(info: OftInfo, plan: SendPlan, allowance: bigint | undefined): ApproveIntent | null {
-  if (!info.approvalRequired) return null
+export function approvePlan(info: SourceInfo, plan: SendPlan, allowance: bigint | undefined): ApproveIntent | null {
+  if (!info.approvalRequired || info.vm !== 'evm') return null
   if (allowance !== undefined && allowance >= plan.amounts.amountLD) return null
   return { spender: info.oft, amount: plan.amounts.amountLD }
 }
@@ -388,7 +410,7 @@ export function approvePlan(info: OftInfo, plan: SendPlan, allowance: bigint | u
 /**
  * §6.14: decode our own `send` calldata and compare every field with the plan.
  */
-export function selfCheck(plan: SendPlan, calldata: Hex): SelfCheckResult {
+export function selfCheck(plan: EvmSendPlan, calldata: Hex): SelfCheckResult {
   const mismatches: string[] = []
   let decoded
   try {

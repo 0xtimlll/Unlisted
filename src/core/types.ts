@@ -1,9 +1,11 @@
 import type { Address, Hex } from 'viem'
+import type { SvmSourceInfo } from './svm/source'
 
 export type OftKind = 'OFT' | 'OFTAdapter'
 
 /** Result of probeOft() (§5.1). Everything here comes from the contract itself. */
 export type OftInfo = {
+  vm: 'evm'
   oft: Address
   kind: OftKind
   /** ERC-20 whose balanceOf/allowance we read. Equals `oft` for plain OFT. */
@@ -29,6 +31,9 @@ export type OftInfo = {
   lockedInAdapter?: bigint
 }
 
+/** The OFT chosen as the source, on either VM. Shared fields (symbol, decimals, routes, enforced…) are read alike. */
+export type SourceInfo = OftInfo | SvmSourceInfo
+
 /** Soft warnings (§6.16). Shown before signing, never block. */
 export type SuspiciousFlag =
   | 'owner_is_eoa'
@@ -38,5 +43,6 @@ export type SuspiciousFlag =
   | 'not_cross_checked'
   | 'svm_recipient_not_activated'
   | 'svm_paused'
+  | 'svm_source_paused'
   | 'svm_fee'
   | 'svm_single_provider'

@@ -2,10 +2,11 @@
 import { useEffect, useState } from 'react'
 import type { Hash } from 'viem'
 import { useWaitForTransactionReceipt } from 'wagmi'
-import { byEid, type EvmChainDef } from '@/core/chains'
+import { byEid, isEvm, type ChainDef } from '@/core/chains'
 import { scanMessageUrl, type TrackPhase } from '@/core/track'
 import { fmt, useDict } from '@/i18n'
 import { useTrack } from '../hooks'
+import { useSvmSignatureStatus } from '../svmHooks'
 import { ChainIcon } from './ChainIcon'
 import { Alert, Box, BoxLabel, Button, Spinner } from './ui'
 
@@ -20,21 +21,27 @@ function useElapsed(since: number): string {
 }
 
 export function Tracker(p: {
-  src: EvmChainDef
+  src: ChainDef
   dstEid: number
-  txHash: Hash
+  /** 0x hash (EVM source) or base58 signature (Solana source). */
+  txHash: string
   startedAt: number
   restored: boolean
+  customRpc: string | undefined
   onFinal: (phase: 'delivered' | 'failed') => void
   onNew: () => void
 }) {
   const d = useDict()
   const dst = byEid(p.dstEid)
-  const receipt = useWaitForTransactionReceipt({ hash: p.txHash, chainId: p.src.chainId })
-  const confirmed = receipt.isSuccess
+  const evm = isEvm(p.src)
+  // Source-chain confirmation: a receipt on EVM, a signature status on Solana.
+  const receipt = useWaitForTransactionReceipt({ hash: evm ? (p.txHash as Hash) : undefined, chainId: isEvm(p.src) ? p.src.chainId : undefined, query: { enabled: evm } })
+  const sig = useSvmSignatureStatus(evm ? undefined : p.txHash, p.customRpc)
+  const confirmed = evm ? receipt.isSuccess : sig.data === 'confirmed'
+  const sourceFailed = evm ? receipt.isError : sig.data === 'failed'
   const track = useTrack(confirmed ? p.txHash : undefined, p.startedAt)
   const s = track.data
-  const phase: TrackPhase = s?.phase ?? 'no_data'
+  const phase: TrackPhase = sourceFailed ? 'failed' : (s?.phase ?? 'no_data')
   const final = phase === 'delivered' || phase === 'failed'
   const elapsed = useElapsed(p.startedAt)
   const minutes = Math.max(1, Math.round((p.src.srcConfirmationsHint * 12) / 60))
@@ -52,7 +59,7 @@ export function Tracker(p: {
           {p.src.name}
         </span>
       ),
-      state: confirmed ? 'done' : 'active',
+      state: confirmed ? 'done' : sourceFailed ? 'failed' : 'active',
     },
     { label: 'LayerZero', state: !confirmed ? 'todo' : phase === 'delivered' ? 'done' : phase === 'failed' ? 'failed' : 'active' },
     {
@@ -68,7 +75,9 @@ export function Tracker(p: {
     },
   ]
 
-  const statusText = !confirmed
+  const statusText = sourceFailed
+    ? d.tracker.sourceFailed
+    : !confirmed
     ? d.tracker.waitingReceipt
     : phase === 'no_data' || phase === 'pending'
       ? fmt(d.tracker.confirmedWaitingScan, { chain: p.src.name })

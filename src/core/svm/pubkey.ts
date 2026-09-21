@@ -14,6 +14,10 @@ export const PROGRAM = {
   token: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
   token2022: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
   ata: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+  /** Address lookup tables live under this native program. */
+  lookupTable: 'AddressLookupTab1e1111111111111111111111111',
+  /** Metaplex Token Metadata: the on-chain name/symbol registry for SPL mints. */
+  metadata: 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
 } as const
 
 export type Pubkey = Uint8Array & { readonly length: 32 }
@@ -83,6 +87,12 @@ export function findProgramAddress(seeds: Uint8Array[], programId: Pubkey): { ad
 /** Associated token account: seeds [owner, tokenProgram, mint] on the ATA program. */
 export function findAta(owner: Pubkey, mint: Pubkey, tokenProgram: Pubkey): Pubkey {
   return findProgramAddress([owner, tokenProgram, mint], pubkeyFromBase58(PROGRAM.ata)).address
+}
+
+/** Metaplex metadata PDA: seeds ["metadata", metadataProgram, mint] on the metadata program. */
+export function findMetadata(mint: Pubkey): Pubkey {
+  const program = pubkeyFromBase58(PROGRAM.metadata)
+  return findProgramAddress([utf8('metadata'), program, mint], program).address
 }
 
 export function u32be(n: number): Uint8Array {

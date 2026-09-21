@@ -33,8 +33,8 @@ export type TrackState = {
   guid?: Hex
   srcEid?: number
   dstEid?: number
-  srcTxHash?: Hash
-  /** 0x-hex on EVM destinations, a base58 signature on Solana. */
+  /** 0x-hex on EVM chains, a base58 signature on Solana. */
+  srcTxHash?: string
   dstTxHash?: string
   /** ISO timestamp from the API. */
   updated?: string
@@ -46,12 +46,18 @@ const FAILED: ReadonlySet<string> = new Set([
   'UNRESOLVABLE_COMMAND', 'MALFORMED_COMMAND',
 ])
 
-export function scanMessageUrl(txHash: Hash): string {
-  return `${LZ_SCAN_UI}/tx/${txHash}`
+/** Only a well-formed hash/signature is ever put in a URL. */
+function txPath(txHash: string): string {
+  if (!isHash(txHash) && !isSolanaSig(txHash)) throw new Error('not a transaction hash')
+  return txHash
 }
 
-export function scanApiUrl(txHash: Hash): string {
-  return `${LZ_SCAN_API}/v1/messages/tx/${txHash}`
+export function scanMessageUrl(txHash: string): string {
+  return `${LZ_SCAN_UI}/tx/${txPath(txHash)}`
+}
+
+export function scanApiUrl(txHash: string): string {
+  return `${LZ_SCAN_API}/v1/messages/tx/${txPath(txHash)}`
 }
 
 const isHash = (v: unknown): v is Hash => typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
@@ -96,7 +102,7 @@ export function parseScanResponse(json: unknown): TrackState {
   const dstEid = num(pathway?.['dstEid'])
   if (dstEid !== undefined) out.dstEid = dstEid
   const srcHash = srcTx?.['txHash']
-  if (isHash(srcHash)) out.srcTxHash = srcHash
+  if (isHash(srcHash) || isSolanaSig(srcHash)) out.srcTxHash = srcHash
   const dstHash = dstTx?.['txHash']
   if (isHash(dstHash) || isSolanaSig(dstHash)) out.dstTxHash = dstHash
   const updated = str(m['updated'])
@@ -107,7 +113,7 @@ export function parseScanResponse(json: unknown): TrackState {
 export type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>
 
 /** One request. Network / HTTP errors -> no_data (never "failed"). */
-export async function fetchStatus(txHash: Hash, fetchImpl: FetchLike = fetch): Promise<TrackState> {
+export async function fetchStatus(txHash: string, fetchImpl: FetchLike = fetch): Promise<TrackState> {
   try {
     const r = await fetchImpl(scanApiUrl(txHash))
     if (!r.ok) return { phase: 'no_data' }
@@ -139,7 +145,7 @@ const defaultSleep = (ms: number, signal?: AbortSignal) =>
  * Polls until delivered/failed, timeout, or abort. Resolves with the last state.
  * A timeout is reported as the last known state (usually `pending`), not as failure.
  */
-export async function pollMessage(txHash: Hash, opts: PollOptions = {}): Promise<TrackState> {
+export async function pollMessage(txHash: string, opts: PollOptions = {}): Promise<TrackState> {
   const interval = opts.intervalMs ?? POLL_INTERVAL_MS
   const timeout = opts.timeoutMs ?? POLL_TIMEOUT_MS
   const sleep = opts.sleep ?? defaultSleep

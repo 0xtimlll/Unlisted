@@ -60,6 +60,7 @@ describe('parseScanResponse', () => {
   it('accepts a Solana (base58) destination signature and rejects junk', () => {
     const sig = '5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW'
     expect(parseScanResponse(msg('DELIVERED', { destination: { tx: { txHash: sig } } })).dstTxHash).toBe(sig)
+    expect(parseScanResponse(msg('INFLIGHT', { source: { tx: { txHash: sig } } })).srcTxHash).toBe(sig)
     expect(parseScanResponse(msg('DELIVERED', { destination: { tx: { txHash: 'javascript:alert(1)' } } })).dstTxHash).toBeUndefined()
     expect(parseScanResponse(msg('DELIVERED', { destination: { tx: { txHash: '0OIl' + sig } } })).dstTxHash).toBeUndefined()
   })
@@ -73,6 +74,12 @@ describe('urls', () => {
   it('point at layerzero scan only', () => {
     expect(scanApiUrl(HASH)).toBe(`https://scan.layerzero-api.com/v1/messages/tx/${HASH}`)
     expect(scanMessageUrl(HASH)).toBe(`https://layerzeroscan.com/tx/${HASH}`)
+  })
+  it('accept a Solana signature and refuse anything else', () => {
+    const sig = '5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW'
+    expect(scanApiUrl(sig)).toBe(`https://scan.layerzero-api.com/v1/messages/tx/${sig}`)
+    expect(() => scanMessageUrl('../../evil')).toThrow(/not a transaction hash/)
+    expect(() => scanApiUrl('0x1234')).toThrow(/not a transaction hash/)
   })
 })
 

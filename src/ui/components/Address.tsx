@@ -2,16 +2,18 @@
 import { useState } from 'react'
 import { checksum } from '@/core/encoding'
 
+const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
 /**
- * EIP-55 address, monospace, first/last 6 chars emphasized (§7). Text only.
+ * EIP-55 address (or a Solana base58 key), monospace, first/last chars emphasized (§7). Text only.
  */
 export function Address({ value, href, short = false }: { value: string; href?: string | undefined; short?: boolean }) {
   const [copied, setCopied] = useState(false)
   let a: string
   try {
-    a = checksum(value)
+    a = BASE58_KEY.test(value) ? value : checksum(value)
   } catch {
-    return <span className="mono text-red-600 dark:text-red-400">{String(value).slice(0, 42)}</span>
+    return <span className="mono text-red-600 dark:text-red-400">{String(value).slice(0, 44)}</span>
   }
   const head = a.slice(0, 8)
   const mid = a.slice(8, -6)

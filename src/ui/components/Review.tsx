@@ -2,12 +2,13 @@
 import { useState } from 'react'
 import { formatAmount } from '@/core/amounts'
 import { receiveTotals } from '@/core/options'
-import { byEid, type ChainDef, type EvmChainDef } from '@/core/chains'
+import { byEid, type ChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
 import type { SendPlan } from '@/core/plan'
 import type { SvmOptionsPlan } from '@/core/options'
 import type { SvmOftInfo } from '@/core/svm/discover'
-import type { OftInfo } from '@/core/types'
+import { BASE_FEE_LAMPORTS, svmTxFee } from '@/core/svm/fees'
+import type { SourceInfo } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import type { DestinationState } from './FromTo'
@@ -15,8 +16,8 @@ import { Alert, Button, Disclosure, Input, Row, Spinner } from './ui'
 
 /** Quote breakdown + advanced settings. Collapsed by default, like Relay's fee row. */
 export function Details(p: {
-  src: EvmChainDef
-  info: OftInfo
+  src: ChainDef
+  info: SourceInfo
   plan: SendPlan | undefined
   state: DestinationState
   onChange: (s: DestinationState) => void
@@ -30,12 +31,15 @@ export function Details(p: {
   const dec = p.info.decimals
   const sym = p.info.symbol
   const native = p.src.nativeSymbol
+  // Native decimals: wei on EVM, lamports on Solana.
+  const nd = p.src.vm === 'svm' ? 9 : 18
+  const fmtNative = (v: bigint) => `${formatAmount(v, nd, { maxFraction: 6 })} ${native}`
   const dst = plan ? byEid(plan.dstEid) : undefined
   const set = (patch: Partial<DestinationState>) => p.onChange({ ...p.state, ...patch })
 
   const summary = plan ? (
     <span className="tnum text-ink">
-      {d.step3.lzFee}: {formatAmount(plan.quote.nativeFee, 18, { maxFraction: 6 })} {native}
+      {d.step3.lzFee}: {fmtNative(plan.quote.nativeFee)}
     </span>
   ) : (
     d.ui.details
@@ -61,16 +65,31 @@ export function Details(p: {
                 </Row>
               ) : null}
               <Row label={d.step3.lzFee}>
-                <b className="tnum">{formatAmount(plan.quote.nativeFee, 18, { maxFraction: 6 })} {native}</b>
+                <b className="tnum">{fmtNative(plan.quote.nativeFee)}</b>
                 <div className="text-[11px] text-muted">
-                  {fmt(d.step3.feeDetail, {
-                    value: `${formatAmount(plan.value, 18, { maxFraction: 6 })} ${native}`,
-                    refund: `${formatAmount(plan.value - plan.quote.nativeFee, 18, { maxFraction: 6 })} ${native}`,
-                  })}
+                  {plan.vm === 'evm'
+                    ? fmt(d.step3.feeDetail, { value: fmtNative(plan.value), refund: fmtNative(plan.value - plan.quote.nativeFee) })
+                    : fmt(d.step3.feeDetailSvm, { value: fmtNative(plan.value) })}
                 </div>
               </Row>
+              {plan.vm === 'svm' ? (
+                <Row label={d.step3.computeBudget}>
+                  <div className="text-xs">
+                    {fmt(d.step3.computeBudgetDetail, {
+                      cu: plan.computeUnitLimit.toLocaleString('en-US'),
+                      price: plan.computeUnitPrice.toString(),
+                      priority: formatAmount(svmTxFee(plan.computeUnitLimit, plan.computeUnitPrice) - BASE_FEE_LAMPORTS, 9, { maxFraction: 9 }),
+                      base: formatAmount(BASE_FEE_LAMPORTS, 9, { maxFraction: 9 }),
+                    })}
+                  </div>
+                </Row>
+              ) : null}
               <Row label={d.step3.contract} mono>
-                <Address value={plan.oft} href={p.src.explorerAddrUrl + plan.oft} short />
+                {plan.vm === 'evm' ? (
+                  <Address value={plan.oft} href={p.src.explorerAddrUrl + plan.oft} short />
+                ) : (
+                  <Address value={plan.oftStore} href={p.src.explorerAddrUrl + plan.oftStore} short />
+                )}
               </Row>
               <Row label={d.step3.destination}>
                 {dst?.name ?? '?'} <span className="text-xs text-muted">(eid {plan.dstEid})</span>
@@ -86,7 +105,7 @@ export function Details(p: {
                   </a>
                 )}
               </Row>
-              <Row label={d.step3.refund} mono>
+              <Row label={plan.vm === 'evm' ? d.step3.refund : d.step3.feePayer} mono>
                 <Address value={plan.sender} short />
               </Row>
               {plan.quote.feeDetails.length > 0 ? (
@@ -113,7 +132,7 @@ export function Details(p: {
                   {p.svmOptions.dropped.length > 0 ? <div className="text-xs text-danger">{d.step3.droppedOptions} {p.svmOptions.dropped.map((o) => o.kind).join(', ')}</div> : null}
                 </Row>
               ) : null}
-              {plan.quote.limitMaxLD < 2n ** 128n ? (
+              {plan.quote.limitMaxLD < (plan.vm === 'svm' ? 2n ** 64n - 1n : 2n ** 128n) ? (
                 <Row label={d.step3.limits}>
                   <span className="mono text-xs">
                     {formatAmount(plan.quote.limitMinLD, dec)} … {formatAmount(plan.quote.limitMaxLD, dec)} {sym}
@@ -251,7 +270,7 @@ export type CtaState =
   | { kind: 'send'; enabled: boolean; reason?: string }
 
 /** One big Relay-style button whose label is the next thing the user must do. */
-export function Cta(p: { state: CtaState; info: OftInfo | undefined; busy: boolean; busyLabel: string; onClick: () => void; error: string }) {
+export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: boolean; busyLabel: string; onClick: () => void; error: string }) {
   const d = useDict()
   const s = p.state
   const label =

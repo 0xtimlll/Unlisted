@@ -1,4 +1,7 @@
 import type { NextConfig } from 'next'
+import { fileURLToPath } from 'node:url'
+
+const shim = (name: string) => fileURLToPath(new URL(`./shims/${name}/index.js`, import.meta.url))
 
 const nextConfig: NextConfig = {
   // Static export: no server runtime. Security headers live in the host config (§7).
@@ -19,6 +22,15 @@ const nextConfig: NextConfig = {
       '@gemini-wallet/core': false,
       'pino-pretty': false,
       '@react-native-async-storage/async-storage': false,
+      // The LayerZero Solana SDK declares helper packages that drag in mnemonic/keypair tooling for
+      // six chains plus node core modules. Only six pure functions are used: see shims/README.md.
+      '@layerzerolabs/lz-utilities': shim('lz-utilities'),
+      '@layerzerolabs/lz-foundation': shim('lz-foundation'),
+      '@layerzerolabs/lz-serdes': false,
+      '@layerzerolabs/lz-corekit-solana': false,
+      '@layerzerolabs/tron-utilities': false,
+      // Exact-match alias ($): the `/umi` sub-path the OFT SDK builds `send` with stays real.
+      '@layerzerolabs/lz-solana-sdk-v2$': shim('lz-solana-sdk-v2'),
     }
     return config
   },

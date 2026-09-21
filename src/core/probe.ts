@@ -124,6 +124,7 @@ export async function probeOft(
 
   return {
     info: {
+      vm: 'evm',
       oft, kind, token, symbol, name, decimals, sharedDecimals, conversionRate,
       approvalRequired, endpoint, ...(owner ? { owner } : {}), routes, enforced,
       ...(lockedInAdapter !== undefined ? { lockedInAdapter } : {}),

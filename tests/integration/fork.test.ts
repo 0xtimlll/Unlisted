@@ -8,7 +8,7 @@ import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } 
 import { erc20Abi, oftAbi } from '@/core/abi'
 import { evmByKey } from '@/core/chains'
 import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
-import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
+import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
 import { encodeLzReceive, planSvmOptions } from '@/core/options'
 import { evmRecipient, svmRecipient } from '@/core/recipient'
 import { encodeBase58 } from '@/core/svm/base58'
@@ -34,7 +34,7 @@ const oftSentEvent = parseAbi([
 ])
 
 /** Runs the whole app-side pipeline against the fork: simulate + gas + self-check + guards. */
-async function fullCheck(f: Fork, info: OftInfo, plan: SendPlan, allowance: bigint | undefined, svm?: Partial<GuardInput>) {
+async function fullCheck(f: Fork, info: OftInfo, plan: EvmSendPlan, allowance: bigint | undefined, svm?: Partial<GuardInput>) {
   const args = assembleSendArgs(plan)
   const calldata = encodeFunctionData({ abi: oftAbi, functionName: 'send', args: [args[0], args[1], args[2]] })
   const sc = selfCheck(plan, calldata)
@@ -62,7 +62,7 @@ async function fullCheck(f: Fork, info: OftInfo, plan: SendPlan, allowance: bigi
   return { report: runGuards(input), simulation, calldata, args }
 }
 
-async function sendOnFork(f: Fork, plan: SendPlan) {
+async function sendOnFork(f: Fork, plan: EvmSendPlan) {
   const wallet = await impersonate(f, USER)
   const args = assembleSendArgs(plan)
   const hash = await wallet.writeContract({ address: plan.oft, abi: oftAbi, functionName: 'send', args: [args[0], args[1], args[2]], value: plan.value })
@@ -122,7 +122,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
     const { info } = await probeOft(f.client, TREAD_OFT)
     await setTokenBalance(f, info.token, USER, 10n * 10n ** 18n)
     const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })
-    const bad: SendPlan = { ...plan, value: plan.quote.nativeFee - 1n }
+    const bad: EvmSendPlan = { ...plan, value: plan.quote.nativeFee - 1n }
     const { simulation, report } = await fullCheck(f, info, bad, undefined)
     expect(simulation.ok).toBe(false)
     expect(report.results.find((r) => r.id === 7)).toMatchObject({ ok: false, code: 'fee_mismatch' })

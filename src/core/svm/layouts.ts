@@ -70,6 +70,10 @@ class Reader {
   vecU8(): Uint8Array {
     return this.bytes(this.u32())
   }
+  /** Borsh string: u32 length + utf8 bytes. Metaplex pads with NULs; those are stripped. */
+  string(): string {
+    return new TextDecoder().decode(this.vecU8()).replace(/\0+$/, '')
+  }
 }
 
 function expectDiscriminator(r: Reader, name: string) {
@@ -164,4 +168,34 @@ export function decodeTokenAccount(data: Uint8Array): TokenAccount {
   if (data.length < 165) throw new LayoutError(`token account too short (${data.length})`)
   const r = new Reader(data)
   return { mint: pubkeyToBase58(r.pubkey()), owner: pubkeyToBase58(r.pubkey()), amount: r.u64() }
+}
+
+export type TokenMetadata = { name: string; symbol: string }
+
+/**
+ * Metaplex Token Metadata account (mpl-token-metadata `Metadata`): key u8, update authority, mint,
+ * then name / symbol / uri as borsh strings. Only name and symbol are read; the rest is ignored.
+ */
+export function decodeTokenMetadata(data: Uint8Array, expectedMint: string): TokenMetadata {
+  const r = new Reader(data)
+  const key = r.u8()
+  if (key !== 4) throw new LayoutError(`not a MetadataV1 account (key ${key})`)
+  r.pubkey() // update authority
+  const mint = pubkeyToBase58(r.pubkey())
+  if (mint !== expectedMint) throw new LayoutError('metadata is for a different mint')
+  const name = r.string().slice(0, 64)
+  const symbol = r.string().slice(0, 16)
+  return { name, symbol }
+}
+
+/** Address lookup table (AddressLookupTab1e…): 56-byte header, then 32-byte addresses. */
+export function decodeLookupTable(data: Uint8Array): { addresses: string[] } {
+  if (data.length < 56) throw new LayoutError(`lookup table too short (${data.length})`)
+  const r = new Reader(data)
+  const kind = r.u32()
+  if (kind !== 1) throw new LayoutError(`not an initialized lookup table (type ${kind})`)
+  r.bytes(52)
+  const addresses: string[] = []
+  while (r.offset + 32 <= data.length) addresses.push(pubkeyToBase58(r.pubkey()))
+  return { addresses }
 }

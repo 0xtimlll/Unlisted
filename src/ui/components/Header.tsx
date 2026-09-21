@@ -2,11 +2,13 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useDict } from '@/i18n'
 import type { Theme } from '../storage'
+import { SvmWalletButton } from '../svm/SvmWalletButton'
 import { Button } from './ui'
 
 export const CANONICAL_DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? 'localhost'
 
-export function Header({ theme, onTheme, onSettings }: { theme: Theme; onTheme: (t: Theme) => void; onSettings: () => void }) {
+/** One wallet slot: the connector follows the SOURCE chain's VM (RainbowKit for EVM, wallet-adapter for Solana). */
+export function Header({ theme, onTheme, onSettings, srcVm }: { theme: Theme; onTheme: (t: Theme) => void; onSettings: () => void; srcVm: 'evm' | 'svm' }) {
   const d = useDict()
   return (
     <header className="flex w-full items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-8">
@@ -18,7 +20,7 @@ export function Header({ theme, onTheme, onSettings }: { theme: Theme; onTheme: 
         <Button variant="ghost" aria-label={d.header.settings} title={d.header.settings} onClick={onSettings} className="w-9 px-0">
           ⚙
         </Button>
-        <WalletButton />
+        {srcVm === 'svm' ? <SvmWalletButton /> : <WalletButton />}
       </div>
     </header>
   )

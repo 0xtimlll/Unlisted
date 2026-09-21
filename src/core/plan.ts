@@ -10,6 +10,7 @@ import { byEid, type EvmChainDef } from './chains'
 import type { ReadClient } from './client'
 import { checksum, isBytes32 } from './encoding'
 import type { Recipient } from './recipient'
+import type { SvmSendPlan } from './svm/plan'
 import type { OftInfo } from './types'
 
 export const DEFAULT_SLIPPAGE_BPS = 0
@@ -43,7 +44,8 @@ export type SendQuote = {
   nativeFee: bigint
 }
 
-export type SendPlan = {
+export type EvmSendPlan = {
+  vm: 'evm'
   oft: Address
   srcEid: number
   dstEid: number
@@ -62,6 +64,17 @@ export type SendPlan = {
   quote: SendQuote
   /** msg.value === fee.nativeFee, strictly. */
   value: bigint
+}
+
+/**
+ * Discriminated by the SOURCE VM. Both carry the same amount/quote/recipient shape so guards and the
+ * review screen read them alike; only the wire form differs (calldata vs. a Solana instruction).
+ */
+export type SendPlan = EvmSendPlan | SvmSendPlan
+
+/** The fee the plan commits to, independent of VM: nativeFee == value, lzTokenFee == 0. */
+export function planFee(plan: SendPlan): MessagingFee {
+  return plan.vm === 'evm' ? assembleSendArgs(plan)[1] : { nativeFee: plan.value, lzTokenFee: 0n }
 }
 
 export type AmountBreakdown = {
@@ -116,7 +129,7 @@ export function buildSendParam(p: {
 }
 
 /** The exact tuple passed to `send(...)`. fee.nativeFee === plan.value, lzTokenFee === 0. */
-export function assembleSendArgs(plan: SendPlan): SendArgs {
+export function assembleSendArgs(plan: EvmSendPlan): SendArgs {
   const sendParam = buildSendParam({
     dstEid: plan.dstEid,
     to: plan.recipient,
@@ -164,7 +177,7 @@ export class PlanError extends Error {
  * §5.3: full plan = pure amount math + quoteOFT + quoteSend + fee buffer.
  * The only RPC calls are the two view quotes.
  */
-export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): Promise<SendPlan> {
+export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): Promise<EvmSendPlan> {
   const slippageBps = p.slippageBps ?? DEFAULT_SLIPPAGE_BPS
   const feeBufferBps = p.feeBufferBps ?? DEFAULT_FEE_BUFFER_BPS
   const extraOptions = p.extraOptions ?? EMPTY_BYTES
@@ -211,6 +224,7 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
   }
 
   return {
+    vm: 'evm',
     oft: p.info.oft,
     srcEid: p.src.eid,
     dstEid: p.dstEid,

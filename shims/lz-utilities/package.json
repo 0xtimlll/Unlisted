@@ -1,0 +1,10 @@
+{
+  "name": "@layerzerolabs/lz-utilities",
+  "version": "0.0.0-shim",
+  "private": true,
+  "description": "Stand-in for @layerzerolabs/lz-utilities: only the four byte helpers the Solana SDK imports.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": { ".": { "types": "./index.d.ts", "default": "./index.js" } }
+}

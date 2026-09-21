@@ -1,13 +1,13 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem'
+import { encodeFunctionData, type Address, type Hex } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { byEid, byKey, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
+import { byEid, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
 import type { ReadClient } from '@/core/client'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
-import { assembleSendArgs, buildSendPlan, type SendPlan } from '@/core/plan'
+import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
 import type { Recipient } from '@/core/recipient'
 import type { SvmOftInfo } from '@/core/svm/discover'
@@ -15,6 +15,7 @@ import type { SvmRecipientCheck } from '@/core/svm/recipient'
 import { fetchStatus, POLL_INTERVAL_MS, POLL_TIMEOUT_MS, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
 import { checkPeerBack, type PeerBackResult } from '@/core/verify'
+import { svmRpcUrls } from '@/core/svm/urls'
 
 export function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value)
@@ -25,55 +26,59 @@ export function useDebounced<T>(value: T, ms: number): T {
   return v
 }
 
-/** wagmi's client for the source chain, typed as our read client. */
-export function useReadClient(chain: EvmChainDef): ReadClient | undefined {
-  return usePublicClient({ chainId: chain.chainId }) as ReadClient | undefined
+/** wagmi's client for the source chain, typed as our read client. Undefined chain (Solana source) → undefined. */
+export function useReadClient(chain: EvmChainDef | undefined): ReadClient | undefined {
+  const client = usePublicClient({ chainId: chain?.chainId ?? 1 }) as ReadClient | undefined
+  return chain ? client : undefined
 }
 
 /**
  * Probe on independent RPCs (core/quorum). Adds the "not cross-checked" flag so the UI can
  * show it next to the other yellow flags.
  */
-export function useProbe(chain: EvmChainDef, address: string | null, customRpc: string | undefined) {
-  const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
+export function useProbe(chain: EvmChainDef | undefined, address: string | null, customRpc: string | undefined) {
+  const pair = useMemo(() => (chain ? clientPair(chain, customRpc) : undefined), [chain, customRpc])
   return useQuery({
-    queryKey: ['probe', chain.key, address?.toLowerCase(), customRpc ?? ''],
+    queryKey: ['probe', chain?.key, address?.toLowerCase(), customRpc ?? ''],
     queryFn: async () => {
-      const r = await probeOftQuorum(pair, address!)
+      const r = await probeOftQuorum(pair!, address!)
       const flags = [...r.flags]
       if (!r.crossChecked) flags.push('not_cross_checked')
       return { ...r, flags }
     },
-    enabled: !!address,
+    enabled: !!pair && !!address,
     staleTime: 60_000,
     retry: false,
   })
 }
 
-export function useDecode(chain: EvmChainDef, hash: string | null, customRpc: string | undefined) {
-  const pair = useMemo(() => clientPair(chain, customRpc), [chain, customRpc])
+export function useDecode(chain: EvmChainDef | undefined, hash: string | null, customRpc: string | undefined) {
+  const pair = useMemo(() => (chain ? clientPair(chain, customRpc) : undefined), [chain, customRpc])
   return useQuery({
-    queryKey: ['decode', chain.key, hash?.toLowerCase(), customRpc ?? ''],
-    queryFn: () => decodeTxQuorum(pair, hash!),
-    enabled: !!hash,
+    queryKey: ['decode', chain?.key, hash?.toLowerCase(), customRpc ?? ''],
+    queryFn: () => decodeTxQuorum(pair!, hash!),
+    enabled: !!pair && !!hash,
     staleTime: Infinity,
     retry: false,
   })
 }
 
-/** Guard 17: does the destination-side peer name our OFT back? Read on the destination chain. */
-export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: number | undefined, peer: Hex | undefined, customRpc: Partial<Record<ChainKey, string>>) {
+/**
+ * Guard 17: does the destination-side peer name our OFT back? Read on the destination chain.
+ * `ours` is our OFT: an EVM address, or the bytes32 of the Solana OFT Store when sending from Solana.
+ */
+export function usePeerBack(srcEid: number, ours: Address | Hex | undefined, dstEid: number | undefined, peer: Hex | undefined, customRpc: Partial<Record<ChainKey, string>>) {
   const dst = dstEid !== undefined ? byEid(dstEid) : undefined
   // Only EVM destinations can be verified this way; other VMs get their own check later.
   const pair = useMemo(() => (dst && isEvm(dst) ? clientPair(dst, customRpc[dst.key]) : undefined), [dst, customRpc])
   return useQuery({
-    queryKey: ['peerBack', srcEid, oft, dstEid, peer],
+    queryKey: ['peerBack', srcEid, ours, dstEid, peer],
     queryFn: async () => {
       // Ask every provider; a mismatch anywhere wins, then any definite "ok", else unavailable.
-      const all = await Promise.all([pair!.primary, ...pair!.secondaries].map((c) => checkPeerBack(c, peer!, srcEid, oft!)))
+      const all = await Promise.all([pair!.primary, ...pair!.secondaries].map((c) => checkPeerBack(c, peer!, srcEid, ours!)))
       return all.find((r) => r.status === 'mismatch') ?? all.find((r) => r.status === 'ok') ?? all[0]!
     },
-    enabled: !!pair && !!oft && !!peer && dstEid !== undefined,
+    enabled: !!pair && !!ours && !!peer && dstEid !== undefined,
     staleTime: 5 * 60_000,
     retry: 1,
   })
@@ -81,7 +86,7 @@ export function usePeerBack(srcEid: number, oft: Address | undefined, dstEid: nu
 
 export type PlanParams = {
   info: OftInfo | undefined
-  src: EvmChainDef
+  src: EvmChainDef | undefined
   dstEid: number | undefined
   amountInput: string
   sender: Address | undefined
@@ -94,15 +99,15 @@ export type PlanParams = {
 export function usePlan(p: PlanParams) {
   const client = useReadClient(p.src)
   const amount = useDebounced(p.amountInput, 350)
-  const enabled = !!client && !!p.info && p.dstEid !== undefined && !!p.sender && !!p.recipient && amount.trim() !== ''
+  const enabled = !!client && !!p.src && !!p.info && p.dstEid !== undefined && !!p.sender && !!p.recipient && amount.trim() !== ''
   return useQuery({
     queryKey: [
-      'plan', p.src.key, p.info?.oft, p.dstEid, amount, p.sender, p.recipient?.vm, p.recipient?.to, p.slippageBps, p.feeBufferBps, p.extraOptions,
+      'plan', p.src?.key, p.info?.oft, p.dstEid, amount, p.sender, p.recipient?.vm, p.recipient?.to, p.slippageBps, p.feeBufferBps, p.extraOptions,
     ],
     queryFn: () =>
       buildSendPlan(client!, {
         info: p.info!,
-        src: p.src,
+        src: p.src!,
         dstEid: p.dstEid!,
         amountInput: amount,
         sender: p.sender!,
@@ -127,10 +132,10 @@ export type CheckResult = {
  * §6.13 + §6.14: simulate `send` and decode our own calldata back. Only runs once the
  * pure guards (chain, peer, balance, allowance…) already pass, so failures here are real.
  */
-export function useCheck(src: EvmChainDef, plan: SendPlan | undefined, ready: boolean) {
+export function useCheck(src: EvmChainDef | undefined, plan: EvmSendPlan | undefined, ready: boolean) {
   const client = useReadClient(src)
   return useQuery({
-    queryKey: ['check', src.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions],
+    queryKey: ['check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions],
     queryFn: async (): Promise<CheckResult> => {
       const args = assembleSendArgs(plan!)
       const calldata = encodeFunctionData({ abi: oftAbi, functionName: 'send', args: [args[0], args[1], args[2]] })
@@ -170,34 +175,34 @@ export function useCheck(src: EvmChainDef, plan: SendPlan | undefined, ready: bo
   })
 }
 
-export function useTokenBalance(chain: EvmChainDef, token: Address | undefined, owner: Address | undefined) {
+export function useTokenBalance(chain: EvmChainDef | undefined, token: Address | undefined, owner: Address | undefined) {
   return useReadContract({
     abi: erc20Abi,
     address: token,
     functionName: 'balanceOf',
     args: owner ? [owner] : undefined,
-    chainId: chain.chainId,
-    query: { enabled: !!token && !!owner, refetchInterval: 15_000 },
+    chainId: chain?.chainId ?? 1,
+    query: { enabled: !!chain && !!token && !!owner, refetchInterval: 15_000 },
   })
 }
 
-export function useAllowance(chain: EvmChainDef, token: Address | undefined, owner: Address | undefined, spender: Address | undefined) {
+export function useAllowance(chain: EvmChainDef | undefined, token: Address | undefined, owner: Address | undefined, spender: Address | undefined) {
   return useReadContract({
     abi: erc20Abi,
     address: token,
     functionName: 'allowance',
     args: owner && spender ? [owner, spender] : undefined,
-    chainId: chain.chainId,
-    query: { enabled: !!token && !!owner && !!spender, refetchInterval: 15_000 },
+    chainId: chain?.chainId ?? 1,
+    query: { enabled: !!chain && !!token && !!owner && !!spender, refetchInterval: 15_000 },
   })
 }
 
-export function useNativeBalance(chain: EvmChainDef, owner: Address | undefined) {
-  return useBalance({ address: owner, chainId: chain.chainId, query: { enabled: !!owner, refetchInterval: 15_000 } })
+export function useNativeBalance(chain: EvmChainDef | undefined, owner: Address | undefined) {
+  return useBalance({ address: owner, chainId: chain?.chainId ?? 1, query: { enabled: !!chain && !!owner, refetchInterval: 15_000 } })
 }
 
 /** §5.5 via react-query: poll LayerZero Scan every 12s until terminal or 20 min. */
-export function useTrack(hash: Hash | undefined, startedAt: number | undefined) {
+export function useTrack(hash: string | undefined, startedAt: number | undefined) {
   return useQuery({
     queryKey: ['track', hash],
     queryFn: () => fetchStatus(hash!),
@@ -227,11 +232,6 @@ export function isUserRejection(e: unknown): boolean {
 
 // ---- Solana destination (read-only). The svm modules are imported on demand so the EVM-only
 // path never downloads base58/ed25519 code. ---------------------------------------------------
-
-function svmRpcUrls(customRpc: string | undefined): string[] {
-  const sol = byKey('solana')
-  return customRpc ? [customRpc, ...sol.rpcUrls] : [...sol.rpcUrls]
-}
 
 export type SvmDestination = {
   info: SvmOftInfo

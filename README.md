@@ -23,8 +23,8 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 
 ## How it works
 
-1. **Connect** a browser wallet (MetaMask, Rabby, …) and choose the source chain.
-2. **Paste** the OFT / OFTAdapter contract address — or the hash of any past `send` transaction, and the contract is picked up from it.
+1. **Connect** a browser wallet and choose the source chain: MetaMask, Rabby, … for EVM chains; Phantom, Solflare, Backpack, … when the source is Solana.
+2. **Paste** the OFT / OFTAdapter contract address (on Solana: the OFT Store address) — or, on EVM, the hash of any past `send` transaction, and the contract is picked up from it.
 3. **Choose** a destination (only chains the contract actually has a peer on) and an amount.
 4. **Review.** The quote, the fee, the recipient and the raw `amountLD` / `minAmountLD` are shown exactly as they will be sent. Eighteen checks run, including a live simulation.
 5. **Send.** Delivery is tracked through LayerZero Scan until the tokens land on the other side.
@@ -40,13 +40,18 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 | BNB Chain | 30102 | | Scroll | 30214 |
 | Solana | 30168 | | | |
 
-Any OFT (LayerZero V2) deployed on these chains works. **EVM → Solana** is supported: the Solana side is discovered from `peers(30168)` (program, mint, token program, PeerConfig), the recipient must be a Solana wallet typed by hand (never your EVM address), and executor options are derived from the contract's enforced options plus token-account rent when the recipient has none. Solana → EVM is the next stage. Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
+Any OFT (LayerZero V2) deployed on these chains works, in both directions between EVM and Solana:
+
+- **EVM → Solana** — the Solana side is discovered from `peers(30168)` (program, mint, token program, PeerConfig); the recipient must be a Solana wallet typed by hand (never your EVM address); executor options are derived from the contract's enforced options plus token-account rent when the recipient has none.
+- **Solana → EVM** — paste the token's **OFT Store** address; its program, mint, escrow and per-chain PeerConfigs are read from the chain. The `send` instruction is built with LayerZero's own Solana SDK, then decoded back by independent code before your wallet sees it (same self-check as on EVM). The recipient is an EVM address typed by hand; your Solana wallet is never offered as one. The fee is the quoted LayerZero fee plus a buffer: the program takes only the quoted amount, the rest never leaves your wallet.
+
+Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
 ## Security model
 
-**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign two things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited) and the OFT `send`. No `eth_sign`, no typed-data, no permits, no arbitrary calldata. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code.
+**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign three things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code, and confines the Solana SDK and the single submit call to one file.
 
-**What goes to the wallet is what you see.** Before signing, the calldata is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds).
+**What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee).
 
 **It checks the bridge, not just the form.**
 - The destination-side peer must name your contract back — a look-alike adapter can point at the real token, but the real bridge will never point at the fake.
@@ -57,7 +62,7 @@ Any OFT (LayerZero V2) deployed on these chains works. **EVM → Solana** is sup
 
 **Nothing leaves your browser** except calls to the chain's RPC and, for tracking, the transaction hash to LayerZero Scan. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
 
-**Auditable.** The footer shows the commit the site was built from and links to it here. Dependencies are pinned to exact versions and audited in CI.
+**Auditable.** The footer shows the commit the site was built from and links to it here. Dependencies are pinned to exact versions and audited in CI. The Solana stack (LayerZero SDK, umi, wallet adapter) is downloaded only when Solana is chosen as the source; a few helper packages the SDK declares but never needs are replaced by tiny stand-ins at build time (see [`shims/`](shims/README.md)) so that no mnemonic or key-derivation code is ever shipped.
 
 ### What it cannot do
 
@@ -90,7 +95,9 @@ Build-time configuration lives in [`.env.production`](.env.production) (all valu
 
 ```
 src/core     pure logic, no React: abi, chains, amounts, plan, guards, probe, options, quorum, track
-src/ui       wagmi/RainbowKit providers, hooks, components, local storage
+src/core/svm Solana: base58, PDAs, account layouts, discovery, the send plan codec/self-check, the SDK boundary (send.ts)
+src/ui       wagmi/RainbowKit providers, the Solana wallet slot, hooks, components, local storage
+shims        build-time stand-ins for LayerZero helper packages the Solana SDK declares but never uses
 scripts      build, security headers, write-whitelist check, local server
 tests/core   unit tests · tests/integration  live-RPC and anvil fork tests
 ```

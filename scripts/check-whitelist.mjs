@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
- * §11: the app may submit ONLY `approve` and `send`. This script greps src/
- * for every state-changing / signing primitive and fails on anything else.
+ * §11 / §7.1: the app may submit ONLY three things:
+ *   EVM    — `approve` and `send` via wagmi's writeContract (a literal functionName next to each call)
+ *   Solana — the OFT program's `send` instruction, built by the LayerZero SDK (`oft.send`) and
+ *            submitted through the umi transaction builder, from ONE file: src/core/svm/send.ts
+ *
+ * This script greps src/ for every state-changing / signing primitive and fails on anything else.
  * It is intentionally dumb (regex, no AST) so it is easy to audit.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -18,11 +22,21 @@ const FORBIDDEN = [
   /dangerouslySetInnerHTML/,
   /\bsignMessage\b/,
   /\bsignTypedData\b/,
+  /\bsignAllTransactions\b/, // Solana: never batch-sign; one transaction, shown on screen, per click
+  /\bsignIn\b/, // Solana "sign in with" — a message signature
   /\beth_sign\b/,
   /\bpersonal_sign\b/,
   /\bpermit\s*\(/i,
   /\bsendTransaction\b/, // raw tx = arbitrary calldata; we only use writeContract
-  /\bsendRawTransaction\b/,
+  /\bsendRawTransaction\b/, // Solana raw submit (web3.js Connection) — only the builder path below may submit
+  /\bsendAndConfirm\b/, // umi: confirms over WebSocket; the app confirms by polling instead (see core/svm/send.ts)
+  /new\s+TransactionInstruction\s*\(/, // Solana: instructions come from the SDK, never assembled from config/network data
+  /\btransactionBuilder\s*\(\s*\[/, // umi: a builder seeded with hand-made instructions
+  /\bcreateApproveInstruction\b|\bapproveChecked\b|\bcreateApproveCheckedInstruction\b/, // SPL delegate approvals
+  /\bsetAuthority\b|\bcreateSetAuthorityInstruction\b/,
+  /\bcloseAccount\b|\bcreateCloseAccountInstruction\b/,
+  /\bcreateTransferInstruction\b|\bcreateTransferCheckedInstruction\b|\btransferChecked\b/, // direct SPL transfers
+  /\bfromSecretKey\b|\bfromSeed\b|\bgenerateSigner\b|\bcreateSignerFromKeypair\b|\bKeypair\b/, // no key material, ever
   /import\s*\(\s*['"]https?:/,
   /<script[^>]+src=['"]https?:/i,
 ]
@@ -31,6 +45,14 @@ const FORBIDDEN = [
 // (The hook `useWriteContract()` itself carries no functionName; the `.writeContract({...})` call does.)
 const WRITE_CALL = /\b(writeContract|writeContractAsync|simulateContract|estimateContractGas|sendCalls)\s*\(/g
 const FUNCTION_NAME = /functionName\s*:\s*['"]([A-Za-z0-9_]+)['"]/g
+
+// Solana: the SDK entry points and the single submit call are confined to one file.
+const SVM_FILE = 'src/core/svm/send.ts'
+// `oft` here is the SDK namespace (a standalone identifier), not a property like `info.oft`.
+const SVM_SDK_CALL = /(?<![.\w])oft\.(send|quote|quoteOft)\s*\(/g
+const SVM_SDK_OTHER = /(?<![.\w])oft\.(?!send\b|quote\b|quoteOft\b|accounts\b)[A-Za-z]+\s*\(/g // initOft, setPeerConfig, withdrawFee, …
+const SVM_SUBMIT = /\.send\s*\(\s*umi\s*[,)]/g // builder.send(umi, …) — not oft.send(umi.rpc, …)
+const SVM_SDK_IMPORT = /@layerzerolabs\/oft-v2-solana-sdk|@metaplex-foundation\/umi(?!\/serializers)|@solana\/web3\.js/
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -51,6 +73,8 @@ function stripCommentLines(text) {
 }
 
 const errors = []
+let svmSubmits = 0
+let svmSendCalls = 0
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file)
   const text = stripCommentLines(readFileSync(file, 'utf8'))
@@ -92,11 +116,37 @@ for (const file of walk(SRC)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
     }
   }
+
+  // Solana: SDK usage and the submit call only in SVM_FILE; no other SDK instruction anywhere.
+  const isSvmFile = rel === SVM_FILE
+  for (const [re, what] of [
+    [SVM_SDK_CALL, 'LayerZero SDK call'],
+    [SVM_SUBMIT, 'Solana submit'],
+  ]) {
+    re.lastIndex = 0
+    while ((m = re.exec(text)) !== null) {
+      const lineNo = text.slice(0, m.index).split('\n').length
+      if (!isSvmFile) errors.push(`${rel}:${lineNo}: ${what} outside ${SVM_FILE}`)
+      else if (re === SVM_SUBMIT) svmSubmits++
+      else if (m[1] === 'send') svmSendCalls++
+    }
+  }
+  SVM_SDK_OTHER.lastIndex = 0
+  while ((m = SVM_SDK_OTHER.exec(text)) !== null) {
+    const lineNo = text.slice(0, m.index).split('\n').length
+    errors.push(`${rel}:${lineNo}: LayerZero SDK instruction other than send/quote: ${m[0].trim()}`)
+  }
+  if (!isSvmFile && !rel.startsWith('src/ui/svm/') && SVM_SDK_IMPORT.test(text) && !/^import type|\bimport type\b/.test(text.split('\n').find((l) => SVM_SDK_IMPORT.test(l)) ?? '')) {
+    errors.push(`${rel}: imports the Solana SDK/umi/web3.js at runtime outside ${SVM_FILE} (type imports are fine)`)
+  }
 }
+
+if (svmSubmits !== 1) errors.push(`${SVM_FILE}: expected exactly one Solana submit call (builder.send(umi)), found ${svmSubmits}`)
+if (svmSendCalls !== 1) errors.push(`${SVM_FILE}: expected exactly one oft.send( call, found ${svmSendCalls}`)
 
 if (errors.length) {
   console.error('check-whitelist: FAILED')
   for (const e of errors) console.error('  ' + e)
   process.exit(1)
 }
-console.log('check-whitelist: ok (only approve/send may be written)')
+console.log(`check-whitelist: ok (EVM: only approve/send may be written; Solana: one oft.send + one submit in ${SVM_FILE})`)

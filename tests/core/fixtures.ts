@@ -2,7 +2,7 @@
 import type { Address } from 'viem'
 import { addressToBytes32 } from '@/core/encoding'
 import type { GuardInput } from '@/core/guards'
-import { computeAmounts, computeValue, type SendPlan, type SendQuote } from '@/core/plan'
+import { computeAmounts, computeValue, type EvmSendPlan, type SendQuote } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
 
 export const TREAD_OFT: Address = '0xd5EE1c81fE161e985dce6b90713c965f9979cf80'
@@ -21,6 +21,7 @@ export const HYPER_FEE_STEP = 10n ** 16n
 /** Plain OFT on HyperEVM: decimals 18, shared 6, no approve. */
 export function treadOftInfo(over: Partial<OftInfo> = {}): OftInfo {
   return {
+    vm: 'evm',
     oft: TREAD_OFT,
     kind: 'OFT',
     token: TREAD_OFT,
@@ -41,6 +42,7 @@ export function treadOftInfo(over: Partial<OftInfo> = {}): OftInfo {
 /** Adapter on Ethereum: approve required. */
 export function treadAdapterInfo(over: Partial<OftInfo> = {}): OftInfo {
   return {
+    vm: 'evm',
     oft: TREAD_ADAPTER,
     kind: 'OFTAdapter',
     token: TREAD_TOKEN_ETH,
@@ -76,13 +78,14 @@ export function quoteFor(amountLD: bigint, over: Partial<SendQuote> = {}): SendQ
  * `over.recipient` may be given as a plain EVM address (tests read better that way);
  * it is stored the way the app stores it: bytes32 + display form.
  */
-export function treadPlan(over: Partial<Omit<SendPlan, 'recipient'>> & { recipient?: Address } = {}, amountInput = '19.82'): SendPlan {
+export function treadPlan(over: Partial<Omit<EvmSendPlan, 'recipient'>> & { recipient?: Address } = {}, amountInput = '19.82'): EvmSendPlan {
   const info = treadOftInfo()
   const amounts = computeAmounts(amountInput, info.decimals, info.conversionRate, 0)
   const quote = quoteFor(amounts.amountLD)
   const { recipient: recipientOver, ...rest } = over
   const recipientAddr = recipientOver ?? WALLET
-  const base: SendPlan = {
+  const base: EvmSendPlan = {
+    vm: 'evm',
     oft: TREAD_OFT,
     srcEid: HYPER_EID,
     dstEid: ETH_EID,
