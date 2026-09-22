@@ -27,7 +27,7 @@ import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNati
 import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored, type Theme } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
-import { useSvmCheck, useSvmContext, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
+import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -73,7 +73,7 @@ export function BridgeApp({
   const [svmPickerOpen, setSvmPickerOpen] = useState(false)
   const [mode, setMode] = useState<TokenMode>('address')
   const [probeTarget, setProbeTarget] = useState<string | null>(null)
-  const [decodeTarget, setDecodeTarget] = useState<Hash | null>(null)
+  const [decodeTarget, setDecodeTarget] = useState<string | null>(null)
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
   const [noGasAccepted, setNoGasAccepted] = useState(false)
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
@@ -112,17 +112,23 @@ export function BridgeApp({
 
   // ---- step 1: probe / decode -------------------------------------------------
   const probe = useProbe(evmSrc, svmSource ? null : probeTarget, stored.customRpc[src.key])
-  const decode = useDecode(evmSrc, decodeTarget, stored.customRpc[src.key])
+  const decode = useDecode(evmSrc, svmSource ? null : (decodeTarget as Hash | null), stored.customRpc[src.key])
   const svmProbe = useSvmProbe(svmSource, probeTarget, stored.customRpc['solana'])
-  const info: SourceInfo | undefined = svmSource ? svmProbe.data?.info : probe.data?.info
+  const svmDecode = useSvmDecode(svmSource, decodeTarget, stored.customRpc['solana'])
+  // The sample's send must have been executed by the program that owns the store we then probed;
+  // otherwise the probed info is discarded as if the store had never been checked.
+  const decodeProgramMismatch = !!svmDecode.data && !!svmProbe.data && svmProbe.data.info.programId !== svmDecode.data.programId
+  const info: SourceInfo | undefined = svmSource ? (decodeProgramMismatch ? undefined : svmProbe.data?.info) : probe.data?.info
   const flags = useMemo(() => (svmSource ? (svmProbe.data?.flags ?? []) : (probe.data?.flags ?? [])), [svmSource, svmProbe.data, probe.data])
   const probeError = svmSource ? svmProbe.error : probe.error
+  const decodeData = svmSource ? svmDecode.data : decode.data
+  const decodeError = svmSource ? svmDecode.error : decode.error
 
   useEffect(() => {
-    if (!decode.data) return
-    setProbeTarget(decode.data.oft)
-    setDest((s) => ({ ...s, dstEid: decode.data.dstEid, extraOptions: decode.data.extraOptions }))
-  }, [decode.data])
+    if (!decodeData) return
+    setProbeTarget('oftStore' in decodeData ? decodeData.oftStore : decodeData.oft)
+    setDest((s) => ({ ...s, dstEid: decodeData.dstEid, extraOptions: decodeData.extraOptions }))
+  }, [decodeData])
 
   const infoId = info ? (info.vm === 'evm' ? info.oft : info.oftStore) : undefined
   useEffect(() => {
@@ -421,14 +427,15 @@ export function BridgeApp({
                 chain={src}
                 mode={mode}
                 onMode={setMode}
-                busy={probe.isFetching || decode.isFetching || svmProbe.isFetching}
+                busy={probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
                 recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
                 info={info}
                 flags={flags}
-                error={probeError ? describeError(d, probeError) : decode.error ? describeError(d, decode.error) : ''}
-                decodedHint={!!decode.data}
-                droppedOptions={decode.data?.droppedOptions ?? []}
-                optionsMalformed={decode.data?.optionsMalformed ?? false}
+                error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
+                decodedHint={!!decodeData}
+                decodedFailed={svmDecode.data?.observed.failed ?? false}
+                droppedOptions={decodeData?.droppedOptions ?? []}
+                optionsMalformed={decodeData?.optionsMalformed ?? false}
                 onProbe={(a) => {
                   setDecodeTarget(null)
                   setDest(EMPTY_DEST)

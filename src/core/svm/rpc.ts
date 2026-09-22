@@ -122,6 +122,11 @@ export class SvmRpc {
     return r.map((x) => BigInt(x.prioritizationFee))
   }
 
+  /** A confirmed transaction by signature, `json` encoding, v0 supported; null when unknown. */
+  async getTransaction(signature: string): Promise<SvmTransaction | null> {
+    return this.call<SvmTransaction | null>('getTransaction', [signature, { encoding: 'json', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }])
+  }
+
   async getSignatureStatus(signature: string): Promise<SvmSignatureStatus | null> {
     const r = await this.call<{ value: ({ confirmationStatus?: string; err: unknown } | null)[] }>('getSignatureStatuses', [[signature], { searchTransactionHistory: true }])
     const v = r.value[0]
@@ -131,4 +136,13 @@ export class SvmRpc {
 }
 
 export type SvmSimulation = { err: unknown; logs: string[]; unitsConsumed: number }
+
+export type SvmCompiledIx = { programIdIndex: number; accounts: number[]; data: string }
+/** The parts of `getTransaction` (json encoding) this app reads. Account indexes span static keys ‖ loaded writable ‖ loaded readonly. */
+export type SvmTransaction = {
+  slot?: number
+  blockTime?: number | null
+  transaction: { signatures: string[]; message: { accountKeys: string[]; instructions: SvmCompiledIx[] } }
+  meta: { err: unknown; loadedAddresses?: { writable: string[]; readonly: string[] }; innerInstructions?: { index: number; instructions: SvmCompiledIx[] }[] } | null
+}
 export type SvmSignatureStatus = { confirmationStatus: string; err: unknown }

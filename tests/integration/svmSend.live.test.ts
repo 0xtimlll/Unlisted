@@ -13,6 +13,7 @@ import { ataFor } from '@/core/svm/recipient'
 import { SvmRpc } from '@/core/svm/rpc'
 import { assembleSvmTransaction, buildSvmSendPlan, createSvmSendContext, simulateSvm, svmTxFeeLamports } from '@/core/svm/send'
 import { probeSvmOft } from '@/core/svm/source'
+import { decodeSvmTx } from '@/core/svm/decode'
 
 const PENGU_STORE = 'qMNo1RFo11J9ZLGuq7dVmWAssuCZaNsSamk8g2q4UZA'
 const PENGU_PROGRAM = 'EfRMrTJWU2CYm52kHmRYozQNdF8RH5aTi3xyeSuLAX2Y'
@@ -141,6 +142,21 @@ describe('Solana source: PENGU', () => {
     badSigner.instructions[2]!.accounts[20]!.isSigner = true
     expect(selfCheckSvm(plan, badSigner)).toMatchObject({ ok: false })
   }, 120_000)
+
+  it('decodes a real PENGU send signature into a prefill that matches the probed store', async () => {
+    // BzCcx7… : 2 980 863.708 PENGU from 5Tibp4… to HyperEVM, options 0x0003 (empty type-3 header).
+    const sig = 'BzCcx7hf2hb4S8GBoBjiRDLv4McVj2t2UbxNwk4KUzrARZ7R8YRY3EdhceXnN18q6q84vYy1XXAx7XEf5P4XBzQ'
+    const d = await decodeSvmTx(rpc, sig)
+    expect(d).toMatchObject({ oftStore: PENGU_STORE, programId: PENGU_PROGRAM, dstEid: HYPER_EID, extraOptions: '0x', droppedOptions: [], optionsMalformed: false, crossChecked: true })
+    expect(d.observed).toMatchObject({ from: '5Tibp4jqdRo4ejyMExkcQrmRnRFBeDDmyvPk5b3kEdLg', amountLD: 2_980_863_708_000n, minAmountLD: 2_951_055_070_920n, nativeFee: 231_700n, hadComposeMsg: false, failed: false })
+    expect(d.observed.to).toBe(addressToBytes32('0x1ebeb39ead138a5a1aa9a2bce759cfa0b5f14bf4'))
+    const { info } = await probeSvmOft(rpc, d.oftStore)
+    expect(info.programId).toBe(d.programId)
+    expect(info.routes.some((r) => r.eid === d.dstEid)).toBe(true)
+    await expect(decodeSvmTx(rpc, sig.slice(0, 40))).rejects.toMatchObject({ code: 'invalid_hash' })
+    // A signature that does not exist.
+    await expect(decodeSvmTx(rpc, '1'.repeat(87))).rejects.toMatchObject({ code: 'tx_not_found' })
+  }, 60_000)
 
   it('refuses an EVM-shaped recipient object for the wrong VM and a Solana recipient for an EVM destination', async () => {
     const { info } = await probeSvmOft(rpc, PENGU_STORE)

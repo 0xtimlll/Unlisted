@@ -24,7 +24,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 ## How it works
 
 1. **Connect** a browser wallet and choose the source chain: MetaMask, Rabby, … for EVM chains; Phantom, Solflare, Backpack, … when the source is Solana.
-2. **Paste** the OFT / OFTAdapter contract address (on Solana: the OFT Store address) — or, on EVM, the hash of any past `send` transaction, and the contract is picked up from it.
+2. **Paste** the OFT / OFTAdapter contract address (on Solana: the OFT Store address) — or the hash / signature of any past `send` transaction, and the contract is picked up from it.
 3. **Choose** a destination (only chains the contract actually has a peer on) and an amount.
 4. **Review.** The quote, the fee, the recipient and the raw `amountLD` / `minAmountLD` are shown exactly as they will be sent. Eighteen checks run, including a live simulation.
 5. **Send.** Delivery is tracked through LayerZero Scan until the tokens land on the other side.
@@ -43,7 +43,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 Any OFT (LayerZero V2) deployed on these chains works, in both directions between EVM and Solana:
 
 - **EVM → Solana** — the Solana side is discovered from `peers(30168)` (program, mint, token program, PeerConfig); the recipient must be a Solana wallet typed by hand (never your EVM address); executor options are derived from the contract's enforced options plus token-account rent when the recipient has none.
-- **Solana → EVM** — paste the token's **OFT Store** address; its program, mint, escrow and per-chain PeerConfigs are read from the chain. The `send` instruction is built with LayerZero's own Solana SDK, then decoded back by independent code before your wallet sees it (same self-check as on EVM). The recipient is an EVM address typed by hand; your Solana wallet is never offered as one. The fee is the quoted LayerZero fee plus a buffer: the program takes only the quoted amount, the rest never leaves your wallet.
+- **Solana → EVM** — paste the token's **OFT Store** address (or the signature of any past `send`); its program, mint, escrow and per-chain PeerConfigs are read from the chain. The `send` instruction is built with LayerZero's own Solana SDK, then decoded back by independent code before your wallet sees it (same self-check as on EVM). The recipient is an EVM address typed by hand; your Solana wallet is never offered as one. The fee is the quoted LayerZero fee plus a buffer: the program takes only the quoted amount, the rest never leaves your wallet.
 
 Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 

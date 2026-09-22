@@ -8,6 +8,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import type { Hex } from 'viem'
 import type { SelfCheckResult, SimulationResult } from '@/core/guards'
 import type { Recipient } from '@/core/recipient'
+import type { SvmDecodeResult } from '@/core/svm/decode'
 import type { SvmSendPlan } from '@/core/svm/plan'
 import type { SvmSendContext, SvmSigner } from '@/core/svm/send'
 import type { SvmSourceInfo } from '@/core/svm/source'
@@ -33,6 +34,20 @@ export function useSvmProbe(enabled: boolean, store: string | null, customRpc: s
     },
     enabled: enabled && !!store,
     staleTime: 60_000,
+    retry: false,
+  })
+}
+
+/** Step 1 by sample transaction (§5.4 for Solana): OFT Store + destination + sanitized options. */
+export function useSvmDecode(enabled: boolean, signature: string | null, customRpc: string | undefined) {
+  return useQuery({
+    queryKey: ['svmDecode', signature, customRpc ?? ''],
+    queryFn: async (): Promise<SvmDecodeResult> => {
+      const [{ SvmRpc }, { decodeSvmTx }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/decode')])
+      return decodeSvmTx(new SvmRpc(svmRpcUrls(customRpc)), signature!)
+    },
+    enabled: enabled && !!signature,
+    staleTime: Infinity,
     retry: false,
   })
 }

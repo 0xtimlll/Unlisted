@@ -4,6 +4,7 @@ import { isAddress } from 'viem'
 import { byEid, type ChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { isTxHash } from '@/core/decodeTx'
+import { isSolanaSignature, looksLikePubkey } from '@/core/svm/ids'
 import { peerToAddress } from '@/core/encoding'
 import type { OptionItem } from '@/core/options'
 import type { SvmSourceInfo } from '@/core/svm/source'
@@ -15,22 +16,22 @@ import { Alert, Box, BoxLabel, Button, ChainDot, Disclosure, Row, Spinner, Tabs 
 
 export type TokenMode = 'address' | 'tx'
 
-/** Shape check only; the chain decides whether it is an OFT (base58 32-byte keys are 32–44 chars). */
-const looksLikePubkey = (v: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)
-
 export function TokenStep(p: {
   chain: ChainDef
   mode: TokenMode
   onMode: (m: TokenMode) => void
   /** An EVM 0x address, or an OFT Store (base58) when the source is Solana. */
   onProbe: (address: string) => void
-  onDecode: (hash: `0x${string}`) => void
+  /** An EVM tx hash, or a Solana signature (base58) when the source is Solana. */
+  onDecode: (hash: string) => void
   busy: boolean
   recent: string[]
   info: SourceInfo | undefined
   flags: SuspiciousFlag[]
   error: string
   decodedHint: boolean
+  /** The sample transaction failed on-chain (Solana reports this; its parameters are still a hint). */
+  decodedFailed?: boolean
   droppedOptions: OptionItem[]
   optionsMalformed: boolean
 }) {
@@ -39,31 +40,28 @@ export function TokenStep(p: {
   const [open, setOpen] = useState(false)
   const v = value.trim()
   const svm = p.chain.vm === 'svm'
-  const ok = p.mode === 'address' ? (svm ? looksLikePubkey(v) : isAddress(v, { strict: false })) : isTxHash(v)
+  const ok = p.mode === 'address' ? (svm ? looksLikePubkey(v) : isAddress(v, { strict: false })) : svm ? isSolanaSignature(v) : isTxHash(v)
   const go = () => {
     if (!ok) return
     if (p.mode === 'address') p.onProbe(v)
-    else p.onDecode(v as `0x${string}`)
+    else p.onDecode(v)
   }
 
   return (
     <Box>
       <BoxLabel
         right={
-          // Decoding a sample transaction on Solana arrives with the last stage; until then the tab is hidden.
-          svm ? null : (
-            <Tabs
-              value={p.mode}
-              onChange={(m) => {
-                p.onMode(m)
-                setValue('')
-              }}
-              items={[
-                { value: 'address', label: d.ui.contractTab },
-                { value: 'tx', label: d.ui.txTab },
-              ]}
-            />
-          )
+          <Tabs
+            value={p.mode}
+            onChange={(m) => {
+              p.onMode(m)
+              setValue('')
+            }}
+            items={[
+              { value: 'address', label: svm ? d.ui.storeTab : d.ui.contractTab },
+              { value: 'tx', label: svm ? d.ui.sigTab : d.ui.txTab },
+            ]}
+          />
         }
       >
         {d.ui.token}
@@ -75,18 +73,18 @@ export function TokenStep(p: {
           onKeyDown={(e) => {
             if (e.key === 'Enter') go()
           }}
-          placeholder={p.mode === 'address' ? (svm ? d.step1.placeholderStore : d.step1.placeholderAddress) : d.step1.placeholderTx}
+          placeholder={p.mode === 'address' ? (svm ? d.step1.placeholderStore : d.step1.placeholderAddress) : svm ? d.step1.placeholderSig : d.step1.placeholderTx}
           spellCheck={false}
           autoComplete="off"
           className="mono min-w-0 flex-1 bg-transparent pr-2 text-sm text-ink outline-none placeholder:text-faint"
-          aria-label={p.mode === 'address' ? (svm ? d.step1.byStore : d.step1.byAddress) : d.step1.byTx}
+          aria-label={p.mode === 'address' ? (svm ? d.step1.byStore : d.step1.byAddress) : svm ? d.step1.bySig : d.step1.byTx}
         />
         <Button variant="primary" className="h-9 rounded-full px-4" disabled={!ok || p.busy} onClick={go}>
           {p.busy ? <Spinner /> : p.mode === 'address' ? d.step1.probe : d.step1.decode}
         </Button>
       </div>
 
-      {svm && !p.info ? <p className="mt-2 text-xs text-muted">{d.step1.storeHint}</p> : null}
+      {svm && !p.info && p.mode === 'address' ? <p className="mt-2 text-xs text-muted">{d.step1.storeHint}</p> : null}
       {p.recent.length > 0 && !p.info ? (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-muted">{d.step1.recent}:</span>
@@ -115,6 +113,11 @@ export function TokenStep(p: {
       {p.decodedHint ? (
         <div className="mt-3">
           <Alert kind="info">{d.step1.decodedHint}</Alert>
+        </div>
+      ) : null}
+      {p.decodedFailed ? (
+        <div className="mt-2">
+          <Alert kind="warn">{d.step1.decodedFailedHint}</Alert>
         </div>
       ) : null}
       {p.optionsMalformed ? (
