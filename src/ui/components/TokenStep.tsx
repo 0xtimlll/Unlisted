@@ -191,24 +191,28 @@ function describeOption(o: OptionItem, d: ReturnType<typeof useDict>): string {
   }
 }
 
+/** Peers per chain: a block of its own (label above, one line per chain) so long addresses never fight the label. */
 function Routes({ info }: { info: SourceInfo }) {
   const d = useDict()
   const known = info.routes.filter((r) => byEid(r.eid))
   return (
-    <Row label={d.card.routes}>
+    <div className="py-1.5 text-sm">
+      <div className="text-muted">{d.card.routes}</div>
       {known.length === 0 ? (
-        <span className="text-danger">{d.card.noRoutes}</span>
+        <div className="text-danger">{d.card.noRoutes}</div>
       ) : (
-        <ul className="space-y-0.5">
+        <ul className="mt-1 space-y-1">
           {known.map((r) => {
             const c = byEid(r.eid)!
             const addr = peerToAddress(r.peer)
             return (
-              <li key={r.eid} className="flex items-center justify-end gap-2 whitespace-nowrap">
-                <ChainIcon chain={c.key} size={16} />
-                <span>{c.name}</span>
-                <span className="text-xs text-muted">eid {r.eid}</span>
-                <span className="shrink-0 text-xs">
+              <li key={r.eid} className="flex items-center justify-between gap-3">
+                <span className="flex min-w-0 shrink-0 items-center gap-2">
+                  <ChainIcon chain={c.key} size={16} />
+                  <span>{c.name}</span>
+                  <span className="text-xs text-muted">eid {r.eid}</span>
+                </span>
+                <span className="min-w-0 text-right text-xs">
                   {addr ? <Address value={addr} href={c.explorerAddrUrl + addr} short /> : <span className="mono">{r.peer.slice(0, 10)}…{r.peer.slice(-6)}</span>}
                 </span>
               </li>
@@ -216,7 +220,7 @@ function Routes({ info }: { info: SourceInfo }) {
           })}
         </ul>
       )}
-    </Row>
+    </div>
   )
 }
 
