@@ -62,7 +62,7 @@ Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
 **Nothing leaves your browser** except calls to the chain's RPC and, for tracking, the transaction hash to LayerZero Scan. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
 
-**Auditable.** The footer shows the commit the site was built from and links to it here. Dependencies are pinned to exact versions and audited in CI. The Solana stack (LayerZero SDK, umi, wallet adapter) is downloaded only when Solana is chosen as the source; a few helper packages the SDK declares but never needs are replaced by tiny stand-ins at build time (see [`shims/`](shims/README.md)) so that no mnemonic or key-derivation code is ever shipped.
+**Auditable.** The footer shows the commit the site was built from and links to it here. Dependencies are pinned to exact versions and audited in CI; the few advisories that do not apply (native-addon or server-only code that never reaches the browser bundle, which CI verifies) are listed with reasons and expiry dates in [`audit-exceptions.json`](audit-exceptions.json). The Solana stack (LayerZero SDK, umi, wallet adapter) is downloaded only when Solana is chosen as the source; a few helper packages the SDK declares but never needs are replaced by tiny stand-ins at build time (see [`shims/`](shims/README.md)) so that no mnemonic or key-derivation code is ever shipped.
 
 ### What it cannot do
 
@@ -76,6 +76,7 @@ Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 npm ci
 npm run dev             # http://localhost:3000
 npm test                # write-whitelist check + unit tests
+npm run audit           # npm audit against the reviewed exception list
 npm run build           # static export to out/ + security headers
 npm start               # serve out/ with the same headers as production
 ```

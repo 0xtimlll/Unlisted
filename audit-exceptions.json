@@ -1,0 +1,14 @@
+[
+  {
+    "id": "GHSA-3gc7-fjrx-p6mg",
+    "package": "bigint-buffer",
+    "reason": "Buffer overflow in the package's NATIVE addon (toBigIntLE). It is a transitive dependency of @solana/spl-token via the LayerZero Solana SDK. The addon is never built (install scripts are not run) and cannot exist in a browser; the pure-JS fallback has no such bug. The function is not even present in the shipped bundle — CI greps the export for it. No fixed version exists.",
+    "expires": "2027-03-22"
+  },
+  {
+    "id": "GHSA-528h-pc64-c93x",
+    "package": "stream-json",
+    "reason": "CPU DoS in stream-json's filter streamers, used only by jayson's server-side stream parsing. @solana/web3.js uses jayson's browser client over fetch; the app never parses streamed JSON and the module is not in the shipped bundle (CI greps the export for it). jayson 4.x pins stream-json 1.x; 3.x renames the files jayson requires, so it cannot be overridden without breaking jayson.",
+    "expires": "2027-03-22"
+  }
+]

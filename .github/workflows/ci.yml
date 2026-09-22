@@ -21,7 +21,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=moderate
+      - run: npm run audit
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
@@ -31,6 +31,14 @@ jobs:
           if grep -rEo '(src|href)="https?://[^"]+"' out/*.html; then
             echo "external resource in HTML"; exit 1; fi
           grep -q "script-src 'self'" out/_headers
+      - name: nothing the audit exceptions rely on ships to users (audit-exceptions.json)
+        run: |
+          if grep -l 'toBigIntLE\|StreamValues\|stream-json' out/_next/static/chunks/*.js; then
+            echo "an audit-excepted module reached the bundle"; exit 1; fi
+      - name: no key-derivation / multi-chain signer code ships to users (shims/README.md)
+        run: |
+          if grep -l 'tronweb\|getEvmAccountFromMnemonic\|Ed25519Signer\|ed25519-hd-key' out/_next/static/chunks/*.js; then
+            echo "a shimmed LayerZero helper reached the bundle"; exit 1; fi
       - uses: actions/upload-artifact@v4
         with:
           name: static-site
