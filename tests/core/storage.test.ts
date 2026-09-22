@@ -40,3 +40,18 @@ describe('storage.sanitize', () => {
     expect(s.recentContracts).toEqual([])
   })
 })
+
+describe('shortError', () => {
+  it('keeps the node’s own words next to viem’s generic label', async () => {
+    const { shortError } = await import('@/ui/hooks')
+    // viem wraps JSON-RPC -32003 as "Transaction creation failed." — useless on its own.
+    expect(shortError({ shortMessage: 'Transaction creation failed.', details: 'insufficient funds for gas * price + value' })).toBe(
+      'Transaction creation failed. insufficient funds for gas * price + value',
+    )
+    expect(shortError({ shortMessage: 'Execution reverted.', details: 'Execution reverted.' })).toBe('Execution reverted.')
+    expect(shortError({ details: 'only details' })).toBe('only details')
+    expect(shortError({ message: 'line one\nline two' })).toBe('line one')
+    expect(shortError(undefined)).toBe('')
+    expect(shortError({ shortMessage: 'x'.repeat(400) })).toHaveLength(240)
+  })
+})

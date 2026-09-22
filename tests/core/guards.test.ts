@@ -250,6 +250,13 @@ describe('8. value + gas <= native balance', () => {
     expect(code(g8Native(goodInput({ nativeBalance: undefined })))).toBe('native_balance_unknown')
     expect(code(g8Native(goodInput({ gasCostWei: undefined })))).toBe('native_balance_unknown')
   })
+  it('the fee alone decides it even when the gas estimate never arrives', () => {
+    // A simulation that fails for lack of native coin produces no gas estimate, so waiting for one
+    // would leave the user staring at "loading" instead of the reason.
+    const p = treadPlan()
+    expect(code(g8Native(goodInput({ plan: p, gasCostWei: undefined, nativeBalance: p.value - 1n })))).toBe('insufficient_native')
+    expect(code(g8Native(goodInput({ plan: p, gasCostWei: undefined, nativeBalance: p.value })))).toBe('native_balance_unknown')
+  })
   it('exact balance passes, one wei short fails', () => {
     const p = treadPlan()
     const gas = 10n ** 15n

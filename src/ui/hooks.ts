@@ -217,12 +217,19 @@ export function useTrack(hash: string | undefined, startedAt: number | undefined
   })
 }
 
-/** First meaningful line of a viem/wallet error, capped. Never rendered as HTML. */
+/**
+ * First meaningful line of a viem/wallet error, capped. Never rendered as HTML.
+ * viem's `shortMessage` is often a generic label ("Transaction creation failed.") while the node's
+ * own words live in `details` — the part that actually says what is wrong, so both are shown.
+ */
 export function shortError(e: unknown): string {
   if (!e) return ''
   const anyE = e as { shortMessage?: string; details?: string; message?: string }
-  const s = anyE.shortMessage ?? anyE.details ?? anyE.message ?? String(e)
-  return s.split('\n')[0]?.slice(0, 200) ?? ''
+  const first = (s: string | undefined) => s?.split('\n')[0]?.trim() ?? ''
+  const short = first(anyE.shortMessage)
+  const details = first(anyE.details)
+  const both = short && details && !short.includes(details) ? `${short} ${details}` : short || details || first(anyE.message) || String(e)
+  return both.slice(0, 240)
 }
 
 export function isUserRejection(e: unknown): boolean {

@@ -236,7 +236,11 @@ export function g7Fee(i: GuardInput): GuardResult {
 // 8. value + gas <= native balance
 export function g8Native(i: GuardInput): GuardResult {
   if (!i.plan) return fail(8, 'plan_missing')
-  if (i.nativeBalance === undefined || i.gasCostWei === undefined) return fail(8, 'native_balance_unknown')
+  if (i.nativeBalance === undefined) return fail(8, 'native_balance_unknown')
+  // The fee alone already settles it: say so instead of waiting for a gas estimate that will never
+  // arrive (the simulation an unaffordable fee makes fail is what produces the estimate).
+  if (i.plan.value > i.nativeBalance) return fail(8, 'insufficient_native', `${i.plan.value} > ${i.nativeBalance}`)
+  if (i.gasCostWei === undefined) return fail(8, 'native_balance_unknown')
   const need = i.plan.value + i.gasCostWei
   if (need > i.nativeBalance) return fail(8, 'insufficient_native', `${need} > ${i.nativeBalance}`)
   return ok(8)
