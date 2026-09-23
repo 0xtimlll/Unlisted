@@ -72,6 +72,10 @@ export const en = {
     flag_svm_recipient_not_activated: 'This Solana wallet has never been used; a token account will have to be created for it',
     flag_svm_paused: 'The Solana side of this OFT is PAUSED — deliveries will not execute',
     flag_svm_fee: 'The Solana side charges an OFT fee ({bps} bps) on top of the LayerZero fee',
+    flag_svm_store_unrecognised:
+      'Non-standard Solana OFT — the account format could not be confirmed, so the token, the pause state and the recipient’s token account cannot be checked on that side. Sending is still possible; start with a small amount.',
+    flag_svm_store_unrecognised_delivered:
+      'Non-standard Solana OFT — the account format could not be confirmed, so the token and the recipient’s token account cannot be checked on that side. This exact path is confirmed by a successful delivery on LayerZero Scan. Sending is still possible; start with a small amount.',
     flag_svm_single_provider: 'Solana reads use a single public RPC provider — set your own RPC in settings for a real cross-check',
     adapterReminder: 'This is an adapter: your balance belongs to the token, not to the bridge. Make sure the adapter address comes from the project’s official sources.',
     locked: 'Locked in adapter',

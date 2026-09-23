@@ -36,7 +36,10 @@ describe('PENGU: HyperEVM OFT with a Solana peer', () => {
   it('discovery reaches program, mint, escrow, token program; PeerConfig points back', async () => {
     const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM)
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)!
-    const svm = await discoverSvmOft(rpc, sol.peer, evmByKey('hyperevm').eid)
+    const found = await discoverSvmOft(rpc, sol.peer, evmByKey('hyperevm').eid)
+    expect(found.recognised).toBe(true)
+    if (!found.recognised) throw new Error('PENGU must be a recognised store')
+    const svm = found.info
 
     expect(svm.programId).not.toBe(PROGRAM.system)
     expect(['token', 'token2022']).toContain(svm.tokenProgram)
@@ -57,8 +60,13 @@ describe('PENGU: HyperEVM OFT with a Solana peer', () => {
   it('recipient classification: escrow is a token account, mint is program-owned, a fresh key is missing', async () => {
     const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM)
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)!
-    const svm = await discoverSvmOft(rpc, sol.peer, evmByKey('hyperevm').eid)
-    const escrow = await checkSvmRecipient(rpc, svm.tokenEscrow, svm.tokenMint, svm.tokenProgram)
+    const found = await discoverSvmOft(rpc, sol.peer, evmByKey('hyperevm').eid)
+    expect(found.recognised).toBe(true)
+    if (!found.recognised) throw new Error('PENGU must be a recognised store')
+    const svm = found.info
+    // PENGU is a current-layout store, so it does hold an escrow.
+    expect(svm.tokenEscrow).toBeDefined()
+    const escrow = await checkSvmRecipient(rpc, svm.tokenEscrow!, svm.tokenMint, svm.tokenProgram)
     expect(escrow.class).toBe('token_account')
     expect(escrow.tokenAccountMint).toBe(svm.tokenMint)
     const mint = await checkSvmRecipient(rpc, svm.tokenMint, svm.tokenMint, svm.tokenProgram)

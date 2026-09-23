@@ -3,7 +3,16 @@
  * discriminator = sha256("account:<Name>")[0..8]; we verify it, so a wrong or foreign
  * account fails loudly instead of decoding into nonsense.
  *
- * OFTStore / PeerConfig follow LayerZero's `oft` program (programs/oft/src/state/*.rs).
+ * TWO generations of LayerZero's Solana `oft` program are live, and they store different accounts:
+ *
+ *   current  OFTStore   + PeerConfig  (devtools/examples/oft-solana/programs/oft/src/state/*.rs)
+ *   earlier  OftConfig  + Peer        (LayerZero-v2/packages/layerzero-v2/solana/programs/
+ *                                      programs/oft/src/state/{oft,peer}.rs)
+ *
+ * Both are official. The earlier one keeps the token program in the account and holds neither TVL,
+ * fee, pause state nor enforced options (those live in a separate EnforcedOptions account), and its
+ * peer account carries only the remote address and a rate limiter. The PDA seeds are the same in
+ * both: ["Peer", <store>, be_u32(eid)].
  * Mint / token accounts follow the SPL Token layout (shared by Token-2022 for the base fields).
  */
 import { sha256 } from '@noble/hashes/sha2'
@@ -82,6 +91,14 @@ function expectDiscriminator(r: Reader, name: string) {
   for (let i = 0; i < 8; i++) if (got[i] !== want[i]) throw new LayoutError(`not an ${name} account (discriminator mismatch)`)
 }
 
+/** True when the account's first 8 bytes are the Anchor discriminator for `name`. */
+export function hasDiscriminator(data: Uint8Array, name: string): boolean {
+  if (data.length < 8) return false
+  const want = anchorDiscriminator(name)
+  for (let i = 0; i < 8; i++) if (data[i] !== want[i]) return false
+  return true
+}
+
 export type OftStore = {
   oftType: 'native' | 'adapter'
   ld2sdRate: bigint
@@ -121,6 +138,67 @@ export function decodeOftStore(data: Uint8Array): OftStore {
   return out
 }
 
+/**
+ * The earlier generation's store.
+ *
+ *   pub struct OftConfig {
+ *       pub ld2sd_rate: u64,
+ *       pub token_mint: Pubkey,
+ *       pub token_program: Pubkey,
+ *       pub endpoint_program: Pubkey,
+ *       pub bump: u8,
+ *       pub admin: Pubkey,
+ *       pub ext: OftConfigExt,     // Native(Option<Pubkey>) | Adapter(Pubkey escrow)
+ *   }
+ *
+ * It has no TVL, no fee and no pause flag — the fields simply do not exist, so they are reported
+ * as zero/false rather than guessed at.
+ */
+export type OftConfig = {
+  oftType: 'native' | 'adapter'
+  ld2sdRate: bigint
+  tokenMint: string
+  /** This generation records the token program itself; the caller cross-checks it against the mint. */
+  tokenProgram: string
+  endpointProgram: string
+  bump: number
+  admin: string
+  /** Adapter only. A native OFT mints and burns, so it holds no escrow. */
+  tokenEscrow?: string
+}
+
+export function decodeOftConfig(data: Uint8Array): OftConfig {
+  const r = new Reader(data)
+  expectDiscriminator(r, 'OftConfig')
+  const ld2sdRate = r.u64()
+  const tokenMint = pubkeyToBase58(r.pubkey())
+  const tokenProgram = pubkeyToBase58(r.pubkey())
+  const endpointProgram = pubkeyToBase58(r.pubkey())
+  const bump = r.u8()
+  const admin = pubkeyToBase58(r.pubkey())
+
+  const extTag = r.u8()
+  if (extTag > 1) throw new LayoutError(`unknown OftConfigExt ${extTag}`)
+  if (extTag === 0) {
+    // Native(Option<Pubkey> mint_authority) — the authority itself is not needed here.
+    r.option(() => r.pubkey())
+    return { oftType: 'native', ld2sdRate, tokenMint, tokenProgram, endpointProgram, bump, admin }
+  }
+  return { oftType: 'adapter', ld2sdRate, tokenMint, tokenProgram, endpointProgram, bump, admin, tokenEscrow: pubkeyToBase58(r.pubkey()) }
+}
+
+/** Either generation's store, tagged with which one it turned out to be. */
+export type AnyOftStore =
+  | { layout: 'OFTStore'; store: OftStore }
+  | { layout: 'OftConfig'; store: OftConfig }
+
+/** Tries both official layouts. Throws only when the account is neither. */
+export function decodeAnyOftStore(data: Uint8Array): AnyOftStore {
+  if (hasDiscriminator(data, 'OFTStore')) return { layout: 'OFTStore', store: decodeOftStore(data) }
+  if (hasDiscriminator(data, 'OftConfig')) return { layout: 'OftConfig', store: decodeOftConfig(data) }
+  throw new LayoutError('neither an OFTStore nor an OftConfig account')
+}
+
 export type PeerConfig = {
   /** bytes32 of the remote OFT (an EVM address left-padded). */
   peerAddress: Hex
@@ -142,6 +220,29 @@ export function decodePeerConfig(data: Uint8Array): PeerConfig {
   const feeBps = r.option(() => r.u16())
   const bump = r.u8()
   return { peerAddress, enforcedSend, enforcedSendAndCall, ...(feeBps !== undefined ? { feeBps } : {}), bump }
+}
+
+/**
+ * The earlier generation's peer account:
+ *
+ *   pub struct Peer { pub address: [u8; 32], pub rate_limiter: Option<RateLimiter>, pub bump: u8 }
+ *
+ * Its enforced options live in a separate EnforcedOptions account, so none are returned here.
+ */
+export function decodePeer(data: Uint8Array): PeerConfig {
+  const r = new Reader(data)
+  expectDiscriminator(r, 'Peer')
+  const peerAddress = pubkeyToHex(r.pubkey())
+  r.option(() => ({ capacity: r.u64(), tokens: r.u64(), refillPerSecond: r.u64(), lastRefillTime: r.u64() }))
+  const bump = r.u8()
+  return { peerAddress, enforcedSend: '0x', enforcedSendAndCall: '0x', bump }
+}
+
+/** Either generation's peer account. Both put the 32-byte remote address first. */
+export function decodeAnyPeer(data: Uint8Array): PeerConfig {
+  if (hasDiscriminator(data, 'PeerConfig')) return decodePeerConfig(data)
+  if (hasDiscriminator(data, 'Peer')) return decodePeer(data)
+  throw new LayoutError('neither a PeerConfig nor a Peer account')
 }
 
 function pubkeyToHexAny(b: Uint8Array): Hex {

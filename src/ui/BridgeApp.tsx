@@ -29,7 +29,7 @@ import { Alert } from './components/ui'
 import { ContractFacts, TokenStep } from './components/TokenStep'
 import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
-import { isUserRejection, shortError, useAllowance, useCheck, useDvn, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
+import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
@@ -291,24 +291,40 @@ export function BridgeApp({
   const ours = info ? (info.vm === 'evm' ? info.oft : info.oftStoreBytes32) : undefined
   const evmPeerBack = usePeerBack(src.eid, ours, dstVm === 'evm' ? dest.dstEid : undefined, route?.peer, stored.customRpc)
   const svmDest = useSvmDestination(dstVm === 'svm', route?.peer, src.eid, info?.vm === 'evm' ? info.oft : undefined, stored.customRpc['solana'])
-  const svmRecipient = useSvmRecipient(svmDest.data?.info, dstVm === 'svm' && recipient?.vm === 'svm' ? recipient.display : undefined, stored.customRpc['solana'])
+  // When the input was a transaction, LayerZero Scan can say whether this very path has already
+  // delivered. It only changes the wording of a warning.
+  const scanDelivered =
+    useScanDelivered(analysisInput?.kind === 'evm_tx' ? analysisInput.hash : undefined).data === true
+
+  // Recognised: everything below can be checked. Unrecognised: the store exists but is not one of
+  // LayerZero's two official layouts, so the mint is unknown and the UI warns instead of blocking.
+  const svmDestInfo = svmDest.data?.recognised ? svmDest.data.info : undefined
+  const svmDestUnknown = svmDest.data && !svmDest.data.recognised ? svmDest.data.store : undefined
+  const svmRecipient = useSvmRecipient(svmDestInfo, dstVm === 'svm' && recipient?.vm === 'svm' ? recipient.display : undefined, stored.customRpc['solana'])
   const peerBack = dstVm === 'svm' ? svmDest.data?.peerBack : evmPeerBack.data
   const svmFlags = useMemo<SuspiciousFlag[]>(() => {
     if (dstVm !== 'svm') return []
     const f: SuspiciousFlag[] = []
-    if (svmDest.data?.info.paused) f.push('svm_paused')
-    if ((svmDest.data?.info.defaultFeeBps ?? 0) > 0) f.push('svm_fee')
+    if (svmDestInfo?.paused) f.push('svm_paused')
+    if ((svmDestInfo?.defaultFeeBps ?? 0) > 0) f.push('svm_fee')
+    // Not an error: the EVM side's own quote and simulation still have to pass.
+    if (svmDestUnknown) f.push(scanDelivered ? 'svm_store_unrecognised_delivered' : 'svm_store_unrecognised')
     if (svmRecipient.data?.class === 'missing') f.push('svm_recipient_not_activated')
     if (!stored.customRpc['solana']) f.push('svm_single_provider')
     return f
-  }, [dstVm, svmDest.data, svmRecipient.data, stored.customRpc])
+  }, [dstVm, svmDestInfo, svmDestUnknown, scanDelivered, svmRecipient.data, stored.customRpc])
 
   // §5.1 Solana destination: extraOptions are derived from the contract's enforced options and
   // the recipient's token-account state, never typed by hand (a sample tx only contributes a hint).
   const svmOptions = useMemo(() => {
-    if (dstVm !== 'svm' || !info || dest.dstEid === undefined || !svmRecipient.data) return undefined
-    return planSvmOptions({ enforced: info.enforced[dest.dstEid] ?? '0x', ataExists: svmRecipient.data.ataExists, sample: dest.extraOptions })
-  }, [dstVm, info, dest.dstEid, dest.extraOptions, svmRecipient.data])
+    if (dstVm !== 'svm' || !info || dest.dstEid === undefined) return undefined
+    // With an unrecognised store there is no mint, so whether the recipient already has a token
+    // account cannot be read. Assume it does not: that funds the account rather than risking an
+    // undeliverable message, and the enforced options usually cover it anyway.
+    const ataExists = svmRecipient.data ? svmRecipient.data.ataExists : svmDestUnknown ? false : undefined
+    if (ataExists === undefined) return undefined
+    return planSvmOptions({ enforced: info.enforced[dest.dstEid] ?? '0x', ataExists, sample: dest.extraOptions })
+  }, [dstVm, info, dest.dstEid, dest.extraOptions, svmRecipient.data, svmDestUnknown])
 
   const planAmount = amountError || (dstVm === 'svm' && !svmOptions) ? '' : dest.amountInput
   const planOptions = dstVm === 'svm' ? (svmOptions?.extraOptions ?? '0x') : dest.extraOptions
@@ -374,8 +390,9 @@ export function BridgeApp({
       svmRecipientClass: svmRecipient.data?.class,
       svmRecipientPdaAccepted: pdaAccepted,
       svmDestinationKnown: dstVm !== 'svm' || !!svmDest.data,
+      svmDestinationRecognised: dstVm !== 'svm' || !svmDestUnknown,
     }),
-    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, dstVm, svmDest.data],
+    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, dstVm, svmDest.data, svmDestUnknown],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -639,7 +656,7 @@ export function BridgeApp({
                 <ContractFacts chain={src} info={info} />
               </PanelSection>
               <PanelSection title={d.ui.section_quote}>
-                <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDest.data?.info} flat />
+                <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat />
               </PanelSection>
               <Checks
                 report={report}

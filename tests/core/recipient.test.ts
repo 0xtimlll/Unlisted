@@ -114,6 +114,24 @@ describe('guard 19/20 on a Solana destination', () => {
     expect(codeOf(19, { ...base(), svmRecipientClass: 'missing' })).toBe('ok')
     expect(codeOf(19, { ...base(), svmRecipientClass: undefined })).toBe('recipient_class_unknown')
   })
+  it('19: a store we could not parse warns instead of blocking — there is no mint to classify against', () => {
+    // §The reported ENA case generalised: the peer account exists and the EVM side quotes happily,
+    // but its layout is unknown, so the recipient's token account cannot be derived. That is a
+    // yellow warning (types.SuspiciousFlag), never a refusal.
+    expect(codeOf(19, { ...base(), svmRecipientClass: undefined, svmDestinationRecognised: false })).toBe('ok')
+    // …and a recognised store still demands the classification.
+    expect(codeOf(19, { ...base(), svmRecipientClass: undefined, svmDestinationRecognised: true })).toBe('recipient_class_unknown')
+    // The VM check is not relaxed by any of this.
+    const wrongVm = { ...svmPlan(), recipientVm: 'evm' as const, recipient: addressToBytes32(WALLET), recipientDisplay: WALLET }
+    expect(codeOf(19, { ...base(), plan: wrongVm, svmDestinationRecognised: false })).toBe('recipient_vm_mismatch')
+  })
+
+  it('2: a zero Solana peer still blocks the send, unrecognised store or not', () => {
+    const noPeer = treadOftInfo({ routes: [] })
+    expect(codeOf(2, { ...base(), info: noPeer })).toBe('peer_missing')
+    expect(codeOf(2, { ...base(), info: noPeer, svmDestinationRecognised: false })).toBe('peer_missing')
+  })
+
   it('19: EVM destination ignores the Solana classification', () => {
     expect(codeOf(19, goodInput({ svmRecipientClass: undefined }))).toBe('ok')
   })

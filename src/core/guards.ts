@@ -121,6 +121,12 @@ export type GuardInput = {
   svmRecipientPdaAccepted?: boolean
   /** Solana destinations only: discovery of the Solana side finished (mint, program, PeerConfig known). */
   svmDestinationKnown?: boolean
+  /**
+   * Solana destinations only: the store matched one of LayerZero's official layouts. When it did
+   * not, the mint is unknown, so the recipient's account class cannot be checked — that is a
+   * warning (§types.SuspiciousFlag), not a reason to refuse a route the EVM side still quotes.
+   */
+  svmDestinationRecognised?: boolean
 }
 
 export type GuardReport = {
@@ -352,6 +358,9 @@ export function g19RecipientVm(i: GuardInput): GuardResult {
   if (!dst) return fail(19, 'peer_missing', `eid ${i.plan.dstEid}`)
   if (i.plan.recipientVm !== dst.vm) return fail(19, 'recipient_vm_mismatch', `${i.plan.recipientVm} → ${dst.vm}`)
   if (dst.vm === 'svm') {
+    // Nothing to classify against: the store's layout is unknown, so there is no mint to derive
+    // the recipient's token account from. The user is warned instead.
+    if (i.svmDestinationRecognised === false) return ok(19)
     const cls = i.svmRecipientClass
     if (cls === undefined) return fail(19, 'recipient_class_unknown')
     if (cls === 'token_account') return fail(19, 'recipient_token_account')

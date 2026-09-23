@@ -13,7 +13,7 @@ import { simulateSend, type SimOutcome } from '@/core/sim/preview'
 import type { DecodedRevert } from '@/core/sim/revert'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
 import type { Recipient } from '@/core/recipient'
-import type { SvmOftInfo } from '@/core/svm/discover'
+import type { SvmOftInfo, SvmUnknownStore } from '@/core/svm/discover'
 import type { SvmRecipientCheck } from '@/core/svm/recipient'
 import { fetchStatus, POLL_INTERVAL_MS, POLL_TIMEOUT_MS, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
@@ -253,6 +253,21 @@ export function useTrack(hash: string | undefined, startedAt: number | undefined
 }
 
 /**
+ * §An extra signal for a route we could not fully read: has LayerZero already delivered THIS
+ * transaction? Purely informational — it softens a warning's wording and never unblocks or blocks
+ * anything. A network failure is silent, as everywhere else in the tracker.
+ */
+export function useScanDelivered(txHash: string | undefined) {
+  return useQuery({
+    queryKey: ['scanDelivered', txHash],
+    queryFn: async () => (await fetchStatus(txHash!)).phase === 'delivered',
+    enabled: !!txHash && /^0x[0-9a-fA-F]{64}$/.test(txHash),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+/**
  * First meaningful line of a viem/wallet error, capped. Never rendered as HTML.
  * viem's `shortMessage` is often a generic label ("Transaction creation failed.") while the node's
  * own words live in `details` — the part that actually says what is wrong, so both are shown.
@@ -275,20 +290,30 @@ export function isUserRejection(e: unknown): boolean {
 // ---- Solana destination (read-only). The svm modules are imported on demand so the EVM-only
 // path never downloads base58/ed25519 code. ---------------------------------------------------
 
-export type SvmDestination = {
-  info: SvmOftInfo
-  peerBack: PeerBackResult
-}
+/**
+ * The Solana side of an EVM -> Solana route.
+ *
+ * `recognised: false` means the peer account exists but matches neither official store layout:
+ * everything that depends on the mint is then unknown, so the UI warns and lets the user decide
+ * rather than refusing a route the EVM side's own quote may well prove is fine.
+ */
+export type SvmDestination =
+  | { recognised: true; info: SvmOftInfo; peerBack: PeerBackResult }
+  | { recognised: false; store: SvmUnknownStore; peerBack: PeerBackResult }
 
 /** §4.2 discovery from the raw bytes32 peer, plus the svm form of guard 17. */
 export function useSvmDestination(enabled: boolean, peer: Hex | undefined, srcEid: number, srcOft: Address | undefined, customRpc: string | undefined) {
   return useQuery({
     queryKey: ['svmDest', peer, srcEid, srcOft, customRpc ?? ''],
     queryFn: async (): Promise<SvmDestination> => {
-      const [{ SvmRpc }, { discoverSvmOft, checkPeerBackSvm }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/discover')])
+      const [{ SvmRpc }, { discoverSvmOft, checkPeerBackSvm, checkPeerBackUnknown }] = await Promise.all([
+        import('@/core/svm/rpc'),
+        import('@/core/svm/discover'),
+      ])
       const rpc = new SvmRpc(svmRpcUrls(customRpc))
-      const info = await discoverSvmOft(rpc, peer!, srcEid)
-      return { info, peerBack: checkPeerBackSvm(info, srcOft!) }
+      const found = await discoverSvmOft(rpc, peer!, srcEid)
+      if (!found.recognised) return { recognised: false, store: found.store, peerBack: checkPeerBackUnknown(found.store, srcOft!) }
+      return { recognised: true, info: found.info, peerBack: checkPeerBackSvm(found.info, srcOft!) }
     },
     enabled: enabled && !!peer && !!srcOft,
     staleTime: 60_000,

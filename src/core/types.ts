@@ -46,3 +46,7 @@ export type SuspiciousFlag =
   | 'svm_source_paused'
   | 'svm_fee'
   | 'svm_single_provider'
+  /** The peer account exists but is neither official store layout. Warns; never blocks. */
+  | 'svm_store_unrecognised'
+  /** The same, plus LayerZero Scan confirming this very path has already delivered. */
+  | 'svm_store_unrecognised_delivered'
