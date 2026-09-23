@@ -7,7 +7,7 @@
  */
 import { decodeFunctionData, encodeFunctionData, isAddressEqual, type Hex } from 'viem'
 import type { ReadClient } from '../../core/client'
-import { decodeRevert, formatRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
+import { decodeRevert, enrichRevert, formatRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
 import { ccipRouterAbi } from './abi'
 import { assembleCcipSendArgs, type CcipPlan } from './plan'
 
@@ -59,7 +59,7 @@ export function ccipSelfCheck(plan: CcipPlan, calldata: Hex): CcipSelfCheck {
   return mismatches.length === 0 ? { ok: true } : { ok: false, mismatches }
 }
 
-export async function previewCcipSend(client: ReadClient, plan: CcipPlan): Promise<CcipPreview> {
+export async function previewCcipSend(client: ReadClient, plan: CcipPlan, chainId?: number): Promise<CcipPreview> {
   const selfCheck = ccipSelfCheck(plan, encodeCcipSend(plan))
   const [selector, message] = assembleCcipSendArgs(plan)
 
@@ -79,7 +79,10 @@ export async function previewCcipSend(client: ReadClient, plan: CcipPlan): Promi
       const reason = (e instanceof Error ? e.message : String(e)).split('\n')[0]?.slice(0, 200) ?? ''
       return { simulation: { ok: false, reason }, selfCheck, gasCostWei: undefined, rpcUnavailable: reason }
     }
-    const revert = decodeRevert(data)
+    const revert =
+      chainId === undefined
+        ? decodeRevert(data)
+        : await enrichRevert(decodeRevert(data), { chainId, candidates: [plan.router, plan.token, plan.pool] })
     return { simulation: { ok: false, reason: formatRevert(revert) }, selfCheck, gasCostWei: undefined, revert }
   }
 

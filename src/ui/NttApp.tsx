@@ -455,6 +455,9 @@ export function NttApp({
               <Alert kind="error">
                 <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
                 <div className="mono mt-1 text-xs opacity-80">{formatRevert(check.data.revert)}</div>
+                {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? (
+                  <div className="mt-1 text-xs opacity-80">{d.revert.fromContractAbi}</div>
+                ) : null}
               </Alert>
             ) : check.data?.rpcUnavailable ? (
               <Alert kind="warn">{d.revert.rpcUnavailable}</Alert>

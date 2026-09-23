@@ -296,6 +296,7 @@ export const en = {
     generic: 'The contract refused this transfer.',
     failedStep_approve: 'The approve itself would fail.',
     failedStep_send: 'The send would fail.',
+    fromContractAbi: 'Name read from the contract’s own verified ABI on Sourcify — the project’s word, not ours.',
     rpcUnavailable: 'The RPC could not run the simulation. This says nothing about the transfer itself — try again or use your own RPC.',
     batched: 'Checked as approve + send together.',
   },

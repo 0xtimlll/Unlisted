@@ -6,6 +6,7 @@ import type { TxLike } from '@/core/analysis/detect'
 import { foreignEventsAbi } from '@/core/analysis/foreign'
 import { parseAnalysisInput } from '@/core/analysis/input'
 import { classifyRpcError, searchTx } from '@/core/analysis/search'
+import { analyzeSvmPrefill } from '@/core/analysis/svm'
 import { lzEventsAbi } from '@/core/lz/events'
 import { encodePacket } from '@/core/lz/packet'
 import { knownErrorsAbi } from '@/core/sim/errors'
@@ -185,6 +186,69 @@ describe('verdicts', () => {
     expect(r?.verdict).toBe('unknown')
     expect(r?.code).toBe('unknown')
     expect(r?.details).toMatchObject({ to: ROUTER, selector: '0x12345678', logEmitters: [ROUTER] })
+  })
+})
+
+describe('a Solana signature, in the same shape as everything else', () => {
+  const prefill = {
+    oftStore: 'qMNo1RFo11J9ZLGuq7dVmWAssuCZaNsSamk8g2q4UZA',
+    programId: 'EfRMrTJWU2CYm52kHmRYozQNdF8RH5aTi3xyeSuLAX2Y',
+    dstEid: 30367,
+    extraOptions: '0x' as const,
+    droppedOptions: [],
+    optionsMalformed: false,
+    observed: {
+      from: '2hCc738iscpDVahFvwjNwUq1WZQ7xRTeitebgWtkkp1h',
+      to: pad(WALLET, { size: 32 }),
+      amountLD: 1_000000n,
+      minAmountLD: 990000n,
+      nativeFee: 231_700n,
+      hadComposeMsg: false,
+      failed: false,
+    },
+  }
+
+  it('produces the same verdict shape as an EVM send', () => {
+    const r = analyzeSvmPrefill(prefill, { signature: SIG, selected: 'solana' })
+    expect(r).toMatchObject({ verdict: 'can_bridge', code: 'lz_oft_send', protocol: 'lz-oft' })
+    expect(r.target).toEqual({ chain: 'solana', address: prefill.oftStore, kind: 'oft-store', dstChain: 'hyperevm' })
+    expect(r.details).toMatchObject({ chain: 'solana', txHash: SIG })
+    expect(r.details.fields).toMatchObject({ programId: prefill.programId, dstEid: '30367', amountLD: '1000000' })
+  })
+
+  it('offers to switch the network when Solana is not the one selected', () => {
+    expect(analyzeSvmPrefill(prefill, { selected: 'base' }).action).toEqual({ kind: 'switch_chain', chain: 'solana' })
+    expect(analyzeSvmPrefill(prefill, { selected: 'solana' }).action).toEqual({ kind: 'use_address', chain: 'solana', address: prefill.oftStore })
+  })
+
+  it('refuses when the store is owned by another program', () => {
+    const r = analyzeSvmPrefill(prefill, { programMismatch: true })
+    expect(r).toMatchObject({ verdict: 'cannot_bridge', code: 'lz_oapp_not_oft' })
+    expect(r.target).toBeUndefined()
+  })
+
+  it('records a destination outside our registry without inventing a name', () => {
+    const r = analyzeSvmPrefill({ ...prefill, dstEid: 30324 }, {})
+    expect(r.vars['destination']).toBe('30324')
+    expect(r.target?.dstChain).toBeUndefined()
+  })
+
+  it('keeps a failed sample visible in the raw details', () => {
+    const r = analyzeSvmPrefill({ ...prefill, observed: { ...prefill.observed, failed: true } }, {})
+    expect(r.details.fields?.['sampleFailed']).toBe('true')
+  })
+})
+
+describe('an unrecognised bridge never becomes a wrong verdict', () => {
+  it('a native bridge we have no address for reads as "could not tell", not as a protocol', () => {
+    // Base's L1StandardBridge on Ethereum is a documented TODO in core/analysis/foreign.ts.
+    // Until it is confirmed, a transaction through it must fall through to unknown.
+    const [r] = analyzeTx(
+      { hash: HASH, to: ROUTER, input: '0x3dbb202b', logs: [{ address: ROUTER, topics: [`0x${'77'.repeat(32)}`], data: '0x' }] },
+      { chain: 'ethereum' },
+    )
+    expect(r).toMatchObject({ verdict: 'unknown', code: 'unknown', protocol: null })
+    expect(r?.details.logEmitters).toEqual([ROUTER])
   })
 })
 

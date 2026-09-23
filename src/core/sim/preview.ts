@@ -18,7 +18,7 @@ import { simulateCalls } from 'viem/actions'
 import { erc20Abi, oftAbi } from '../abi'
 import type { ReadClient } from '../client'
 import type { SendArgs } from '../plan'
-import { decodeRevert, formatRevert, revertDataFromError, type DecodedRevert } from './revert'
+import { decodeRevert, enrichRevert, formatRevert, revertDataFromError, type DecodedRevert } from './revert'
 
 export type SimStep = 'approve' | 'send'
 
@@ -35,6 +35,14 @@ export type SimulateInput = {
   value: bigint
   /** Present only when the allowance is short; the approve is for exactly this amount. */
   approve?: { token: Address; spender: Address; amount: bigint }
+  /** Lets an unnamed selector be looked up in the contract's own verified ABI. */
+  chainId?: number
+  token?: Address
+}
+
+/** Contracts that could have produced the revert, most likely first. */
+function revertCandidates(p: SimulateInput): string[] {
+  return [p.oft, ...(p.token ? [p.token] : []), ...(p.approve ? [p.approve.token] : [])]
 }
 
 /** Errors that mean "this node does not implement eth_simulateV1", not "the call fails". */
@@ -57,7 +65,7 @@ export async function simulateSend(client: ReadClient, p: SimulateInput): Promis
   } catch (e) {
     const data = revertDataFromError(e)
     if (data === undefined && !looksLikeRevert(e)) return { ok: 'unknown', reason: firstLine(e) }
-    const revert = decodeRevert(data)
+    const revert = await name(decodeRevert(data), p)
     return { ok: false, step: 'send', revert, reason: formatRevert(revert), batched: false }
   }
   let gas: bigint | undefined
@@ -89,11 +97,11 @@ async function trySimulateCalls(client: ReadClient, p: SimulateInput): Promise<S
     })
     const [approveResult, sendResult] = res.results
     if (approveResult && approveResult.status === 'failure') {
-      const revert = decodeRevert(revertDataFromError(approveResult.error))
+      const revert = await name(decodeRevert(revertDataFromError(approveResult.error)), p)
       return { ok: false, step: 'approve', revert, reason: formatRevert(revert), batched: true }
     }
     if (sendResult && sendResult.status === 'failure') {
-      const revert = decodeRevert(revertDataFromError(sendResult.error))
+      const revert = await name(decodeRevert(revertDataFromError(sendResult.error)), p)
       return { ok: false, step: 'send', revert, reason: formatRevert(revert), batched: true }
     }
     // Raw gas, like the plain path: the caller adds its own headroom.
@@ -103,9 +111,15 @@ async function trySimulateCalls(client: ReadClient, p: SimulateInput): Promise<S
     if (isUnsupported(e)) return undefined
     const data = revertDataFromError(e)
     if (data === undefined) return undefined // an RPC hiccup: let the plain path decide
-    const revert = decodeRevert(data)
+    const revert = await name(decodeRevert(data), p)
     return { ok: false, step: 'send', revert, reason: formatRevert(revert), batched: true }
   }
+}
+
+/** Gives an unnamed selector a name from the contract's own verified ABI, when there is one. */
+async function name(revert: DecodedRevert, p: SimulateInput): Promise<DecodedRevert> {
+  if (revert.kind !== 'unknown' || p.chainId === undefined) return revert
+  return enrichRevert(revert, { chainId: p.chainId, candidates: revertCandidates(p) })
 }
 
 function looksLikeRevert(e: unknown): boolean {

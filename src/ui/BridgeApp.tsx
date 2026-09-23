@@ -7,6 +7,7 @@ import { erc20Abi, oftAbi } from '@/core/abi'
 import { AmountError, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
+import { analyzeSvmPrefill } from '@/core/analysis/svm'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
 import { DecodeTxError } from '@/core/decodeTx'
@@ -136,9 +137,7 @@ export function BridgeApp({
 
   // ---- step 1: analyse whatever was pasted ------------------------------------
   const analysis = useAnalysis(analysisInput, srcKey, stored.customRpc)
-  const results = useMemo(() => analysis.data?.results ?? [], [analysis.data])
   const [chosen, setChosen] = useState(0)
-  const primary = results[chosen] ?? results[0]
 
   /** Point the form at a contract the analysis found, on its own chain. */
   const applyTarget = useCallback(
@@ -176,6 +175,45 @@ export function BridgeApp({
     }
   }
 
+  // ---- step 1b: read the contract ---------------------------------------------
+  const probe = useProbe(evmSrc, svmSource ? null : probeTarget, stored.customRpc[src.key])
+  const decode = useDecode(evmSrc, svmSource ? null : (decodeTarget as Hash | null), stored.customRpc[src.key])
+  const svmProbe = useSvmProbe(svmSource, probeTarget, stored.customRpc['solana'])
+  const svmDecode = useSvmDecode(svmSource, decodeTarget, stored.customRpc['solana'])
+  // The sample's send must have been executed by the program that owns the store we then probed;
+  // otherwise the probed info is discarded as if the store had never been checked.
+  const decodeProgramMismatch = !!svmDecode.data && !!svmProbe.data && svmProbe.data.info.programId !== svmDecode.data.programId
+  const info: SourceInfo | undefined = svmSource ? (decodeProgramMismatch ? undefined : svmProbe.data?.info) : probe.data?.info
+  const flags = useMemo(() => (svmSource ? (svmProbe.data?.flags ?? []) : (probe.data?.flags ?? [])), [svmSource, svmProbe.data, probe.data])
+  const probeError = svmSource ? svmProbe.error : probe.error
+  const decodeData = svmSource ? svmDecode.data : decode.data
+  const decodeError = svmSource ? svmDecode.error : decode.error
+
+  /**
+   * §Task 1.6: a Solana signature goes through the same analysis as everything else. The decoding
+   * is NOT repeated — core/svm/decode.ts already produced the prefill above, and this only turns it
+   * into the one result shape the panel renders.
+   */
+  const results = useMemo(() => {
+    const fromEvm = analysis.data?.results ?? []
+    if (fromEvm.length > 0) return fromEvm
+    if (!svmDecode.data) return []
+    return [
+      analyzeSvmPrefill(svmDecode.data, {
+        signature: svmDecode.data.observed.from ? (decodeTarget ?? '') : '',
+        selected: srcKey,
+        programMismatch: decodeProgramMismatch,
+      }),
+    ]
+  }, [analysis.data, svmDecode.data, decodeProgramMismatch, decodeTarget, srcKey])
+  const primary = results[chosen] ?? results[0]
+
+  useEffect(() => {
+    if (!decodeData) return
+    setProbeTarget('oftStore' in decodeData ? decodeData.oftStore : decodeData.oft)
+    setDest((s) => ({ ...s, dstEid: decodeData.dstEid, extraOptions: decodeData.extraOptions }))
+  }, [decodeData])
+
   const onAnalysisAction = (a: AnalysisAction) => {
     switch (a.kind) {
       case 'switch_chain':
@@ -193,32 +231,19 @@ export function BridgeApp({
     }
   }
 
-  // can_bridge on the chain already selected: fill the form in without another click.
-  const autoTarget = primary?.verdict === 'can_bridge' && primary.target?.chain === srcKey ? primary.target : undefined
+  /**
+   * can_bridge on the chain already selected: fill the form in without another click.
+   *
+   * A Solana result is excluded: its prefill (store, destination, options) is applied by the
+   * decode effect above, and re-applying it here would clear `decodeTarget` — which is what the
+   * verdict itself is derived from, so the card would appear and immediately vanish.
+   */
+  const autoTarget =
+    primary?.verdict === 'can_bridge' && primary.target?.chain === srcKey && primary.target.kind !== 'oft-store' ? primary.target : undefined
   useEffect(() => {
     if (autoTarget) applyTarget(autoTarget)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoTarget?.address, autoTarget?.chain, autoTarget?.dstChain])
-
-  // ---- step 1b: read the contract ---------------------------------------------
-  const probe = useProbe(evmSrc, svmSource ? null : probeTarget, stored.customRpc[src.key])
-  const decode = useDecode(evmSrc, svmSource ? null : (decodeTarget as Hash | null), stored.customRpc[src.key])
-  const svmProbe = useSvmProbe(svmSource, probeTarget, stored.customRpc['solana'])
-  const svmDecode = useSvmDecode(svmSource, decodeTarget, stored.customRpc['solana'])
-  // The sample's send must have been executed by the program that owns the store we then probed;
-  // otherwise the probed info is discarded as if the store had never been checked.
-  const decodeProgramMismatch = !!svmDecode.data && !!svmProbe.data && svmProbe.data.info.programId !== svmDecode.data.programId
-  const info: SourceInfo | undefined = svmSource ? (decodeProgramMismatch ? undefined : svmProbe.data?.info) : probe.data?.info
-  const flags = useMemo(() => (svmSource ? (svmProbe.data?.flags ?? []) : (probe.data?.flags ?? [])), [svmSource, svmProbe.data, probe.data])
-  const probeError = svmSource ? svmProbe.error : probe.error
-  const decodeData = svmSource ? svmDecode.data : decode.data
-  const decodeError = svmSource ? svmDecode.error : decode.error
-
-  useEffect(() => {
-    if (!decodeData) return
-    setProbeTarget('oftStore' in decodeData ? decodeData.oftStore : decodeData.oft)
-    setDest((s) => ({ ...s, dstEid: decodeData.dstEid, extraOptions: decodeData.extraOptions }))
-  }, [decodeData])
 
   const infoId = info ? (info.vm === 'evm' ? info.oft : info.oftStore) : undefined
   useEffect(() => {
@@ -356,7 +381,7 @@ export function BridgeApp({
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
   const pendingApprove =
     approveIntent && info?.vm === 'evm' ? { token: info.token, spender: approveIntent.spender, amount: approveIntent.amount } : undefined
-  const evmCheck = useCheck(evmSrc, evmPlan.data, preOk && !svmSource, pendingApprove)
+  const evmCheck = useCheck(evmSrc, evmPlan.data, preOk && !svmSource, pendingApprove, info?.vm === 'evm' ? info.token : undefined)
   const svmCheck = useSvmCheck(svmCtx.data, svmPlan.data, preOk && svmSource)
   const check = svmSource ? svmCheck : evmCheck
   // A send that only fails on the allowance, on a node that cannot batch, is not a failed send:
@@ -679,6 +704,7 @@ function SimulationNote({ check }: { check: CheckResult | undefined }) {
     <Alert kind="error">
       <div className="font-semibold">{d.revert[meaning]}</div>
       <div className="mono mt-1 text-xs opacity-80">{formatRevert(r)}</div>
+      {r.kind === 'error' && r.source === 'contract' ? <div className="mt-1 text-xs opacity-80">{d.revert.fromContractAbi}</div> : null}
       {r.kind === 'unknown' ? (
         <a href={r.lookupUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs underline">
           {d.analysis.lookupSelector}

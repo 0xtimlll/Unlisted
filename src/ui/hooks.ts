@@ -144,12 +144,18 @@ export type PendingApprove = { token: Address; spender: Address; amount: bigint 
  * §6.13 + §6.14 + §Task 4: simulate `send` (over a pending approve where the node supports
  * eth_simulateV1) and decode our own calldata back.
  */
-export function useCheck(src: EvmChainDef | undefined, plan: EvmSendPlan | undefined, ready: boolean, approve?: PendingApprove | undefined) {
+export function useCheck(
+  src: EvmChainDef | undefined,
+  plan: EvmSendPlan | undefined,
+  ready: boolean,
+  approve?: PendingApprove | undefined,
+  token?: Address | undefined,
+) {
   const client = useReadClient(src)
   return useQuery({
     queryKey: [
       'check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions,
-      approve ? `${approve.token}:${approve.spender}:${approve.amount}` : '',
+      approve ? `${approve.token}:${approve.spender}:${approve.amount}` : '', token ?? '',
     ],
     queryFn: async (): Promise<CheckResult> => {
       const args = assembleSendArgs(plan!)
@@ -161,6 +167,8 @@ export function useCheck(src: EvmChainDef | undefined, plan: EvmSendPlan | undef
         sendArgs: args,
         value: plan!.value,
         ...(approve ? { approve } : {}),
+        ...(token ? { token } : {}),
+        ...(src ? { chainId: src.chainId } : {}),
       })
 
       if (outcome.ok === 'unknown') {

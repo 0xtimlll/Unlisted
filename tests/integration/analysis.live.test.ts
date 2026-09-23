@@ -8,6 +8,8 @@
  *   0xcd8ced52…2d74  Solana -> HyperEVM, the receiving side of a transfer
  *   0xff9825e7…7a3e  the GUID of the first message
  *
+ *   3deSsL9g…j3LT8  Solana -> HyperEVM, an OFT send signature (same LayerZero Scan listing)
+ *
  * The other protocols come from their own explorers:
  *   0xa4a6bd5f…bbef  Ethereum, Wormhole NTT -> BNB Chain   (Wormholescan /api/v1/operations,
  *   0x255fa1b5…8ebd  Ethereum, Wormhole NTT -> Arbitrum     appId=NATIVE_TOKEN_TRANSFER)
@@ -36,6 +38,8 @@ const PENGU_HYPEREVM = '0xfa44c2634ff17cbe26dc3007d36bd61c79068c14'
 const NTT_TO_BSC = '0xa4a6bd5fb664702bc81d5b52214e31727ae9964306adf39506cf4d988708bbef'
 const NTT_TO_ARBITRUM = '0x255fa1b55e7a2d63e452a3fa3081e9115db9eb9354b6da8a61843aa81e6e8ebd'
 const CCIP_ON_BASE = '0xa2360083ee189f6d3a9f483816a4ad3182ee34dcb44cefd028d15ae39398fd39'
+const SOLANA_SEND = '3deSsL9gEzcoGmw2qrr6rrjULK53uoJ2o98vbrrdR9zgj1qDnr1Uc1HpjxUbdpeqe6gLYZKZtca7KmVXkMZj3LT8'
+const PENGU_STORE = 'qMNo1RFo11J9ZLGuq7dVmWAssuCZaNsSamk8g2q4UZA'
 const SOLANA_EID = 30168
 
 const fetchAcrossChains = async (hash: string, selected?: ChainKey) =>
@@ -133,6 +137,30 @@ describe('analysis on real transactions', () => {
     expect(outcome.reason).not.toMatch(/^0x[0-9a-f]{8,}$/) // not raw bytes
     expect(revertMeaning(outcome.revert)).toBeDefined()
     expect(outcome.step).toBe('send')
+  })
+
+  it('a real Solana signature goes through the same analysis and returns the same shape', async () => {
+    const { SvmRpc } = await import('@/core/svm/rpc')
+    const { decodeSvmTx } = await import('@/core/svm/decode')
+    const { analyzeSvmPrefill } = await import('@/core/analysis/svm')
+    const { byKey } = await import('@/core/chains')
+
+    const rpc = new SvmRpc([...byKey('solana').rpcUrls])
+    const raw = await rpc.getTransaction(SOLANA_SEND).catch(() => null)
+    if (!raw) {
+      console.warn(`analysis.live: ${SOLANA_SEND.slice(0, 8)}… is no longer served (pruned); skipping`)
+      return
+    }
+
+    // The existing decoder does the work; the analysis only translates its result.
+    const prefill = await decodeSvmTx(rpc, SOLANA_SEND)
+    expect(prefill.oftStore).toBe(PENGU_STORE)
+
+    const r = analyzeSvmPrefill(prefill, { signature: SOLANA_SEND, selected: 'ethereum' })
+    expect(r).toMatchObject({ verdict: 'can_bridge', code: 'lz_oft_send', protocol: 'lz-oft' })
+    expect(r.target).toMatchObject({ chain: 'solana', address: PENGU_STORE, kind: 'oft-store', dstChain: 'hyperevm' })
+    expect(r.action).toEqual({ kind: 'switch_chain', chain: 'solana' })
+    expect(r.details.fields?.['dstEid']).toBe('30367')
   })
 
   it('classifies the OFT itself, and its endpoint as a non-OFT contract', async () => {

@@ -10,12 +10,17 @@
  */
 import { decodeErrorResult, type Abi, type Hex } from 'viem'
 import { knownErrorsAbi, meaningOf, type RevertMeaning } from './errors'
+import { fetchContractErrorAbi, type SourcifyFetch } from './sourcify'
 
 export type { RevertMeaning }
 
 export type DecodedRevert =
-  /** A named error, ours or the contract's own. */
-  | { kind: 'error'; name: string; args: readonly unknown[]; meaning: RevertMeaning; selector: Hex }
+  /**
+   * A named error. `source` says where the name came from: `known` is one of the protocol ABIs
+   * compiled into this app, `contract` is the contract's own verified ABI (core/sim/sourcify.ts),
+   * which the UI labels as such because it is a third party's word, not ours.
+   */
+  | { kind: 'error'; name: string; args: readonly unknown[]; meaning: RevertMeaning; selector: Hex; source: 'known' | 'contract'; from?: string }
   /** require(false, "…") */
   | { kind: 'string'; message: string; meaning: RevertMeaning }
   /** Solidity's built-in Panic(uint256). */
@@ -58,11 +63,11 @@ export function decodeRevert(data: Hex | undefined, contractAbi?: Abi): DecodedR
   }
 
   const known = tryDecode(data, knownErrorsAbi as unknown as Abi)
-  if (known) return { kind: 'error', name: known.name, args: known.args, meaning: meaningOf(known.name), selector }
+  if (known) return { kind: 'error', name: known.name, args: known.args, meaning: meaningOf(known.name), selector, source: 'known' }
 
   if (contractAbi) {
     const own = tryDecode(data, contractAbi)
-    if (own) return { kind: 'error', name: own.name, args: own.args, meaning: meaningOf(own.name), selector }
+    if (own) return { kind: 'error', name: own.name, args: own.args, meaning: meaningOf(own.name), selector, source: 'contract' }
   }
 
   return { kind: 'unknown', selector, data, lookupUrl: selectorLookupUrl(selector) }
@@ -116,4 +121,31 @@ function stringifyArg(a: unknown): string {
   if (typeof a === 'string') return a
   if (Array.isArray(a)) return `[${a.map(stringifyArg).join(', ')}]`
   return String(a)
+}
+
+/**
+ * §Task 4: a selector we could not name is looked up in the contract's OWN verified ABI.
+ *
+ * `candidates` are the contracts that could plausibly have reverted, most likely first — the one
+ * being called, then the token. The first verified ABI that decodes the bytes wins; if none does,
+ * the raw selector and its lookup link are returned unchanged, exactly as before.
+ *
+ * Never throws, and never turns an unreachable Sourcify into a statement about the transaction.
+ */
+export async function enrichRevert(
+  revert: DecodedRevert,
+  ctx: { chainId: number; candidates: readonly string[]; fetchImpl?: SourcifyFetch },
+): Promise<DecodedRevert> {
+  if (revert.kind !== 'unknown') return revert
+  const seen = new Set<string>()
+  for (const address of ctx.candidates) {
+    const at = address.toLowerCase()
+    if (seen.has(at)) continue
+    seen.add(at)
+    const found = await fetchContractErrorAbi(ctx.chainId, at, ctx.fetchImpl ?? fetch)
+    if (!found) continue
+    const decoded = decodeRevert(revert.data, found.abi)
+    if (decoded.kind === 'error') return { ...decoded, source: 'contract', from: found.from }
+  }
+  return revert
 }

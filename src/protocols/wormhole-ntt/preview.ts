@@ -7,7 +7,7 @@
  */
 import { encodeFunctionData, type Hex } from 'viem'
 import type { ReadClient } from '../../core/client'
-import { decodeRevert, formatRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
+import { decodeRevert, enrichRevert, formatRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
 import { nttManagerAbi } from './abi'
 import { assembleNttTransferArgs, nttSelfCheck, type NttPlan, type NttSelfCheck } from './plan'
 
@@ -26,7 +26,7 @@ export function encodeNttTransfer(plan: NttPlan): Hex {
   return encodeFunctionData({ abi: nttManagerAbi, functionName: 'transfer', args: [a[0], a[1], a[2], a[3], a[4], a[5]] })
 }
 
-export async function previewNttTransfer(client: ReadClient, plan: NttPlan): Promise<NttPreview> {
+export async function previewNttTransfer(client: ReadClient, plan: NttPlan, chainId?: number): Promise<NttPreview> {
   const selfCheck = nttSelfCheck(plan, encodeNttTransfer(plan))
   const a = assembleNttTransferArgs(plan)
 
@@ -48,7 +48,8 @@ export async function previewNttTransfer(client: ReadClient, plan: NttPlan): Pro
       const reason = (e instanceof Error ? e.message : String(e)).split('\n')[0]?.slice(0, 200) ?? ''
       return { simulation: { ok: false, reason }, selfCheck, gasCostWei: undefined, rpcUnavailable: reason }
     }
-    const revert = decodeRevert(data)
+    const revert =
+      chainId === undefined ? decodeRevert(data) : await enrichRevert(decodeRevert(data), { chainId, candidates: [plan.manager, plan.token] })
     return { simulation: { ok: false, reason: formatRevert(revert) }, selfCheck, gasCostWei: undefined, revert }
   }
 
