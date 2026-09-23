@@ -12,9 +12,10 @@ const THEME_GLYPH: Record<Theme, string> = { dark: '☾', light: '☀', system: 
 const NEXT_THEME: Record<Theme, Theme> = { dark: 'light', light: 'system', system: 'dark' }
 
 /**
- * One header for every tab: the protocol tabs, then the shared controls. One wallet slot —
- * the connector follows the source chain's VM (RainbowKit for EVM, wallet-adapter for Solana).
- * Everything here is 40px tall so tabs, icons and the wallet button share one baseline.
+ * One header for every tab: the wordmark (which restarts the app), the protocol tabs, then the
+ * shared controls. One wallet slot — the connector follows the source chain's VM (RainbowKit for
+ * EVM, wallet-adapter for Solana). Everything here is 40px tall so tabs, icons and the wallet
+ * button share one baseline.
  */
 export function Header({
   tab,
@@ -22,6 +23,7 @@ export function Header({
   theme,
   onTheme,
   onSettings,
+  onReload,
   srcVm,
 }: {
   tab: TabSlug
@@ -29,12 +31,22 @@ export function Header({
   theme: Theme
   onTheme: (t: Theme) => void
   onSettings: () => void
+  /** The wordmark restarts the app: the veil comes back and the page reloads behind it. */
+  onReload: () => void
   srcVm: 'evm' | 'svm'
 }) {
   const d = useDict()
   return (
     <header className="flex w-full items-center gap-6 border-b border-line px-6 py-3">
-      <span className="text-[22px] font-black tracking-tight text-ink">{d.app.title}</span>
+      <button
+        type="button"
+        onClick={onReload}
+        title={d.gate.reload}
+        aria-label={d.gate.reload}
+        className="-mx-1.5 rounded-lg px-1.5 text-[22px] font-black tracking-tight text-ink transition hover:text-muted outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+      >
+        {d.app.title}
+      </button>
       <LinkTabs
         value={tab}
         onSelect={onTab}

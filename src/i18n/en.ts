@@ -5,6 +5,10 @@ export const en = {
     domainNotice: 'Canonical domain:',
     wip: 'Work in progress',
   },
+  gate: {
+    start: 'Start bridging',
+    reload: 'Start over — reloads the page',
+  },
   tabs: {
     oft: 'OFT (LayerZero)',
     ntt: 'Wormhole NTT',

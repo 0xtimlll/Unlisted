@@ -95,3 +95,80 @@ input.amount::placeholder {
 :root {
   --rk-radii-modal: 20px;
 }
+
+/*
+ * The entry veil (ui/components/Gate.tsx). `backdrop-filter` blurs what is already painted
+ * underneath, so the app itself is never filtered or transformed — its sticky column and its
+ * portals behave the same before and after the veil is gone.
+ */
+.gate {
+  animation: gate-fade 320ms ease-out both;
+}
+
+.gate-glass {
+  /* Matte, not milky: a page-coloured wash, denser in the middle where the card sits. */
+  background:
+    radial-gradient(58% 52% at 50% 44%, color-mix(in srgb, var(--color-page) 62%, transparent), transparent 74%),
+    color-mix(in srgb, var(--color-page) 58%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(135%);
+  backdrop-filter: blur(28px) saturate(135%);
+  animation: gate-frost 520ms ease-out both;
+}
+
+.gate-card {
+  animation: gate-rise 560ms cubic-bezier(0.16, 0.84, 0.44, 1) both;
+}
+
+.gate.gate-leaving {
+  pointer-events: none;
+  animation: gate-leave 360ms ease-in both;
+}
+
+.gate.gate-leaving .gate-card {
+  animation: gate-card-leave 300ms ease-in both;
+}
+
+@keyframes gate-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The blur ramps in instead of snapping on — the app is legible for a moment, then it is glass. */
+@keyframes gate-frost {
+  from {
+    -webkit-backdrop-filter: blur(0) saturate(100%);
+    backdrop-filter: blur(0) saturate(100%);
+  }
+}
+
+@keyframes gate-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+}
+
+@keyframes gate-leave {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes gate-card-leave {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(1.03);
+  }
+}
+
+/* Same veil, no motion: it is simply there and then gone (Gate skips its waits to match). */
+@media (prefers-reduced-motion: reduce) {
+  .gate,
+  .gate-glass,
+  .gate-card,
+  .gate.gate-leaving,
+  .gate.gate-leaving .gate-card {
+    animation-duration: 1ms;
+  }
+}
