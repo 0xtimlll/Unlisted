@@ -12,6 +12,13 @@
  */
 import type { ChainKey } from '../../core/chains.ts'
 
+/**
+ * Wormhole's explorer API: the official NTT token list and delivery status come from here.
+ * Declared in this file because scripts/gen-headers.mjs loads it with plain Node to build the
+ * Content-Security-Policy, so it must stay free of any runtime import.
+ */
+export const WORMHOLESCAN_API = 'https://api.wormholescan.io'
+
 export type WormholeChainConfig = {
   /** Wormhole chain id (uint16) — NOT an EVM chain id and NOT a LayerZero eid. */
   wormholeChainId: number

@@ -17,7 +17,13 @@ const isTx = (v: unknown): v is string => typeof v === 'string' && (/^0x[0-9a-fA
 
 export type HistoryEntry = {
   srcChain: ChainKey
+  /**
+   * LayerZero's endpoint id. Only LayerZero numbers chains this way, so protocols that do not
+   * use eids write 0 here and record `dstChain` instead.
+   */
   dstEid: number
+  /** The destination, for protocols that have no LayerZero eid (NTT, CCIP). */
+  dstChain?: ChainKey
   /**
    * Which bridge carried it. Entries written before protocols existed have none; they are all
    * LayerZero OFT, and `entryProtocol()` says so — the field is never invented on disk.
@@ -80,11 +86,12 @@ export function sanitize(raw: unknown): Stored {
   if (Array.isArray(r['history'])) {
     for (const e of r['history'] as unknown[]) {
       if (e && typeof e === 'object') {
-        const { srcChain, dstEid, protocol, oft, txHash, at } = e as Record<string, unknown>
+        const { srcChain, dstEid, dstChain, protocol, oft, txHash, at } = e as Record<string, unknown>
         if (isKey(srcChain) && typeof dstEid === 'number' && isAccount(oft) && isTx(txHash) && typeof at === 'number') {
           const status = (e as Record<string, unknown>)['status']
           out.history.push({
             srcChain, dstEid, oft, txHash, at,
+            ...(isKey(dstChain) ? { dstChain } : {}),
             ...(isProtocolId(protocol) ? { protocol } : {}),
             ...(status === 'delivered' || status === 'failed' ? { status } : {}),
           })

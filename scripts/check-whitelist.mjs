@@ -15,6 +15,18 @@ const ROOT = new URL('..', import.meta.url).pathname
 const SRC = join(ROOT, 'src')
 const WHITELIST = new Set(['approve', 'send'])
 
+/**
+ * Writes allowed only in named places. `transfer` is an NttManager call
+ * (evm/src/interfaces/INttManager.sol); it shares its name with ERC-20's `transfer`, so it is
+ * confined to the NTT protocol module plus the one screen that submits it, AND src/core/abi.ts is
+ * checked below for never declaring a `transfer` of its own. Together that means no code path in
+ * this app can ever move tokens with a plain ERC-20 transfer.
+ */
+const SCOPED_WRITES = { transfer: /^src\/(protocols\/wormhole-ntt\/|ui\/NttApp\.tsx$)/ }
+
+const writeAllowed = (name, rel) => WHITELIST.has(name) || (SCOPED_WRITES[name]?.test(rel) ?? false)
+const writeName = (name) => (SCOPED_WRITES[name] ? `${name} (only in ${SCOPED_WRITES[name].source})` : name)
+
 // Any of these anywhere in src/ is a bug.
 const FORBIDDEN = [
   /\beval\s*\(/,
@@ -99,7 +111,7 @@ for (const file of walk(SRC)) {
       errors.push(`${rel}:${lineNo}: ${m[1]} without a literal functionName nearby`)
     }
     for (const n of names) {
-      if (!WHITELIST.has(n)) errors.push(`${rel}:${lineNo}: ${m[1]} with non-whitelisted functionName "${n}"`)
+      if (!writeAllowed(n, rel)) errors.push(`${rel}:${lineNo}: ${m[1]} with non-whitelisted functionName "${writeName(n)}"`)
     }
   }
 
@@ -117,8 +129,15 @@ for (const file of walk(SRC)) {
       'oAppVersion',     // IOAppCore: "is this a LayerZero app at all?"
       'getSendLibrary',  // IMessageLibManager: which send library serves (oapp, dstEid)
       'getUlnConfig',    // UlnBase: how many DVNs that route requires (informational)
+      // Wormhole NTT (task 5). All view/pure — see src/protocols/wormhole-ntt/abi.ts for sources.
+      'chainId', 'getMode', 'getThreshold', 'getPeer', 'tokenDecimals',
+      'getCurrentOutboundCapacity', 'getCurrentInboundCapacity', 'getTransceivers', 'quoteDeliveryPrice',
+      'getTransceiverType', 'getNttManagerToken', 'wormhole', 'getWormholePeer',
+      'isWormholeRelayingEnabled', 'isSpecialRelayingEnabled', 'encodeWormholeTransceiverInstruction',
+      // The token-side anchor that lets an NttManager become an approve spender at all.
+      'minter', 'MINTER_ROLE', 'hasRole',
     ])
-    if (!WHITELIST.has(n) && !KNOWN_READS.has(n)) {
+    if (!writeAllowed(n, rel) && !KNOWN_READS.has(n)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
     }
   }
@@ -147,6 +166,15 @@ for (const file of walk(SRC)) {
   }
 }
 
+// `transfer` is only safe as a scoped write because the shared ERC-20 ABI has no such entry:
+// if one were ever added, an approve-style call site could quietly move tokens instead.
+{
+  const abi = readFileSync(join(SRC, 'core/abi.ts'), 'utf8')
+  if (/function\s+transfer\s*\(/.test(abi)) {
+    errors.push('src/core/abi.ts: declares a `transfer` function — the shared ERC-20 ABI must never have one')
+  }
+}
+
 if (svmSubmits !== 1) errors.push(`${SVM_FILE}: expected exactly one Solana submit call (builder.send(umi)), found ${svmSubmits}`)
 if (svmSendCalls !== 1) errors.push(`${SVM_FILE}: expected exactly one oft.send( call, found ${svmSendCalls}`)
 
@@ -155,4 +183,7 @@ if (errors.length) {
   for (const e of errors) console.error('  ' + e)
   process.exit(1)
 }
-console.log(`check-whitelist: ok (EVM: only approve/send may be written; Solana: one oft.send + one submit in ${SVM_FILE})`)
+console.log(
+  'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer inside ' +
+    `src/protocols/wormhole-ntt/; Solana: one oft.send + one submit in ${SVM_FILE})`,
+)

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { byEid, byKey } from '@/core/chains'
 import { PROTOCOL_IDS, type ProtocolId } from '@/core/protocols'
 import { scanMessageUrl } from '@/core/track'
+import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { protocolBadge, useDict } from '@/i18n'
 import { entryProtocol, filterHistory, type HistoryEntry, type HistoryFilter } from '../storage'
 import { ChainIcon } from './ChainIcon'
@@ -54,7 +55,8 @@ export function History({ entries, onClear, onTrack }: { entries: HistoryEntry[]
 function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: HistoryEntry) => void }) {
   const d = useDict()
   const src = byKey(e.srcChain)
-  const dst = byEid(e.dstEid)
+  // LayerZero records an eid; the other protocols record the chain itself.
+  const dst = e.dstChain ? byKey(e.dstChain) : byEid(e.dstEid)
   const protocol = entryProtocol(e)
   return (
     <li className="flex items-center gap-4 px-4 py-2.5 text-sm">
@@ -78,10 +80,14 @@ function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: H
       <a href={src.explorerTxUrl + e.txHash} target="_blank" rel="noopener noreferrer" className="mono shrink-0 text-xs text-accent-ink hover:underline">
         {e.txHash.slice(0, 8)}…
       </a>
-      {/* Only LayerZero transfers have a LayerZero Scan page; the other protocols get theirs with their stage. */}
+      {/* Each protocol has its own explorer for the message, not just the transaction. */}
       {protocol === 'lz-oft' ? (
         <a href={scanMessageUrl(e.txHash)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs text-accent-ink hover:underline">
           lzscan ↗
+        </a>
+      ) : protocol === 'wormhole-ntt' && /^0x[0-9a-fA-F]{64}$/.test(e.txHash) ? (
+        <a href={wormholescanTxUrl(e.txHash)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs text-accent-ink hover:underline">
+          wormholescan ↗
         </a>
       ) : null}
     </li>

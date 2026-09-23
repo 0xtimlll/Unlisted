@@ -161,12 +161,12 @@ describe('verdicts', () => {
     expect(needsChoice(rs)).toBe(true)
   })
 
-  it('a protocol we recognise but have not built says so and offers its tab', () => {
+  it('a protocol we have built hands over to its tab', () => {
     const sent = makeLog(ROUTER, nttTransferSentV1Abi as Abi, 'TransferSent', {
       recipient: pad(WALLET, { size: 32 }), refundAddress: pad(WALLET, { size: 32 }), amount: 7n, fee: 0n, recipientChain: 30, msgSequence: 1n,
     })
     const [r] = analyzeTx({ logs: [sent] }, { chain: 'ethereum' })
-    expect(r).toMatchObject({ verdict: 'cannot_bridge', code: 'protocol_not_implemented', protocol: 'wormhole-ntt' })
+    expect(r).toMatchObject({ verdict: 'can_bridge', code: 'switch_protocol', protocol: 'wormhole-ntt' })
     expect(r?.action).toEqual({ kind: 'open_tab', protocol: 'wormhole-ntt' })
     expect(r?.target).toMatchObject({ kind: 'ntt-manager', dstChain: 'base' })
   })

@@ -32,10 +32,68 @@ export const nttTransferSentDigestAbi = parseAbi(['event TransferSent(bytes32 in
 
 export const nttRedeemedAbi = parseAbi(['event TransferRedeemed(bytes32 indexed digest)'])
 
-/** Reads used to describe an NTT manager found in a transaction. */
+/**
+ * NttManager reads and the single write. Signatures from the contracts that declare them:
+ *   token, chainId, getMode, getThreshold, quoteDeliveryPrice   evm/src/interfaces/IManagerBase.sol
+ *   getPeer, NttManagerPeer, transfer                           evm/src/interfaces/INttManager.sol
+ *   getCurrentOutboundCapacity, getCurrentInboundCapacity       evm/src/interfaces/IRateLimiter.sol
+ *   getTransceivers                                             evm/src/NttManager/TransceiverRegistry.sol
+ */
 export const nttManagerAbi = parseAbi([
+  'struct NttManagerPeer { bytes32 peerAddress; uint8 tokenDecimals; }',
+
   'function token() view returns (address)',
+  'function chainId() view returns (uint16)',
   'function getMode() view returns (uint8)',
+  'function getThreshold() view returns (uint8)',
+  'function getPeer(uint16 chainId_) view returns (NttManagerPeer)',
+  'function tokenDecimals() view returns (uint8)',
+  'function getCurrentOutboundCapacity() view returns (uint256)',
+  'function getCurrentInboundCapacity(uint16 chainId_) view returns (uint256)',
+  'function getTransceivers() view returns (address[])',
+  'function quoteDeliveryPrice(uint16 recipientChain, bytes transceiverInstructions) view returns (uint256[], uint256)',
+
+  // The only state-changing call this protocol module may make. shouldQueue is always false:
+  // a transfer over the rate limit must revert, never sit in a queue the user cannot see.
+  'function transfer(uint256 amount, uint16 recipientChain, bytes32 recipient, bytes32 refundAddress, bool shouldQueue, bytes transceiverInstructions) payable returns (uint64)',
+])
+
+/**
+ * Transceiver reads.
+ *   getTransceiverType, getNttManagerToken   evm/src/interfaces/ITransceiver.sol
+ *   encodeWormholeTransceiverInstruction,
+ *   WormholeTransceiverInstruction           evm/src/interfaces/IWormholeTransceiver.sol
+ *   wormhole, isWormholeRelayingEnabled,
+ *   isSpecialRelayingEnabled, getWormholePeer
+ *                                            evm/src/Transceiver/WormholeTransceiver/
+ *                                            WormholeTransceiverState.sol (v1.1.0+evm — the shape
+ *                                            deployed on mainnet; newer builds may drop the
+ *                                            relaying getters, which we treat as "cannot confirm")
+ */
+export const wormholeTransceiverAbi = parseAbi([
+  'struct WormholeTransceiverInstruction { bool shouldSkipRelayerSend; }',
+
+  'function getTransceiverType() view returns (string)',
+  'function getNttManagerToken() view returns (address)',
+  'function wormhole() view returns (address)',
+  'function getWormholePeer(uint16 chainId_) view returns (bytes32)',
+  'function isWormholeRelayingEnabled(uint16 chainId_) view returns (bool)',
+  'function isSpecialRelayingEnabled(uint16 chainId_) view returns (bool)',
+  'function encodeWormholeTransceiverInstruction(WormholeTransceiverInstruction instruction) pure returns (bytes)',
+])
+
+/** The transceiver type string the official Wormhole transceiver reports. */
+export const WORMHOLE_TRANSCEIVER_TYPE = 'wormhole'
+
+/**
+ * The token-side anchor (§the manager must be named by the TOKEN, not only name the token).
+ * `minter()` is what the reference NTT token exposes; AccessControl tokens answer
+ * `hasRole(MINTER_ROLE, manager)` instead, with the role read from the token itself.
+ */
+export const nttTokenAnchorAbi = parseAbi([
+  'function minter() view returns (address)',
+  'function MINTER_ROLE() view returns (bytes32)',
+  'function hasRole(bytes32 role, address account) view returns (bool)',
 ])
 
 const topic0 = (abi: readonly unknown[], eventName: string): Hex => {

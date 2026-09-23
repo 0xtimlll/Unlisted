@@ -9,6 +9,7 @@ import type { AnalysisTarget } from '@/core/analysis/result'
 import { protocolOfTab, tabOfPath, tabOfProtocol, tabPath, type ProtocolId, type TabSlug } from '@/core/protocols'
 import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
+import { NttApp } from './NttApp'
 import { ComingSoon } from './components/Placeholder'
 import { entryProtocol, load, save, type HistoryEntry, type Stored, type Theme } from './storage'
 import { saveLastTab } from './tabs'
@@ -117,6 +118,8 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                     goTab(tabOfProtocol(protocol))
                   }}
                 />
+              ) : tab === 'ntt' ? (
+                <NttApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} handoff={handoff} />
               ) : (
                 <ComingSoon protocol={protocol} handoff={handoff} />
               )}

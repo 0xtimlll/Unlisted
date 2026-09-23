@@ -86,15 +86,14 @@ describe('analysis on real transactions', () => {
     expect(found.status).toBe('not_found')
   })
 
-  it('recognises a real Wormhole NTT transfer and points at its tab', async () => {
+  it('recognises a real Wormhole NTT transfer and hands it to its tab', async () => {
     const tx = await fetchEvmTx(makeReadClient(evmByKey('ethereum')), NTT_TO_BSC)
     expect(tx).not.toBeNull()
     const [r] = analyzeTx(tx!, { chain: 'ethereum', selected: 'ethereum' })
     expect(r?.protocol).toBe('wormhole-ntt')
     expect(r?.action).toEqual({ kind: 'open_tab', protocol: 'wormhole-ntt' })
     expect(r?.target?.dstChain).toBe('bsc')
-    // Not a verdict we can act on yet — the NTT bridge is not built.
-    expect(r?.code).toBe('protocol_not_implemented')
+    expect(r?.code).toBe('switch_protocol')
   })
 
   it('reads the destination out of a second NTT transfer', async () => {

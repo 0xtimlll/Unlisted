@@ -46,7 +46,8 @@ describe('protocols', () => {
     expect(TAB_SLUGS.map(tabPath)).toEqual(['/oft', '/ntt', '/ccip'])
   })
 
-  it('only the LayerZero bridge is implemented so far', () => {
-    expect([...IMPLEMENTED]).toEqual(['lz-oft'])
+  it('tracks which bridges are actually built', () => {
+    expect([...IMPLEMENTED]).toEqual(['lz-oft', 'wormhole-ntt'])
+    expect(IMPLEMENTED.has('ccip')).toBe(false)
   })
 })

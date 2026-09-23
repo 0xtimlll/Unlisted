@@ -56,4 +56,4 @@ export function tabOfPath(pathname: string): TabSlug | undefined {
 }
 
 /** Protocols whose bridge is implemented. Detection may still recognise the others. */
-export const IMPLEMENTED: ReadonlySet<ProtocolId> = new Set<ProtocolId>(['lz-oft'])
+export const IMPLEMENTED: ReadonlySet<ProtocolId> = new Set<ProtocolId>(['lz-oft', 'wormhole-ntt'])

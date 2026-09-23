@@ -47,6 +47,30 @@ Any OFT (LayerZero V2) deployed on these chains works, in both directions betwee
 
 Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
+## Wormhole NTT
+
+The **NTT** tab bridges Wormhole Native Token Transfers between EVM chains. The manager contract is
+the approve spender, so it has to earn that: `verifyNttManager` refuses unless all four of these
+hold, and a check that cannot be completed counts as a refusal.
+
+1. The token is in [Wormhole's official NTT token list](https://api.wormholescan.io/api/v1/native-token-transfer/token-list)
+   for this network, and the manager names exactly that address.
+2. **The token vouches for the manager.** On at least one side of the pair the listed token names it
+   as its minter — `minter()`, or `hasRole(MINTER_ROLE, manager)` with the role read from the token.
+   A locking hub mints nothing, so it is confirmed through the burning side of the pair.
+3. Peers point at each other in both directions, the destination side read on its own RPC.
+4. A Wormhole transceiver that reports the Wormhole type, points at this network's official core
+   bridge, and has automatic relaying enabled — a route that would need a manual redeem is refused.
+
+Wormholescan's decoded transfers are shown as context but are never evidence: `sourceNttManager` is
+written by the manager itself, so a single self-made transfer would launder a fake. Only the token
+can vouch for the manager.
+
+Two more things the contracts decide, not us: an approve is needed in **both** modes, because the
+manager pulls with `transferFrom` before it burns or locks; and the amount is rounded **down** to
+the precision the route carries, because the manager reverts on dust instead of trimming.
+`shouldQueue` is always false — over a rate limit the transfer must revert, not sit in a queue.
+
 ### It also says when the answer is no
 
 If the transaction belongs to a bridge this app does not build — Wormhole NTT, Chainlink CCIP, Wormhole Portal, Axelar, Circle CCTP, Hyperlane, or a network's own bridge — it is named, and you are pointed at that project's own app instead of being told "not an OFT". A LayerZero application that is not an OFT is called out as exactly that. A transaction nobody's RPC could be reached for is reported as an RPC problem, never as a verdict.
@@ -55,7 +79,7 @@ Every event signature, error signature, chain id and selector used for this come
 
 ## Security model
 
-**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign three things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code, and confines the Solana SDK and the single submit call to one file.
+**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign four things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the NttManager `transfer`, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code: it confines the Solana SDK and the single submit call to one file, allows `transfer` only inside the NTT module and the one screen that submits it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
 
 **What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee).
 
@@ -66,7 +90,7 @@ Every event signature, error signature, chain id and selector used for this come
 - For lock/unlock adapters the app shows how much the adapter holds and flags an empty one.
 - Slippage is capped at 5%. Sending to an address other than your own wallet requires an explicit switch and re-typing the address's last characters.
 
-**Nothing leaves your browser** except calls to the chain's RPC and, for tracking, the transaction hash to LayerZero Scan. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
+**Nothing leaves your browser** except calls to the chain's RPC, the transaction hash to LayerZero Scan for tracking, and — in the NTT tab — Wormhole's own explorer for the official token list and delivery status. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
 
 **Auditable.** The footer shows the commit the site was built from and links to it here. Dependencies are pinned to exact versions and audited in CI; the few advisories that do not apply (native-addon or server-only code that never reaches the browser bundle, which CI verifies) are listed with reasons and expiry dates in [`audit-exceptions.json`](audit-exceptions.json). The Solana stack (LayerZero SDK, umi, wallet adapter) is downloaded only when Solana is chosen as the source; a few helper packages the SDK declares but never needs are replaced by tiny stand-ins at build time (see [`shims/`](shims/README.md)) so that no mnemonic or key-derivation code is ever shipped.
 
