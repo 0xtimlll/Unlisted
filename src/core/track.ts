@@ -36,6 +36,9 @@ export type TrackState = {
   /** 0x-hex on EVM chains, a base58 signature on Solana. */
   srcTxHash?: string
   dstTxHash?: string
+  /** The OApp on each side, as the pathway reports it (§Task 1.7). */
+  sender?: string
+  receiver?: string
   /** ISO timestamp from the API. */
   updated?: string
 }
@@ -60,9 +63,20 @@ export function scanApiUrl(txHash: string): string {
   return `${LZ_SCAN_API}/v1/messages/tx/${txPath(txHash)}`
 }
 
+/**
+ * Lookup by message GUID. Path documented at docs.layerzero.network/v2/tools/layerzeroscan/api
+ * ("/messages/guid/{guid}"). Only a well-formed bytes32 ever reaches the URL.
+ */
+export function scanGuidUrl(guid: string): string {
+  if (!isHash(guid)) throw new Error('not a GUID')
+  return `${LZ_SCAN_API}/v1/messages/guid/${guid}`
+}
+
 const isHash = (v: unknown): v is Hash => typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
 /** A Solana transaction signature: 64 bytes in base58 (87–88 chars). */
 const isSolanaSig = (v: unknown): v is string => typeof v === 'string' && /^[1-9A-HJ-NP-Za-km-z]{86,88}$/.test(v)
+/** An EVM address or a Solana base58 key — anything else from the API is dropped. */
+const isAccountish = (v: string): boolean => /^0x[0-9a-fA-F]{40}$/.test(v) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v.slice(0, 256) : undefined)
 
@@ -107,6 +121,10 @@ export function parseScanResponse(json: unknown): TrackState {
   if (isHash(dstHash) || isSolanaSig(dstHash)) out.dstTxHash = dstHash
   const updated = str(m['updated'])
   if (updated) out.updated = updated
+  const sender = str((pathway?.['sender'] as Record<string, unknown> | undefined)?.['address'])
+  if (sender && isAccountish(sender)) out.sender = sender
+  const receiver = str((pathway?.['receiver'] as Record<string, unknown> | undefined)?.['address'])
+  if (receiver && isAccountish(receiver)) out.receiver = receiver
   return out
 }
 
@@ -114,8 +132,17 @@ export type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promis
 
 /** One request. Network / HTTP errors -> no_data (never "failed"). */
 export async function fetchStatus(txHash: string, fetchImpl: FetchLike = fetch): Promise<TrackState> {
+  return fetchScan(scanApiUrl(txHash), fetchImpl)
+}
+
+/** §Task 1.7: the same lookup by message GUID. */
+export async function fetchStatusByGuid(guid: string, fetchImpl: FetchLike = fetch): Promise<TrackState> {
+  return fetchScan(scanGuidUrl(guid), fetchImpl)
+}
+
+async function fetchScan(url: string, fetchImpl: FetchLike): Promise<TrackState> {
   try {
-    const r = await fetchImpl(scanApiUrl(txHash))
+    const r = await fetchImpl(url)
     if (!r.ok) return { phase: 'no_data' }
     return parseScanResponse(await r.json())
   } catch {

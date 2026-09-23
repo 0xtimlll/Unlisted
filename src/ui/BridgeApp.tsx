@@ -6,6 +6,9 @@ import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContr
 import { erc20Abi, oftAbi } from '@/core/abi'
 import { AmountError, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
+import type { AnalysisInput } from '@/core/analysis/input'
+import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
+import type { ProtocolId } from '@/core/protocols'
 import { DecodeTxError } from '@/core/decodeTx'
 import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { tryRecipient, type Recipient } from '@/core/recipient'
@@ -14,18 +17,23 @@ import type { SourceInfo, SuspiciousFlag } from '@/core/types'
 import { planSvmOptions } from '@/core/options'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
-import { useDict, type Dict } from '@/i18n'
+import type { DvnConfig } from '@/core/lz/dvn'
+import { formatRevert, revertMeaning } from '@/core/sim/revert'
+import { fmt, useDict, type Dict } from '@/i18n'
 import { FromBox, ToBox, type DestinationState } from './components/FromTo'
 import { ProtocolBadge } from './components/History'
 import { Panel, TwoColumn } from './components/Layout'
 import { Checks, Cta, Details, type CtaState } from './components/Review'
-import { ContractFacts, TokenStep, type TokenMode } from './components/TokenStep'
+import { Alert } from './components/ui'
+import { ContractFacts, TokenStep } from './components/TokenStep'
+import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
-import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
+import { isUserRejection, shortError, useAllowance, useCheck, useDvn, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
+import { useAnalysis } from './useAnalysis'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -38,8 +46,12 @@ const EMPTY_DEST: DestinationState = {
   extraOptions: '0x',
 }
 
-/** Guards that do not depend on simulation/gas; the check query waits for these. */
-const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15, 17, 18, 19, 20])
+/**
+ * Guards that do not depend on simulation/gas; the check query waits for these.
+ * Guard 10 (allowance) is deliberately NOT here: where the RPC supports eth_simulateV1 the send is
+ * simulated on top of the pending approve, so a real problem shows up before anything is signed.
+ */
+const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 11, 12, 15, 17, 18, 19, 20])
 
 type Sent = { txHash: string; dstEid: number; startedAt: number; srcChain: ChainKey; restored: boolean }
 
@@ -51,6 +63,7 @@ export function BridgeApp({
   setSrcKey,
   trackRequest,
   onTrackConsumed,
+  onOpenTab,
 }: {
   stored: Stored
   setStored: (s: Stored) => void
@@ -59,6 +72,8 @@ export function BridgeApp({
   /** A past transfer the user asked to track from Recent transfers. */
   trackRequest: HistoryEntry | null
   onTrackConsumed: () => void
+  /** The analysis found another protocol: hand the tab and what was found to the shell. */
+  onOpenTab: (protocol: ProtocolId, target: AnalysisTarget | undefined) => void
 }) {
   const d = useDict()
   const { address: wallet, chainId: walletChainId } = useAccount()
@@ -72,8 +87,8 @@ export function BridgeApp({
   const svmSource = src.vm === 'svm'
   const sender: string | undefined = svmSource ? svmWallet.address : wallet
   const [svmPickerOpen, setSvmPickerOpen] = useState(false)
-  const [mode, setMode] = useState<TokenMode>('address')
   const [probeTarget, setProbeTarget] = useState<string | null>(null)
+  const [analysisInput, setAnalysisInput] = useState<AnalysisInput | null>(null)
   const [decodeTarget, setDecodeTarget] = useState<string | null>(null)
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
   const [noGasAccepted, setNoGasAccepted] = useState(false)
@@ -105,6 +120,7 @@ export function BridgeApp({
   const reset = useCallback(() => {
     setProbeTarget(null)
     setDecodeTarget(null)
+    setAnalysisInput(null)
     setDest(EMPTY_DEST)
     setNoGasAccepted(false)
     setPeerBackAccepted(false)
@@ -115,11 +131,76 @@ export function BridgeApp({
 
   const onSrcChange = (k: ChainKey) => {
     setSrcKey(k)
-    setMode('address')
     reset()
   }
 
-  // ---- step 1: probe / decode -------------------------------------------------
+  // ---- step 1: analyse whatever was pasted ------------------------------------
+  const analysis = useAnalysis(analysisInput, srcKey, stored.customRpc)
+  const results = useMemo(() => analysis.data?.results ?? [], [analysis.data])
+  const [chosen, setChosen] = useState(0)
+  const primary = results[chosen] ?? results[0]
+
+  /** Point the form at a contract the analysis found, on its own chain. */
+  const applyTarget = useCallback(
+    (t: AnalysisTarget) => {
+      if (t.chain !== srcKey) setSrcKey(t.chain)
+      setDecodeTarget(null)
+      setProbeTarget(t.address)
+      setDest(t.dstChain ? { ...EMPTY_DEST, dstEid: byKey(t.dstChain).eid } : EMPTY_DEST)
+    },
+    [srcKey, setSrcKey],
+  )
+
+  const onInput = (i: AnalysisInput) => {
+    setTxError('')
+    setProbeTarget(null)
+    setDecodeTarget(null)
+    setAnalysisInput(null)
+    setDest(EMPTY_DEST)
+    setChosen(0)
+    switch (i.kind) {
+      case 'evm_address':
+        setProbeTarget(i.address)
+        return
+      case 'svm_address':
+        // An OFT Store only means anything with Solana as the source.
+        if (srcKey !== 'solana') setSrcKey('solana')
+        setProbeTarget(i.address)
+        return
+      case 'svm_tx':
+        if (srcKey !== 'solana') setSrcKey('solana')
+        setDecodeTarget(i.signature)
+        return
+      default:
+        setAnalysisInput(i)
+    }
+  }
+
+  const onAnalysisAction = (a: AnalysisAction) => {
+    switch (a.kind) {
+      case 'switch_chain':
+        if (primary?.target) applyTarget(primary.target)
+        else setSrcKey(a.chain)
+        return
+      case 'use_address':
+        applyTarget(primary?.target ?? { chain: a.chain, address: a.address, kind: 'oft' })
+        return
+      case 'open_tab':
+        onOpenTab(a.protocol, primary?.target)
+        return
+      default:
+        return
+    }
+  }
+
+  // can_bridge on the chain already selected: fill the form in without another click.
+  const autoTarget = primary?.verdict === 'can_bridge' && primary.target?.chain === srcKey ? primary.target : undefined
+  useEffect(() => {
+    if (autoTarget) applyTarget(autoTarget)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTarget?.address, autoTarget?.chain, autoTarget?.dstChain])
+
+  // ---- step 1b: read the contract ---------------------------------------------
   const probe = useProbe(evmSrc, svmSource ? null : probeTarget, stored.customRpc[src.key])
   const decode = useDecode(evmSrc, svmSource ? null : (decodeTarget as Hash | null), stored.customRpc[src.key])
   const svmProbe = useSvmProbe(svmSource, probeTarget, stored.customRpc['solana'])
@@ -236,6 +317,7 @@ export function BridgeApp({
   const evmTokenBalance = useTokenBalance(evmSrc, info?.vm === 'evm' ? info.token : undefined, wallet)
   const svmTokenBalance = useSvmTokenBalance(info?.vm === 'svm' ? info : undefined, svmWallet.address, stored.customRpc['solana'])
   const allowance = useAllowance(evmSrc, info?.vm === 'evm' && info.approvalRequired ? info.token : undefined, wallet, info?.vm === 'evm' ? info.oft : undefined)
+  const dvn = useDvn(evmSrc, info?.vm === 'evm' ? info.endpoint : undefined, info?.vm === 'evm' ? info.oft : undefined, dest.dstEid)
   const evmNativeBalance = useNativeBalance(evmSrc, wallet)
   const svmNativeBalance = useSvmNativeBalance(svmSource ? svmWallet.address : undefined, stored.customRpc['solana'])
   const tokenBalance = svmSource ? svmTokenBalance.data : evmTokenBalance.data
@@ -272,13 +354,20 @@ export function BridgeApp({
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
-  const evmCheck = useCheck(evmSrc, evmPlan.data, preOk && !svmSource)
+  const pendingApprove =
+    approveIntent && info?.vm === 'evm' ? { token: info.token, spender: approveIntent.spender, amount: approveIntent.amount } : undefined
+  const evmCheck = useCheck(evmSrc, evmPlan.data, preOk && !svmSource, pendingApprove)
   const svmCheck = useSvmCheck(svmCtx.data, svmPlan.data, preOk && svmSource)
   const check = svmSource ? svmCheck : evmCheck
+  // A send that only fails on the allowance, on a node that cannot batch, is not a failed send:
+  // it has not been checked yet. Saying "simulation failed" there would be a lie.
+  const evmData = svmSource ? undefined : evmCheck.data
+  const blockedOnApprove = !!pendingApprove && !!evmData && !evmData.batched && revertMeaning(evmData.revert) === 'needs_approve'
+  const simulation = blockedOnApprove ? undefined : check.data?.simulation
   const fullInput: GuardInput = {
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
-    simulation: check.data?.simulation,
+    simulation,
     selfCheck: check.data?.selfCheck,
   }
   const report = runGuards(fullInput)
@@ -428,9 +517,8 @@ export function BridgeApp({
     <>
       <TokenStep
         chain={src}
-        mode={mode}
-        onMode={setMode}
-        busy={probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
+        onInput={onInput}
+        busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
         recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
         info={info}
         flags={flags}
@@ -439,16 +527,6 @@ export function BridgeApp({
         decodedFailed={svmDecode.data?.observed.failed ?? false}
         droppedOptions={decodeData?.droppedOptions ?? []}
         optionsMalformed={decodeData?.optionsMalformed ?? false}
-        onProbe={(a) => {
-          setDecodeTarget(null)
-          setDest(EMPTY_DEST)
-          setProbeTarget(a)
-        }}
-        onDecode={(h) => {
-          setProbeTarget(null)
-          setDest(EMPTY_DEST)
-          setDecodeTarget(h)
-        }}
       />
 
       <FromBox
@@ -492,33 +570,70 @@ export function BridgeApp({
     </>
   )
 
-  // The panel is the live preview: what comes out, what it costs, and every check, without scrolling.
+  const unreachable = analysis.data?.failed ?? []
+  const analysisError = analysis.error ? describeError(d, analysis.error) : ''
+
+  // The panel is the live preview: the verdict first, then what comes out, what it costs and
+  // every check — all without scrolling.
   const right = (
     <Panel title={d.ui.preview} badge={<ProtocolBadge id="lz-oft" />}>
       {sent ? (
         <p className="text-sm text-muted">{d.ui.previewTracking}</p>
-      ) : info ? (
-        <div className="space-y-4">
-          <PanelSection title={d.ui.section_contract}>
-            <ContractFacts chain={src} info={info} />
-          </PanelSection>
-          <PanelSection title={d.ui.section_quote}>
-            <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDest.data?.info} flat />
-          </PanelSection>
-          <Checks
-            report={report}
-            noGasAccepted={noGasAccepted}
-            onNoGasAccepted={setNoGasAccepted}
-            peerBackAccepted={peerBackAccepted}
-            onPeerBackAccepted={setPeerBackAccepted}
-            pdaAccepted={pdaAccepted}
-            onPdaAccepted={setPdaAccepted}
-            show={!!planData}
-            defaultOpen
-          />
-        </div>
       ) : (
-        <p className="text-sm text-muted">{d.ui.previewEmpty}</p>
+        <div className="space-y-4">
+          {results.length > 1 ? (
+            <div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{fmt(d.analysis.severalTitle, { n: results.length })}</div>
+              <p className="mb-2 text-xs text-muted">{d.analysis.severalHint}</p>
+              <div className="flex flex-wrap gap-1">
+                {results.map((r, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setChosen(i)}
+                    className={`h-8 rounded-lg px-3 text-xs font-semibold ${i === chosen ? 'bg-accent text-page' : 'bg-surface-2 text-ink hover:bg-line'}`}
+                  >
+                    {i + 1}. {r.protocol ? r.protocol : d.analysis.title_unknown}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {primary ? <VerdictCard result={primary} onAction={onAnalysisAction} /> : null}
+
+          {unreachable.length > 0 ? (
+            <Alert kind="warn">{fmt(d.analysis.unreachable, { chains: unreachable.map((f) => byKey(f.chain).name).join(', ') })}</Alert>
+          ) : null}
+
+          {analysisError ? <Alert kind="error">{analysisError}</Alert> : null}
+
+          {info ? (
+            <>
+              <PanelSection title={d.ui.section_contract}>
+                <ContractFacts chain={src} info={info} />
+              </PanelSection>
+              <PanelSection title={d.ui.section_quote}>
+                <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDest.data?.info} flat />
+              </PanelSection>
+              <Checks
+                report={report}
+                noGasAccepted={noGasAccepted}
+                onNoGasAccepted={setNoGasAccepted}
+                peerBackAccepted={peerBackAccepted}
+                onPeerBackAccepted={setPeerBackAccepted}
+                pdaAccepted={pdaAccepted}
+                onPdaAccepted={setPdaAccepted}
+                show={!!planData}
+                defaultOpen
+              />
+              <SimulationNote check={evmData} />
+              <DvnNote config={dvn.data} />
+            </>
+          ) : primary ? null : (
+            <p className="text-sm text-muted">{d.ui.previewEmpty}</p>
+          )}
+        </div>
       )}
     </Panel>
   )
@@ -536,6 +651,40 @@ export function BridgeApp({
         />
       ) : null}
     </>
+  )
+}
+
+/** §Task 4, informational: how many parties attest to messages on this route. Never blocks. */
+function DvnNote({ config }: { config: DvnConfig | undefined }) {
+  const d = useDict()
+  if (!config) return null
+  const optional = config.optionalThreshold > 0 ? fmt(d.analysis.dvnOptional, { n: config.optionalThreshold, total: config.optionalDVNs.length }) : ''
+  return (
+    <div className="text-xs text-muted">
+      {fmt(d.analysis.dvn, { required: config.requiredDVNs.length, optional, confirmations: config.confirmations.toString() })}
+      {config.weak ? <div className="mt-1 text-warn">⚠ {d.analysis.dvnWeak}</div> : null}
+    </div>
+  )
+}
+
+/** §Task 4: the human sentence behind a failed simulation, with the raw line underneath. */
+function SimulationNote({ check }: { check: CheckResult | undefined }) {
+  const d = useDict()
+  if (!check) return null
+  if (check.rpcUnavailable) return <Alert kind="warn">{d.revert.rpcUnavailable}</Alert>
+  const r = check.revert
+  if (!r) return check.batched ? <p className="text-xs text-muted">{d.revert.batched}</p> : null
+  const meaning = revertMeaning(r) ?? 'generic'
+  return (
+    <Alert kind="error">
+      <div className="font-semibold">{d.revert[meaning]}</div>
+      <div className="mono mt-1 text-xs opacity-80">{formatRevert(r)}</div>
+      {r.kind === 'unknown' ? (
+        <a href={r.lookupUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs underline">
+          {d.analysis.lookupSelector}
+        </a>
+      ) : null}
+    </Alert>
   )
 }
 

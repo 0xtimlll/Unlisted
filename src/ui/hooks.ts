@@ -7,7 +7,10 @@ import { erc20Abi, oftAbi } from '@/core/abi'
 import { byEid, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
 import type { ReadClient } from '@/core/client'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
+import { readDvnConfig } from '@/core/lz/dvn'
 import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
+import { simulateSend, type SimOutcome } from '@/core/sim/preview'
+import type { DecodedRevert } from '@/core/sim/revert'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
 import type { Recipient } from '@/core/recipient'
 import type { SvmOftInfo } from '@/core/svm/discover'
@@ -126,51 +129,75 @@ export type CheckResult = {
   simulation: SimulationResult
   selfCheck: SelfCheckResult
   gasCostWei: bigint | undefined
+  /** The decoded revert behind a failed simulation, for the human-readable reason (§Task 4). */
+  revert?: DecodedRevert
+  /** approve and send were simulated together (eth_simulateV1). */
+  batched: boolean
+  /** The RPC could not answer: the send is NOT known to fail. */
+  rpcUnavailable?: string
 }
 
+/** An approve the send still needs; passing it lets the send be simulated on top of it. */
+export type PendingApprove = { token: Address; spender: Address; amount: bigint }
+
 /**
- * §6.13 + §6.14: simulate `send` and decode our own calldata back. Only runs once the
- * pure guards (chain, peer, balance, allowance…) already pass, so failures here are real.
+ * §6.13 + §6.14 + §Task 4: simulate `send` (over a pending approve where the node supports
+ * eth_simulateV1) and decode our own calldata back.
  */
-export function useCheck(src: EvmChainDef | undefined, plan: EvmSendPlan | undefined, ready: boolean) {
+export function useCheck(src: EvmChainDef | undefined, plan: EvmSendPlan | undefined, ready: boolean, approve?: PendingApprove | undefined) {
   const client = useReadClient(src)
   return useQuery({
-    queryKey: ['check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions],
+    queryKey: [
+      'check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions,
+      approve ? `${approve.token}:${approve.spender}:${approve.amount}` : '',
+    ],
     queryFn: async (): Promise<CheckResult> => {
       const args = assembleSendArgs(plan!)
       const calldata = encodeFunctionData({ abi: oftAbi, functionName: 'send', args: [args[0], args[1], args[2]] })
       const sc = selfCheck(plan!, calldata)
-      let simulation: SimulationResult
-      let gasCostWei: bigint | undefined
-      try {
-        await client!.simulateContract({
-          address: plan!.oft,
-          abi: oftAbi,
-          functionName: 'send',
-          args: [args[0], args[1], args[2]],
-          value: plan!.value,
-          account: plan!.sender,
-        })
-        simulation = { ok: true }
-        const [gas, price] = await Promise.all([
-          client!.estimateContractGas({
-            address: plan!.oft,
-            abi: oftAbi,
-            functionName: 'send',
-            args: [args[0], args[1], args[2]],
-            value: plan!.value,
-            account: plan!.sender,
-          }),
-          client!.getGasPrice(),
-        ])
-        gasCostWei = (gas * price * 12n) / 10n // +20% headroom
-      } catch (e) {
-        simulation = { ok: false, reason: shortError(e) }
+      const outcome: SimOutcome = await simulateSend(client!, {
+        account: plan!.sender,
+        oft: plan!.oft,
+        sendArgs: args,
+        value: plan!.value,
+        ...(approve ? { approve } : {}),
+      })
+
+      if (outcome.ok === 'unknown') {
+        // Never turn an unreachable RPC into "this transaction will fail".
+        return { simulation: { ok: false, reason: outcome.reason }, selfCheck: sc, gasCostWei: undefined, batched: false, rpcUnavailable: outcome.reason }
       }
-      return { simulation, selfCheck: sc, gasCostWei }
+      if (outcome.ok === false) {
+        return { simulation: { ok: false, reason: outcome.reason }, selfCheck: sc, gasCostWei: undefined, revert: outcome.revert, batched: outcome.batched }
+      }
+      let gasCostWei: bigint | undefined
+      if (outcome.gas !== undefined) {
+        try {
+          const price = await client!.getGasPrice()
+          gasCostWei = (outcome.gas * price * 12n) / 10n // +20% headroom
+        } catch {
+          /* a missing gas price only leaves the native-balance check pending */
+        }
+      }
+      return { simulation: { ok: true }, selfCheck: sc, gasCostWei, batched: outcome.batched }
     },
     enabled: !!client && !!plan && ready,
     staleTime: 20_000,
+    retry: false,
+  })
+}
+
+/**
+ * §Task 4, informational: how many DVNs the project requires for this route. Never blocks a send;
+ * a single-DVN route is simply said out loud.
+ */
+export function useDvn(chain: EvmChainDef | undefined, endpoint: Address | undefined, oapp: Address | undefined, dstEid: number | undefined) {
+  const client = useReadClient(chain)
+  return useQuery({
+    queryKey: ['dvn', chain?.key, endpoint, oapp, dstEid],
+    queryFn: () => readDvnConfig(client!, endpoint!, oapp!, dstEid!),
+    enabled: !!client && !!endpoint && !!oapp && dstEid !== undefined,
+    staleTime: 10 * 60_000,
     retry: false,
   })
 }

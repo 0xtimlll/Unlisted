@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { WagmiProvider } from 'wagmi'
 import type { ChainKey } from '@/core/chains'
-import { protocolOfTab, tabOfPath, tabOfProtocol, tabPath, type TabSlug } from '@/core/protocols'
+import type { AnalysisTarget } from '@/core/analysis/result'
+import { protocolOfTab, tabOfPath, tabOfProtocol, tabPath, type ProtocolId, type TabSlug } from '@/core/protocols'
 import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
 import { ComingSoon } from './components/Placeholder'
@@ -34,6 +35,8 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   const [srcKey, setSrcKey] = useState<ChainKey>('ethereum')
   const [tab, setTabState] = useState<TabSlug>(initialTab)
   const [trackRequest, setTrackRequest] = useState<HistoryEntry | null>(null)
+  /** What the analysis found for another protocol, carried across when its tab opens. */
+  const [handoff, setHandoff] = useState<AnalysisTarget | null>(null)
   const setStored = (s: Stored) => {
     setStoredState(s)
     save(s)
@@ -109,9 +112,13 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                   setSrcKey={setSrcKey}
                   trackRequest={trackRequest}
                   onTrackConsumed={() => setTrackRequest(null)}
+                  onOpenTab={(protocol: ProtocolId, target: AnalysisTarget | undefined) => {
+                    setHandoff(target ?? null)
+                    goTab(tabOfProtocol(protocol))
+                  }}
                 />
               ) : (
-                <ComingSoon protocol={protocol} />
+                <ComingSoon protocol={protocol} handoff={handoff} />
               )}
             </AppShell>
           </SvmWalletHost>

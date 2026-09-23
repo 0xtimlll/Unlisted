@@ -43,7 +43,9 @@ const FORBIDDEN = [
 
 // Write/simulate CALL sites: every occurrence must sit next to a whitelisted functionName.
 // (The hook `useWriteContract()` itself carries no functionName; the `.writeContract({...})` call does.)
-const WRITE_CALL = /\b(writeContract|writeContractAsync|simulateContract|estimateContractGas|sendCalls)\s*\(/g
+// `simulateCalls` (eth_simulateV1) is read-only, but it takes a LIST of calls, so it is held to the
+// same rule: the batch it builds may contain nothing but approve and send.
+const WRITE_CALL = /\b(writeContract|writeContractAsync|simulateContract|estimateContractGas|sendCalls|simulateCalls)\s*\(/g
 const FUNCTION_NAME = /functionName\s*:\s*['"]([A-Za-z0-9_]+)['"]/g
 
 // Solana: the SDK entry points and the single submit call are confined to one file.
@@ -111,6 +113,10 @@ for (const file of walk(SRC)) {
       'quoteSend', 'quoteOFT', 'token', 'approvalRequired', 'sharedDecimals', 'decimalConversionRate',
       'oftVersion', 'peers', 'endpoint', 'owner', 'enforcedOptions',
       'decimals', 'symbol', 'name', 'balanceOf', 'allowance',
+      // Analysis (stage: tasks 1-4). All view-only.
+      'oAppVersion',     // IOAppCore: "is this a LayerZero app at all?"
+      'getSendLibrary',  // IMessageLibManager: which send library serves (oapp, dstEid)
+      'getUlnConfig',    // UlnBase: how many DVNs that route requires (informational)
     ])
     if (!WHITELIST.has(n) && !KNOWN_READS.has(n)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)

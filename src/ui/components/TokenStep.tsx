@@ -1,10 +1,8 @@
 'use client'
 import { useState } from 'react'
-import { isAddress } from 'viem'
 import { byEid, type ChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
-import { isTxHash } from '@/core/decodeTx'
-import { isSolanaSignature, looksLikePubkey } from '@/core/svm/ids'
+import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
 import { peerToAddress } from '@/core/encoding'
 import type { OptionItem } from '@/core/options'
 import type { SvmSourceInfo } from '@/core/svm/source'
@@ -12,18 +10,15 @@ import type { OftInfo, SourceInfo, SuspiciousFlag } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import { ChainIcon } from './ChainIcon'
-import { Alert, Box, BoxLabel, Button, ChainDot, Row, Spinner, Tabs } from './ui'
-
-export type TokenMode = 'address' | 'tx'
+import { Alert, Box, BoxLabel, Button, ChainDot, Row, Spinner } from './ui'
 
 export function TokenStep(p: {
   chain: ChainDef
-  mode: TokenMode
-  onMode: (m: TokenMode) => void
-  /** An EVM 0x address, or an OFT Store (base58) when the source is Solana. */
-  onProbe: (address: string) => void
-  /** An EVM tx hash, or a Solana signature (base58) when the source is Solana. */
-  onDecode: (hash: string) => void
+  /**
+   * §Task 1: one field for everything — a contract, a transaction on either VM, a LayerZero Scan
+   * link or a message GUID. What it is decides where it goes; the caller routes it.
+   */
+  onInput: (input: AnalysisInput) => void
   busy: boolean
   recent: string[]
   info: SourceInfo | undefined
@@ -37,53 +32,52 @@ export function TokenStep(p: {
 }) {
   const d = useDict()
   const [value, setValue] = useState('')
+  const [formatError, setFormatError] = useState('')
   const v = value.trim()
   const svm = p.chain.vm === 'svm'
-  const ok = p.mode === 'address' ? (svm ? looksLikePubkey(v) : isAddress(v, { strict: false })) : svm ? isSolanaSignature(v) : isTxHash(v)
   const go = () => {
-    if (!ok) return
-    if (p.mode === 'address') p.onProbe(v)
-    else p.onDecode(v)
+    if (v === '') return
+    const r = parseAnalysisInput(v)
+    if (!r.ok) {
+      setFormatError(d.analysis[`input_${r.code}`])
+      return
+    }
+    setFormatError('')
+    p.onInput(r.input)
   }
 
   return (
     <Box>
-      <BoxLabel
-        right={
-          <Tabs
-            value={p.mode}
-            onChange={(m) => {
-              p.onMode(m)
-              setValue('')
-            }}
-            items={[
-              { value: 'address', label: svm ? d.ui.storeTab : d.ui.contractTab },
-              { value: 'tx', label: svm ? d.ui.sigTab : d.ui.txTab },
-            ]}
-          />
-        }
-      >
-        {d.ui.token}
-      </BoxLabel>
+      <BoxLabel>{d.ui.token}</BoxLabel>
       <div className="flex h-[50px] items-center rounded-full bg-surface-2 pl-4 pr-1.5">
         <input
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value)
+            setFormatError('')
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') go()
           }}
-          placeholder={p.mode === 'address' ? (svm ? d.step1.placeholderStore : d.step1.placeholderAddress) : svm ? d.step1.placeholderSig : d.step1.placeholderTx}
+          placeholder={d.analysis.placeholder}
           spellCheck={false}
           autoComplete="off"
           className="mono min-w-0 flex-1 bg-transparent pr-2 text-sm text-ink outline-none placeholder:text-faint"
-          aria-label={p.mode === 'address' ? (svm ? d.step1.byStore : d.step1.byAddress) : svm ? d.step1.bySig : d.step1.byTx}
+          aria-label={d.analysis.placeholder}
         />
-        <Button variant="primary" className="h-9 rounded-full px-4" disabled={!ok || p.busy} onClick={go}>
-          {p.busy ? <Spinner /> : p.mode === 'address' ? d.step1.probe : d.step1.decode}
+        {/* Enabled whenever there is something to judge: a bad format must produce a message,
+            not a dead button the user cannot learn anything from. */}
+        <Button variant="primary" className="h-9 rounded-full px-4" disabled={v === '' || p.busy} onClick={go}>
+          {p.busy ? <Spinner /> : d.analysis.button}
         </Button>
       </div>
+      {formatError ? (
+        <div className="mt-2 text-xs">
+          <span className="text-danger">{formatError}</span> <span className="text-muted">{d.analysis.examples}</span>
+        </div>
+      ) : null}
 
-      {svm && !p.info && p.mode === 'address' ? <p className="mt-2 text-xs text-muted">{d.step1.storeHint}</p> : null}
+      {svm && !p.info ? <p className="mt-2 text-xs text-muted">{d.step1.storeHint}</p> : null}
       {p.recent.length > 0 && !p.info ? (
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
           <span className="text-muted">{d.step1.recent}:</span>
@@ -94,8 +88,8 @@ export function TokenStep(p: {
               className="mono rounded-full bg-surface-2 px-2 py-0.5 text-ink hover:bg-line"
               onClick={() => {
                 setValue(a)
-                p.onMode('address')
-                p.onProbe(a)
+                const r = parseAnalysisInput(a)
+                if (r.ok) p.onInput(r.input)
               }}
             >
               {a.slice(0, 6)}…{a.slice(-4)}
