@@ -95,13 +95,18 @@ Build-time configuration lives in [`.env.production`](.env.production) (all valu
 ### Layout
 
 ```
-src/core     pure logic, no React: abi, chains, amounts, plan, guards, probe, options, quorum, track
+src/app      one static page per protocol tab (/oft, /ntt, /ccip); / redirects to the last one used
+src/core     pure logic, no React: abi, chains, protocols, amounts, plan, guards, probe, options, quorum, track
 src/core/svm Solana: base58, PDAs, account layouts, discovery, the send plan codec/self-check, the SDK boundary (send.ts)
-src/ui       wagmi/RainbowKit providers, the Solana wallet slot, hooks, components, local storage
+src/ui       wagmi/RainbowKit providers, the shell (header/tabs/history), the Solana wallet slot, hooks, components, local storage
 shims        build-time stand-ins for LayerZero helper packages the Solana SDK declares but never uses
 scripts      build, security headers, write-whitelist check, local server
 tests/core   unit tests · tests/integration  live-RPC and anvil fork tests
 ```
+
+The interface is desktop-only by design: a ~1280px two-column layout (form left, live preview right)
+with a 1024px floor — below that the page scrolls sideways rather than reflowing. Switching tabs
+changes the URL without reloading, so the wallet, the RPC settings and an in-flight transfer survive.
 
 Everything that touches money lives in `src/core` and is covered by tests.
 

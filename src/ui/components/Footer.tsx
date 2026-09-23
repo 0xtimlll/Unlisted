@@ -8,7 +8,7 @@ const DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? ''
 export function Footer() {
   const d = useDict()
   return (
-    <footer className="mx-auto w-full max-w-[560px] space-y-2 px-4 pb-8 pt-6 text-center text-[11px] text-muted">
+    <footer className="mx-auto w-full max-w-[560px] space-y-2 px-4 pb-8 pt-6 text-center text-xs text-muted">
       <p>{d.footer.disclaimer}</p>
       {DOMAIN ? (
         <p className="mono">

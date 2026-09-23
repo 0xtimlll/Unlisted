@@ -15,16 +15,14 @@ import { planSvmOptions } from '@/core/options'
 import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
 import { useDict, type Dict } from '@/i18n'
-import { Footer } from './components/Footer'
 import { FromBox, ToBox, type DestinationState } from './components/FromTo'
-import { Header } from './components/Header'
-import { History } from './components/History'
+import { ProtocolBadge } from './components/History'
+import { Panel, TwoColumn } from './components/Layout'
 import { Checks, Cta, Details, type CtaState } from './components/Review'
-import { SettingsDialog } from './components/SettingsDialog'
-import { TokenStep, type TokenMode } from './components/TokenStep'
+import { ContractFacts, TokenStep, type TokenMode } from './components/TokenStep'
 import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
-import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored, type Theme } from './storage'
+import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
@@ -45,18 +43,22 @@ const PRE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 15, 17, 18, 19, 20]
 
 type Sent = { txHash: string; dstEid: number; startedAt: number; srcChain: ChainKey; restored: boolean }
 
+/** The LayerZero OFT tab. The shell around it (header, history, settings, footer) is AppShell. */
 export function BridgeApp({
   stored,
   setStored,
-  onTheme,
   srcKey,
   setSrcKey,
+  trackRequest,
+  onTrackConsumed,
 }: {
   stored: Stored
   setStored: (s: Stored) => void
-  onTheme: (t: Theme) => void
   srcKey: ChainKey
   setSrcKey: (k: ChainKey) => void
+  /** A past transfer the user asked to track from Recent transfers. */
+  trackRequest: HistoryEntry | null
+  onTrackConsumed: () => void
 }) {
   const d = useDict()
   const { address: wallet, chainId: walletChainId } = useAccount()
@@ -69,7 +71,6 @@ export function BridgeApp({
   const evmSrc = isEvm(src) ? src : undefined
   const svmSource = src.vm === 'svm'
   const sender: string | undefined = svmSource ? svmWallet.address : wallet
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [svmPickerOpen, setSvmPickerOpen] = useState(false)
   const [mode, setMode] = useState<TokenMode>('address')
   const [probeTarget, setProbeTarget] = useState<string | null>(null)
@@ -80,10 +81,18 @@ export function BridgeApp({
   const [pdaAccepted, setPdaAccepted] = useState(false)
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
-    const a = activeTransfer(stored)
+    const a = activeTransfer(stored, 'lz-oft')
     return a ? { txHash: a.txHash, dstEid: a.dstEid, startedAt: a.at, srcChain: a.srcChain, restored: true } : null
   })
   const [txError, setTxError] = useState('')
+
+  // "Track" in Recent transfers: the shell switches to this tab and hands the entry over.
+  useEffect(() => {
+    if (!trackRequest) return
+    setSent({ txHash: trackRequest.txHash, dstEid: trackRequest.dstEid, startedAt: trackRequest.at, srcChain: trackRequest.srcChain, restored: true })
+    onTrackConsumed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackRequest])
 
   // Follow the EVM wallet's chain when it is one we support and the source is EVM.
   useEffect(() => {
@@ -308,7 +317,7 @@ export function BridgeApp({
   const svmSend = useSvmSend()
   const recordSent = (txHash: string, dstEid: number, oft: string) => {
     setSent({ txHash, dstEid, startedAt: Date.now(), srcChain: src.key, restored: false })
-    setStored(pushHistory(stored, { srcChain: src.key, dstEid, oft, txHash, at: Date.now() }))
+    setStored(pushHistory(stored, { srcChain: src.key, protocol: 'lz-oft', dstEid, oft, txHash, at: Date.now() }))
   }
   const onSend = () => {
     setTxError('')
@@ -404,124 +413,119 @@ export function BridgeApp({
   }
 
   // ---- render -------------------------------------------------------------------
-  return (
-    <div className="flex min-h-screen w-full flex-col">
-      <Header theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} srcVm={src.vm} />
+  const left = sent ? (
+    <Tracker
+      src={byKey(sent.srcChain)}
+      dstEid={sent.dstEid}
+      txHash={sent.txHash}
+      startedAt={sent.startedAt}
+      restored={sent.restored}
+      customRpc={stored.customRpc['solana']}
+      onFinal={(phase) => setStored(setHistoryStatus(stored, sent.txHash, phase))}
+      onNew={reset}
+    />
+  ) : (
+    <>
+      <TokenStep
+        chain={src}
+        mode={mode}
+        onMode={setMode}
+        busy={probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
+        recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
+        info={info}
+        flags={flags}
+        error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
+        decodedHint={!!decodeData}
+        decodedFailed={svmDecode.data?.observed.failed ?? false}
+        droppedOptions={decodeData?.droppedOptions ?? []}
+        optionsMalformed={decodeData?.optionsMalformed ?? false}
+        onProbe={(a) => {
+          setDecodeTarget(null)
+          setDest(EMPTY_DEST)
+          setProbeTarget(a)
+        }}
+        onDecode={(h) => {
+          setProbeTarget(null)
+          setDest(EMPTY_DEST)
+          setDecodeTarget(h)
+        }}
+      />
 
-      <main className="flex flex-1 flex-col items-center px-3 py-8 sm:py-14">
-        <div className="w-full max-w-[408px] space-y-2">
-          {sent ? (
-            <Tracker
-              src={byKey(sent.srcChain)}
-              dstEid={sent.dstEid}
-              txHash={sent.txHash}
-              startedAt={sent.startedAt}
-              restored={sent.restored}
-              customRpc={stored.customRpc['solana']}
-              onFinal={(phase) => setStored(setHistoryStatus(stored, sent.txHash, phase))}
-              onNew={reset}
-            />
-          ) : (
-            <>
-              <TokenStep
-                chain={src}
-                mode={mode}
-                onMode={setMode}
-                busy={probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
-                recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
-                info={info}
-                flags={flags}
-                error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
-                decodedHint={!!decodeData}
-                decodedFailed={svmDecode.data?.observed.failed ?? false}
-                droppedOptions={decodeData?.droppedOptions ?? []}
-                optionsMalformed={decodeData?.optionsMalformed ?? false}
-                onProbe={(a) => {
-                  setDecodeTarget(null)
-                  setDest(EMPTY_DEST)
-                  setProbeTarget(a)
-                }}
-                onDecode={(h) => {
-                  setProbeTarget(null)
-                  setDest(EMPTY_DEST)
-                  setDecodeTarget(h)
-                }}
-              />
+      <FromBox
+        src={src}
+        onSrcChange={onSrcChange}
+        info={info}
+        balance={tokenBalance}
+        amountInput={dest.amountInput}
+        onAmount={(v) => setDest({ ...dest, amountInput: v })}
+        amountError={amountError}
+        dustTrimmed={planData?.amounts.dustTrimmed}
+      />
 
-              <FromBox
-                src={src}
-                onSrcChange={onSrcChange}
-                info={info}
-                balance={tokenBalance}
-                amountInput={dest.amountInput}
-                onAmount={(v) => setDest({ ...dest, amountInput: v })}
-                amountError={amountError}
-                dustTrimmed={planData?.amounts.dustTrimmed}
-              />
-
-              {info ? (
-                <>
-                  <div className="relative z-10 -my-4 flex justify-center">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm">↓</span>
-                  </div>
-                  <ToBox
-                    info={info}
-                    wallet={sender}
-                    plan={planData}
-                    state={dest}
-                    onChange={(next) => {
-                      // Switching between an EVM and a Solana destination clears the recipient:
-                      // an address for one VM must never linger into the other.
-                      const nextVm = next.dstEid !== undefined ? byEid(next.dstEid)?.vm : undefined
-                      setDest(nextVm !== dstVm ? { ...next, recipientCustom: false, recipientInput: '', confirmLast6: '' } : next)
-                      setPdaAccepted(false)
-                    }}
-                    dstVm={dstVm}
-                    recipientError={recipientError}
-                    svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
-                  />
-                  <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDest.data?.info} />
-                  <Checks
-                    report={report}
-                    noGasAccepted={noGasAccepted}
-                    onNoGasAccepted={setNoGasAccepted}
-                    peerBackAccepted={peerBackAccepted}
-                    onPeerBackAccepted={setPeerBackAccepted}
-                    pdaAccepted={pdaAccepted}
-                    onPdaAccepted={setPdaAccepted}
-                    show={!!planData}
-                  />
-                </>
-              ) : null}
-
-              <div className="pt-1">
-                <Cta state={cta} info={info} busy={busy} busyLabel={busyLabel} onClick={onCta} error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')} />
-              </div>
-            </>
-          )}
-
-          <div className="pt-4">
-            <History
-              entries={stored.history}
-              onClear={() => setStored({ ...stored, history: [] })}
-              onTrack={(e: HistoryEntry) => setSent({ txHash: e.txHash, dstEid: e.dstEid, startedAt: e.at, srcChain: e.srcChain, restored: true })}
-            />
+      {info ? (
+        <>
+          <div className="relative z-10 -my-4 flex justify-center">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm">↓</span>
           </div>
-        </div>
-      </main>
-
-      <Footer />
-
-      {settingsOpen ? (
-        <SettingsDialog
-          stored={stored}
-          onClose={() => setSettingsOpen(false)}
-          onSave={(rpc) => {
-            setStored({ ...stored, customRpc: rpc })
-            setSettingsOpen(false)
-          }}
-        />
+          <ToBox
+            info={info}
+            wallet={sender}
+            plan={planData}
+            state={dest}
+            onChange={(next) => {
+              // Switching between an EVM and a Solana destination clears the recipient:
+              // an address for one VM must never linger into the other.
+              const nextVm = next.dstEid !== undefined ? byEid(next.dstEid)?.vm : undefined
+              setDest(nextVm !== dstVm ? { ...next, recipientCustom: false, recipientInput: '', confirmLast6: '' } : next)
+              setPdaAccepted(false)
+            }}
+            dstVm={dstVm}
+            recipientError={recipientError}
+            svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
+          />
+        </>
       ) : null}
+
+      <div className="pt-1">
+        <Cta state={cta} info={info} busy={busy} busyLabel={busyLabel} onClick={onCta} error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')} />
+      </div>
+    </>
+  )
+
+  // The panel is the live preview: what comes out, what it costs, and every check, without scrolling.
+  const right = (
+    <Panel title={d.ui.preview} badge={<ProtocolBadge id="lz-oft" />}>
+      {sent ? (
+        <p className="text-sm text-muted">{d.ui.previewTracking}</p>
+      ) : info ? (
+        <div className="space-y-4">
+          <PanelSection title={d.ui.section_contract}>
+            <ContractFacts chain={src} info={info} />
+          </PanelSection>
+          <PanelSection title={d.ui.section_quote}>
+            <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDest.data?.info} flat />
+          </PanelSection>
+          <Checks
+            report={report}
+            noGasAccepted={noGasAccepted}
+            onNoGasAccepted={setNoGasAccepted}
+            peerBackAccepted={peerBackAccepted}
+            onPeerBackAccepted={setPeerBackAccepted}
+            pdaAccepted={pdaAccepted}
+            onPdaAccepted={setPdaAccepted}
+            show={!!planData}
+            defaultOpen
+          />
+        </div>
+      ) : (
+        <p className="text-sm text-muted">{d.ui.previewEmpty}</p>
+      )}
+    </Panel>
+  )
+
+  return (
+    <>
+      <TwoColumn left={left} right={right} />
       {svmPickerOpen ? (
         <SvmWalletPicker
           onClose={() => setSvmPickerOpen(false)}
@@ -531,6 +535,15 @@ export function BridgeApp({
           }}
         />
       ) : null}
+    </>
+  )
+}
+
+function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{title}</div>
+      {children}
     </div>
   )
 }

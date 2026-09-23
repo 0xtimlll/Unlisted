@@ -37,7 +37,7 @@ export function SvmWalletButton() {
       </button>
       {menu ? (
         <div role="menu" className="absolute right-0 z-40 mt-1 w-48 rounded-xl border border-line bg-surface p-1 shadow-lg">
-          <div className="mono truncate px-2 py-1.5 text-[11px] text-muted">{w.address}</div>
+          <div className="mono truncate px-2 py-1.5 text-xs text-muted">{w.address}</div>
           <Button variant="ghost" className="w-full justify-start" onClick={() => void navigator.clipboard?.writeText(w.address ?? '')}>
             {d.header.copyAddress}
           </Button>
@@ -91,7 +91,7 @@ export function SvmWalletPicker({ onClose, onPick }: { onClose: () => void; onPi
             ))}
           </ul>
         )}
-        <p className="mt-3 text-[11px] text-faint">{d.header.solanaWalletHint}</p>
+        <p className="mt-3 text-xs text-faint">{d.header.solanaWalletHint}</p>
       </div>
     </div>
   )

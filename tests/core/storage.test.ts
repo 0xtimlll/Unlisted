@@ -1,6 +1,6 @@
 /** localStorage shape: EVM and Solana identifiers are both accepted, anything else is dropped. */
 import { describe, expect, it } from 'vitest'
-import { sanitize } from '@/ui/storage'
+import { activeTransfer, entryProtocol, filterHistory, sanitize, type HistoryEntry } from '@/ui/storage'
 
 const EVM = '0xfa44c2634ff17cbe26dc3007d36bd61c79068c14'
 const STORE = 'qMNo1RFo11J9ZLGuq7dVmWAssuCZaNsSamk8g2q4UZA'
@@ -38,6 +38,52 @@ describe('storage.sanitize', () => {
     })
     expect(s.history).toEqual([])
     expect(s.recentContracts).toEqual([])
+  })
+})
+
+describe('storage: protocol on a history entry', () => {
+  it('keeps a known protocol and drops an unknown one', () => {
+    const s = sanitize({
+      history: [
+        { srcChain: 'base', dstEid: 30101, protocol: 'ccip', oft: EVM, txHash: HASH, at: 3 },
+        { srcChain: 'base', dstEid: 30101, protocol: 'made-up', oft: EVM, txHash: `0x${'cd'.repeat(32)}`, at: 4 },
+      ],
+    })
+    expect(s.history[0]?.protocol).toBe('ccip')
+    expect(s.history[1]).not.toHaveProperty('protocol')
+  })
+
+  it('entries written before protocols existed are LayerZero OFT', () => {
+    const old: HistoryEntry = { srcChain: 'hyperevm', dstEid: 30101, oft: EVM, txHash: HASH, at: 1 }
+    expect(entryProtocol(old)).toBe('lz-oft')
+    expect(entryProtocol({ ...old, protocol: 'wormhole-ntt' })).toBe('wormhole-ntt')
+  })
+
+  it('filters by protocol', () => {
+    const entries: HistoryEntry[] = [
+      { srcChain: 'base', dstEid: 30101, oft: EVM, txHash: HASH, at: 1 },
+      { srcChain: 'base', dstEid: 30101, protocol: 'ccip', oft: EVM, txHash: `0x${'cd'.repeat(32)}`, at: 2 },
+    ]
+    expect(filterHistory(entries, 'all')).toHaveLength(2)
+    expect(filterHistory(entries, 'lz-oft').map((e) => e.at)).toEqual([1])
+    expect(filterHistory(entries, 'ccip').map((e) => e.at)).toEqual([2])
+    expect(filterHistory(entries, 'wormhole-ntt')).toEqual([])
+  })
+
+  it('a tab only re-opens its own in-flight transfer', () => {
+    const now = Date.now()
+    const stored = sanitize({
+      history: [
+        { srcChain: 'base', dstEid: 30101, protocol: 'ccip', oft: EVM, txHash: HASH, at: now },
+        { srcChain: 'base', dstEid: 30101, oft: EVM, txHash: `0x${'cd'.repeat(32)}`, at: now },
+      ],
+    })
+    expect(activeTransfer(stored, 'ccip')?.txHash).toBe(HASH)
+    expect(activeTransfer(stored, 'lz-oft')?.at).toBe(now)
+    expect(activeTransfer(stored, 'wormhole-ntt')).toBeUndefined()
+    // A delivered transfer is never re-opened.
+    const done = sanitize({ history: [{ srcChain: 'base', dstEid: 30101, oft: EVM, txHash: HASH, at: now, status: 'delivered' }] })
+    expect(activeTransfer(done, 'lz-oft')).toBeUndefined()
   })
 })
 

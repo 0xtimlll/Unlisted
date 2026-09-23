@@ -24,6 +24,25 @@ export function Button({
   return <button type="button" {...p} className={`inline-flex items-center justify-center gap-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${focus} ${v} ${className}`} />
 }
 
+/**
+ * A square icon button for the header. Desktop-sized on purpose: the hit area is 40x40 and the
+ * glyph ~21px, because the old 36x28 ghost buttons were nearly unhittable on a Mac trackpad.
+ * `label` is both the accessible name and the tooltip.
+ */
+export function IconButton({ label, children, className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+  return (
+    <button
+      type="button"
+      {...p}
+      aria-label={label}
+      title={label}
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-[21px] leading-none text-muted transition hover:border-line hover:bg-surface-2 hover:text-ink ${focus} ${className}`}
+    >
+      <span aria-hidden>{children}</span>
+    </button>
+  )
+}
+
 export function Input({ className = '', ...p }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -129,7 +148,7 @@ export function PillSelect({
                 {o.icon ?? <span className="h-7 w-7 shrink-0" />}
                 <span className="flex flex-col leading-tight">
                   <span className="text-sm font-semibold text-ink">{o.label}</span>
-                  {o.sub ? <span className="text-[11px] text-muted">{o.sub}</span> : null}
+                  {o.sub ? <span className="text-xs text-muted">{o.sub}</span> : null}
                 </span>
                 {o.value === value ? <span className="ml-auto text-ink">✓</span> : null}
               </button>
@@ -217,6 +236,47 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
         </button>
       ))}
     </div>
+  )
+}
+
+/**
+ * The protocol tabs in the header. Each tab is a real link to its own page so it can be opened,
+ * bookmarked and middle-clicked; in-app clicks are intercepted by the caller (no reload, the
+ * wallet stays connected).
+ */
+export function LinkTabs<T extends string>({
+  value,
+  items,
+  onSelect,
+}: {
+  value: T
+  items: { value: T; label: string; href: string }[]
+  onSelect: (v: T) => void
+}) {
+  return (
+    <nav className="flex items-center gap-1 rounded-2xl bg-surface-2 p-1" aria-label="Protocol">
+      {items.map((it) => {
+        const active = it.value === value
+        return (
+          <a
+            key={it.value}
+            href={it.href}
+            aria-current={active ? 'page' : undefined}
+            onClick={(e) => {
+              // Plain left-click stays in the app; modified clicks keep the browser's behaviour.
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+              e.preventDefault()
+              onSelect(it.value)
+            }}
+            className={`inline-flex h-10 items-center rounded-xl px-4 text-[15px] font-semibold transition ${focus} ${
+              active ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+            }`}
+          >
+            {it.label}
+          </a>
+        )
+      })}
+    </nav>
   )
 }
 

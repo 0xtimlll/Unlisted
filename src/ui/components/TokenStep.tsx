@@ -12,7 +12,7 @@ import type { OftInfo, SourceInfo, SuspiciousFlag } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import { ChainIcon } from './ChainIcon'
-import { Alert, Box, BoxLabel, Button, ChainDot, Disclosure, Row, Spinner, Tabs } from './ui'
+import { Alert, Box, BoxLabel, Button, ChainDot, Row, Spinner, Tabs } from './ui'
 
 export type TokenMode = 'address' | 'tx'
 
@@ -37,7 +37,6 @@ export function TokenStep(p: {
 }) {
   const d = useDict()
   const [value, setValue] = useState('')
-  const [open, setOpen] = useState(false)
   const v = value.trim()
   const svm = p.chain.vm === 'svm'
   const ok = p.mode === 'address' ? (svm ? looksLikePubkey(v) : isAddress(v, { strict: false })) : svm ? isSolanaSignature(v) : isTxHash(v)
@@ -147,8 +146,8 @@ export function TokenStep(p: {
             <div className="min-w-0 flex-1 leading-tight">
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold text-ink">{p.info.symbol || '—'}</span>
-                <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-ink">{p.info.kind}</span>
-                {p.info.approvalRequired ? <span className="rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-semibold text-warn">approve</span> : null}
+                <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-ink">{p.info.kind}</span>
+                {p.info.approvalRequired ? <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs font-semibold text-warn">approve</span> : null}
               </div>
               <div className="truncate text-xs text-muted">
                 {p.info.name} · {p.info.decimals}/{p.info.sharedDecimals} · {d.ui.onChain}
@@ -165,11 +164,6 @@ export function TokenStep(p: {
               </Alert>
             </div>
           ) : null}
-          <div className="mt-2">
-            <Disclosure title={d.ui.details} open={open} onToggle={() => setOpen(!open)}>
-              {p.info.vm === 'evm' ? <OftDetails chain={p.chain} info={p.info} /> : <SvmOftDetails chain={p.chain} info={p.info} />}
-            </Disclosure>
-          </div>
         </div>
       ) : null}
     </Box>
@@ -189,6 +183,11 @@ function describeOption(o: OptionItem, d: ReturnType<typeof useDict>): string {
     default:
       return d.step3.opt_unknown
   }
+}
+
+/** Everything read from the contract, for the right-hand panel: facts first, then the peers. */
+export function ContractFacts({ chain, info }: { chain: ChainDef; info: SourceInfo }) {
+  return info.vm === 'evm' ? <OftDetails chain={chain} info={info} /> : <SvmOftDetails chain={chain} info={info} />
 }
 
 /** Peers per chain: a block of its own (label above, one line per chain) so long addresses never fight the label. */

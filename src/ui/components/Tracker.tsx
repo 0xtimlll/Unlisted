@@ -116,7 +116,7 @@ export function Tracker(p: {
               </span>
             ) : null}
             {statusText}
-            {s?.raw ? <span className="mono ml-2 text-[11px] text-muted">{s.raw}</span> : null}
+            {s?.raw ? <span className="mono ml-2 text-xs text-muted">{s.raw}</span> : null}
           </span>
         </div>
         {s?.message ? <div className="text-right text-xs text-muted">{s.message}</div> : null}

@@ -20,6 +20,19 @@
   --color-warn: #a16207;
   --color-danger: #b91c1c;
   --radius-card: 16px;
+
+  /*
+   * Desktop type scale. Tailwind's defaults (12/14/16px) are meant for phones too and read small
+   * on a Mac; every size is bumped one step so the whole app follows without touching components.
+   */
+  --text-xs: 13px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 15px;
+  --text-sm--line-height: 1.5;
+  --text-base: 16px;
+  --text-base--line-height: 1.55;
+  --text-lg: 18px;
+  --text-lg--line-height: 1.45;
 }
 
 .dark {

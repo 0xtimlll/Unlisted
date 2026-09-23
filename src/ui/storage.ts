@@ -4,7 +4,9 @@
  */
 import { isAddress } from 'viem'
 import type { ChainKey } from '@/core/chains'
+import { isProtocolId, type ProtocolId } from '@/core/protocols'
 import { validateRpcUrl } from '@/core/rpcPolicy'
+import { clearLastTab } from './tabs'
 
 const KEY = 'oft-bridge-ui:v1'
 
@@ -16,6 +18,11 @@ const isTx = (v: unknown): v is string => typeof v === 'string' && (/^0x[0-9a-fA
 export type HistoryEntry = {
   srcChain: ChainKey
   dstEid: number
+  /**
+   * Which bridge carried it. Entries written before protocols existed have none; they are all
+   * LayerZero OFT, and `entryProtocol()` says so — the field is never invented on disk.
+   */
+  protocol?: ProtocolId
   /** The OFT contract (EVM) or OFT Store (Solana). */
   oft: string
   /** 0x hash (EVM) or base58 signature (Solana). */
@@ -73,10 +80,14 @@ export function sanitize(raw: unknown): Stored {
   if (Array.isArray(r['history'])) {
     for (const e of r['history'] as unknown[]) {
       if (e && typeof e === 'object') {
-        const { srcChain, dstEid, oft, txHash, at } = e as Record<string, unknown>
+        const { srcChain, dstEid, protocol, oft, txHash, at } = e as Record<string, unknown>
         if (isKey(srcChain) && typeof dstEid === 'number' && isAccount(oft) && isTx(txHash) && typeof at === 'number') {
           const status = (e as Record<string, unknown>)['status']
-          out.history.push({ srcChain, dstEid, oft, txHash, at, ...(status === 'delivered' || status === 'failed' ? { status } : {}) })
+          out.history.push({
+            srcChain, dstEid, oft, txHash, at,
+            ...(isProtocolId(protocol) ? { protocol } : {}),
+            ...(status === 'delivered' || status === 'failed' ? { status } : {}),
+          })
         }
       }
       if (out.history.length >= MAX_HISTORY) break
@@ -108,6 +119,18 @@ export function clearAll(): void {
   } catch {
     /* ignore */
   }
+  clearLastTab()
+}
+
+/** The protocol an entry belongs to; entries written before protocols existed are LayerZero OFT. */
+export function entryProtocol(e: HistoryEntry): ProtocolId {
+  return e.protocol ?? 'lz-oft'
+}
+
+export type HistoryFilter = ProtocolId | 'all'
+
+export function filterHistory(entries: readonly HistoryEntry[], filter: HistoryFilter): HistoryEntry[] {
+  return filter === 'all' ? [...entries] : entries.filter((e) => entryProtocol(e) === filter)
 }
 
 export function exportJson(): string {
@@ -128,10 +151,13 @@ export function setHistoryStatus(s: Stored, txHash: string, status: 'delivered' 
   return { ...s, history: s.history.map((h) => (h.txHash.toLowerCase() === txHash.toLowerCase() ? { ...h, status } : h)) }
 }
 
-/** A transfer worth re-opening the tracker for after a reload: recent and not yet final. */
+/**
+ * A transfer worth re-opening the tracker for after a reload: recent and not yet final.
+ * `protocol` scopes it to one tab — the OFT tab never re-opens a CCIP transfer.
+ */
 export const ACTIVE_TRANSFER_MAX_AGE_MS = 45 * 60_000
-export function activeTransfer(s: Stored): HistoryEntry | undefined {
-  const h = s.history[0]
+export function activeTransfer(s: Stored, protocol?: ProtocolId): HistoryEntry | undefined {
+  const h = protocol === undefined ? s.history[0] : s.history.find((e) => entryProtocol(e) === protocol)
   if (!h || h.status) return undefined
   return Date.now() - h.at < ACTIVE_TRANSFER_MAX_AGE_MS ? h : undefined
 }

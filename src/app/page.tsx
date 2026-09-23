@@ -1,16 +1,16 @@
 'use client'
-import dynamic from 'next/dynamic'
-
-// Wallet libraries touch `window`; with a static export we render the app client-side only.
-const Providers = dynamic(() => import('@/ui/Providers'), {
-  ssr: false,
-  loading: () => (
-    <main className="mx-auto flex min-h-screen max-w-3xl items-center justify-center p-8 text-sm text-muted">
-      Unlisted — loading…
-    </main>
-  ),
-})
+/**
+ * The root sends you to the tab you used last (OFT by default). Each tab is a real page in the
+ * static export, so this is the only redirect in the app.
+ */
+import { useEffect } from 'react'
+import { tabPath } from '@/core/protocols'
+import { Loading } from '@/ui/AppEntry'
+import { loadLastTab } from '@/ui/tabs'
 
 export default function Home() {
-  return <Providers />
+  useEffect(() => {
+    window.location.replace(tabPath(loadLastTab()))
+  }, [])
+  return <Loading />
 }

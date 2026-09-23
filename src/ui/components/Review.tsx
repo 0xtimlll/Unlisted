@@ -23,6 +23,8 @@ export function Details(p: {
   onChange: (s: DestinationState) => void
   svmOptions?: SvmOptionsPlan | undefined
   svmInfo?: SvmOftInfo | undefined
+  /** Right-hand panel: show the breakdown expanded, without the summary toggle. */
+  flat?: boolean
 }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
@@ -45,19 +47,17 @@ export function Details(p: {
     d.ui.details
   )
 
-  return (
-    <div className="px-1">
-      <Disclosure title={summary} open={open} onToggle={() => setOpen(!open)}>
-        <div className="rounded-xl bg-surface-2 px-3 py-1">
+  const body = (
+    <div className="rounded-xl bg-surface-2 px-3 py-1">
           {plan ? (
             <>
               <Row label={d.step3.sending}>
                 <b className="tnum">{formatAmount(plan.amounts.amountLD, dec)} {sym}</b>
-                <div className="mono text-[11px] text-muted">amountLD {plan.amounts.amountLD.toString()}</div>
+                <div className="mono text-xs text-muted">amountLD {plan.amounts.amountLD.toString()}</div>
               </Row>
               <Row label={d.step3.receiveMin}>
                 <b className="tnum">{formatAmount(plan.amounts.minAmountLD, dec)} {sym}</b>
-                <div className="mono text-[11px] text-muted">minAmountLD {plan.amounts.minAmountLD.toString()}</div>
+                <div className="mono text-xs text-muted">minAmountLD {plan.amounts.minAmountLD.toString()}</div>
               </Row>
               {plan.quote.amountReceivedLD !== plan.amounts.amountLD ? (
                 <Row label={d.step3.receiveQuoted}>
@@ -66,7 +66,7 @@ export function Details(p: {
               ) : null}
               <Row label={d.step3.lzFee}>
                 <b className="tnum">{fmtNative(plan.quote.nativeFee)}</b>
-                <div className="text-[11px] text-muted">
+                <div className="text-xs text-muted">
                   {plan.vm === 'evm'
                     ? fmt(d.step3.feeDetail, { value: fmtNative(plan.value), refund: fmtNative(plan.value - plan.quote.nativeFee) })
                     : fmt(d.step3.feeDetailSvm, { value: fmtNative(plan.value) })}
@@ -159,7 +159,14 @@ export function Details(p: {
               ) : null}
             </div>
           </Disclosure>
-        </div>
+    </div>
+  )
+
+  if (p.flat) return body
+  return (
+    <div className="px-1">
+      <Disclosure title={summary} open={open} onToggle={() => setOpen(!open)}>
+        {body}
       </Disclosure>
     </div>
   )
@@ -175,9 +182,11 @@ export function Checks(p: {
   pdaAccepted: boolean
   onPdaAccepted: (v: boolean) => void
   show: boolean
+  /** Right-hand panel: the list is the content, so it starts expanded. */
+  defaultOpen?: boolean
 }) {
   const d = useDict()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(p.defaultOpen ?? false)
   const results = p.report.results
   const failing = results.filter((r) => !r.ok && !isPending(r))
   const pending = results.filter((r) => isPending(r))
@@ -237,7 +246,7 @@ export function Checks(p: {
         </div>
       ) : null}
       <Disclosure title={title} open={open || failing.length > 0} onToggle={() => setOpen(!open)}>
-        <ul className="grid gap-x-3 gap-y-0.5 text-xs sm:grid-cols-2">
+        <ul className="grid gap-x-3 gap-y-0.5 text-xs">
           {results.map((r) => {
             const label = r.ok ? okLabel(r.id, d) : d.guard[r.code]
             if (!label) return null
@@ -246,7 +255,7 @@ export function Checks(p: {
               <li key={r.id} className={r.ok ? 'text-ok' : pend ? 'text-muted' : 'text-danger'}>
                 {r.ok ? '✓' : pend ? '○' : '✗'} {label}
                 {!r.ok && r.detail && (r.code === 'simulation_failed' || r.code === 'selfcheck_failed' || r.code === 'peer_back_mismatch') ? (
-                  <span className="mono block pl-4 text-[11px] opacity-80">{r.detail}</span>
+                  <span className="mono block pl-4 text-xs opacity-80">{r.detail}</span>
                 ) : null}
               </li>
             )
@@ -311,7 +320,7 @@ export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: bo
         )}
       </Button>
       {s.kind === 'send' && !s.enabled && s.reason ? <div className="text-center text-xs text-muted">{s.reason}</div> : null}
-      <div className="text-center text-[11px] text-faint">{d.step3.simulationHint}</div>
+      <div className="text-center text-xs text-faint">{d.step3.simulationHint}</div>
     </div>
   )
 }

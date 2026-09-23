@@ -1,25 +1,52 @@
 'use client'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useDict } from '@/i18n'
+import { TAB_SLUGS, tabPath, type TabSlug } from '@/core/protocols'
+import { fmt, useDict } from '@/i18n'
 import type { Theme } from '../storage'
 import { SvmWalletButton } from '../svm/SvmWalletButton'
-import { Button } from './ui'
+import { IconButton, LinkTabs } from './ui'
 
 export const CANONICAL_DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? 'localhost'
 
-/** One wallet slot: the connector follows the SOURCE chain's VM (RainbowKit for EVM, wallet-adapter for Solana). */
-export function Header({ theme, onTheme, onSettings, srcVm }: { theme: Theme; onTheme: (t: Theme) => void; onSettings: () => void; srcVm: 'evm' | 'svm' }) {
+const THEME_GLYPH: Record<Theme, string> = { dark: '☾', light: '☀', system: '◐' }
+const NEXT_THEME: Record<Theme, Theme> = { dark: 'light', light: 'system', system: 'dark' }
+
+/**
+ * One header for every tab: the protocol tabs, then the shared controls. One wallet slot —
+ * the connector follows the source chain's VM (RainbowKit for EVM, wallet-adapter for Solana).
+ * Everything here is 40px tall so tabs, icons and the wallet button share one baseline.
+ */
+export function Header({
+  tab,
+  onTab,
+  theme,
+  onTheme,
+  onSettings,
+  srcVm,
+}: {
+  tab: TabSlug
+  onTab: (t: TabSlug) => void
+  theme: Theme
+  onTheme: (t: Theme) => void
+  onSettings: () => void
+  srcVm: 'evm' | 'svm'
+}) {
   const d = useDict()
   return (
-    <header className="flex w-full items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-8">
+    <header className="flex w-full items-center gap-6 border-b border-line px-6 py-3">
       <span className="text-[22px] font-black tracking-tight text-ink">{d.app.title}</span>
-      <div className="flex items-center gap-1.5">
-        <Button variant="ghost" aria-label={d.ui.theme} title={d.ui.theme} onClick={() => onTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark')} className="w-9 px-0">
-          {theme === 'dark' ? '☾' : theme === 'light' ? '☀' : '◐'}
-        </Button>
-        <Button variant="ghost" aria-label={d.header.settings} title={d.header.settings} onClick={onSettings} className="w-9 px-0">
+      <LinkTabs
+        value={tab}
+        onSelect={onTab}
+        items={TAB_SLUGS.map((s) => ({ value: s, label: d.tabs[s], href: tabPath(s) }))}
+      />
+      <div className="ml-auto flex items-center gap-1.5">
+        <IconButton label={fmt(d.ui.themeTooltip, { mode: d.ui[`theme_${theme}`] })} onClick={() => onTheme(NEXT_THEME[theme])}>
+          {THEME_GLYPH[theme]}
+        </IconButton>
+        <IconButton label={d.header.settings} onClick={onSettings}>
           ⚙
-        </Button>
+        </IconButton>
         {srcVm === 'svm' ? <SvmWalletButton /> : <WalletButton />}
       </div>
     </header>
