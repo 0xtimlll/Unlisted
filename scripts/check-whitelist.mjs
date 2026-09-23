@@ -16,13 +16,17 @@ const SRC = join(ROOT, 'src')
 const WHITELIST = new Set(['approve', 'send'])
 
 /**
- * Writes allowed only in named places. `transfer` is an NttManager call
- * (evm/src/interfaces/INttManager.sol); it shares its name with ERC-20's `transfer`, so it is
- * confined to the NTT protocol module plus the one screen that submits it, AND src/core/abi.ts is
- * checked below for never declaring a `transfer` of its own. Together that means no code path in
- * this app can ever move tokens with a plain ERC-20 transfer.
+ * Writes allowed only in named places, one protocol each:
+ *   transfer  NttManager (evm/src/interfaces/INttManager.sol). It shares its name with ERC-20's
+ *             `transfer`, so it is confined to the NTT module plus the one screen that submits it,
+ *             AND src/core/abi.ts is checked below for never declaring a `transfer` of its own —
+ *             together, no code path here can move tokens with a plain ERC-20 transfer.
+ *   ccipSend  Router (contracts/src/v0.8/ccip/interfaces/IRouterClient.sol).
  */
-const SCOPED_WRITES = { transfer: /^src\/(protocols\/wormhole-ntt\/|ui\/NttApp\.tsx$)/ }
+const SCOPED_WRITES = {
+  transfer: /^src\/(protocols\/wormhole-ntt\/|ui\/NttApp\.tsx$)/,
+  ccipSend: /^src\/(protocols\/ccip\/|ui\/CcipApp\.tsx$)/,
+}
 
 const writeAllowed = (name, rel) => WHITELIST.has(name) || (SCOPED_WRITES[name]?.test(rel) ?? false)
 const writeName = (name) => (SCOPED_WRITES[name] ? `${name} (only in ${SCOPED_WRITES[name].source})` : name)
@@ -136,6 +140,11 @@ for (const file of walk(SRC)) {
       'isWormholeRelayingEnabled', 'isSpecialRelayingEnabled', 'encodeWormholeTransceiverInstruction',
       // The token-side anchor that lets an NttManager become an approve spender at all.
       'minter', 'MINTER_ROLE', 'hasRole',
+      // Chainlink CCIP (task 6). All view — see src/protocols/ccip/abi.ts for sources.
+      'getFee', 'isChainSupported', 'getPool', 'getTokenConfig',
+      'getToken', 'getTokenDecimals', 'getRouter', 'isSupportedChain', 'getSupportedChains',
+      'getRemoteToken', 'getRemotePools',
+      'getCurrentOutboundRateLimiterState', 'getCurrentInboundRateLimiterState',
     ])
     if (!writeAllowed(n, rel) && !KNOWN_READS.has(n)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
@@ -184,6 +193,6 @@ if (errors.length) {
   process.exit(1)
 }
 console.log(
-  'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer inside ' +
-    `src/protocols/wormhole-ntt/; Solana: one oft.send + one submit in ${SVM_FILE})`,
+  'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer and ' +
+    `Router.ccipSend inside their own protocol modules; Solana: one oft.send + one submit in ${SVM_FILE})`,
 )

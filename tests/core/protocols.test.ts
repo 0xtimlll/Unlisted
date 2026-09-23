@@ -46,8 +46,7 @@ describe('protocols', () => {
     expect(TAB_SLUGS.map(tabPath)).toEqual(['/oft', '/ntt', '/ccip'])
   })
 
-  it('tracks which bridges are actually built', () => {
-    expect([...IMPLEMENTED]).toEqual(['lz-oft', 'wormhole-ntt'])
-    expect(IMPLEMENTED.has('ccip')).toBe(false)
+  it('every protocol with a tab now has a bridge behind it', () => {
+    expect([...IMPLEMENTED].sort()).toEqual([...PROTOCOL_IDS].sort())
   })
 })

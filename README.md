@@ -71,6 +71,30 @@ manager pulls with `transferFrom` before it burns or locks; and the amount is ro
 the precision the route carries, because the manager reverts on dust instead of trimming.
 `shouldQueue` is always false — over a rate limit the transfer must revert, not sit in a queue.
 
+## Chainlink CCIP
+
+The **CCIP** tab bridges tokens between EVM chains through Chainlink's router. Two addresses decide
+everything and both come from configuration, never from anything read on chain or typed in:
+
+- the **Router** — which is also the approve spender, and
+- the **TokenAdminRegistry**, which names the pool for a token.
+
+Both are taken from the [CCIP Directory](https://docs.chain.link/ccip/directory/mainnet), through
+its own machine-readable data file, with the chain selectors from `smartcontractkit/chain-selectors`.
+The pool is only ever used to learn where a token can go and what its rate limits are; a pool wired
+to some other router is refused, because nothing sent through the official router would reach it.
+
+The message is the one Chainlink's own tutorial builds for a token transfer to an EOA: the receiver
+abi-encoded, empty `data`, one token entry, the native coin as the fee token, and
+`EVMExtraArgsV2(gasLimit: 0, allowOutOfOrderExecution: true)`. A guard re-checks that shape, and the
+self-check decodes the calldata back before it is signed — a payload smuggled into `data` would turn
+a transfer into a call on the other side.
+
+`msg.value` is **exactly** the quoted fee, with no buffer, because `Router.ccipSend` says
+*"we take the whole msg.value regardless if its larger"* — an over-payment would be kept, not
+refunded. Both pool rate limits are read, the inbound one on the destination's own RPC, and the
+amount that arrives is computed from the destination token's decimals rather than assumed.
+
 ### It also says when the answer is no
 
 If the transaction belongs to a bridge this app does not build — Wormhole NTT, Chainlink CCIP, Wormhole Portal, Axelar, Circle CCTP, Hyperlane, or a network's own bridge — it is named, and you are pointed at that project's own app instead of being told "not an OFT". A LayerZero application that is not an OFT is called out as exactly that. A transaction nobody's RPC could be reached for is reported as an RPC problem, never as a verdict.
@@ -79,7 +103,7 @@ Every event signature, error signature, chain id and selector used for this come
 
 ## Security model
 
-**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign four things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the NttManager `transfer`, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code: it confines the Solana SDK and the single submit call to one file, allows `transfer` only inside the NTT module and the one screen that submits it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
+**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign five things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the NttManager `transfer`, the CCIP Router's `ccipSend`, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code: it confines the Solana SDK and the single submit call to one file, allows `transfer` and `ccipSend` only inside their own protocol modules and the one screen each that submits them, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
 
 **What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee).
 
