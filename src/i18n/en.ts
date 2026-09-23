@@ -5,8 +5,8 @@ export const en = {
     domainNotice: 'Canonical domain:',
     wip: 'Work in progress',
   },
-  gate: {
-    start: 'Start bridging',
+  splash: {
+    start: 'Start Bridge',
     reload: 'Start over — reloads the page',
   },
   tabs: {

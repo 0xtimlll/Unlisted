@@ -3,8 +3,8 @@
  * Everything that is the same on every tab: the header (tabs, theme, settings, wallet), the
  * page frame, Recent transfers across the full width and the settings dialog. The active tab
  * renders its own two columns inside `children`. The disclaimer, the canonical domain and the
- * build stamp (components/Footer.tsx) are not mounted: they belong on the entry veil, and go
- * back up there once the app is finished.
+ * build stamp (components/Footer.tsx) are not mounted: they belong on the splash, and go back up
+ * there once the app is finished.
  */
 import { useState } from 'react'
 import type { ChainKey } from '@/core/chains'
@@ -21,8 +21,6 @@ export function AppShell({
   setStored,
   onTheme,
   srcVm,
-  gated,
-  onReload,
   onTrack,
   children,
 }: {
@@ -33,25 +31,14 @@ export function AppShell({
   onTheme: (t: Theme) => void
   /** Which wallet connector the header shows — follows the active tab's source chain. */
   srcVm: 'evm' | 'svm'
-  /** The entry veil is up: the shell goes inert, so nothing behind the glass takes a click or the focus. */
-  gated: boolean
-  onReload: () => void
   onTrack: (e: HistoryEntry) => void
   children: React.ReactNode
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   return (
     // min-w: below ~1024px the page scrolls sideways instead of falling apart (desktop-only tool).
-    <div inert={gated} className="flex min-h-screen w-full min-w-[1024px] flex-col">
-      <Header
-        tab={tab}
-        onTab={onTab}
-        theme={stored.theme}
-        onTheme={onTheme}
-        onSettings={() => setSettingsOpen(true)}
-        onReload={onReload}
-        srcVm={srcVm}
-      />
+    <div className="flex min-h-screen w-full min-w-[1024px] flex-col">
+      <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} srcVm={srcVm} />
 
       <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 py-8">
         {children}

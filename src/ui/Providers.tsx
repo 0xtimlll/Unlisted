@@ -10,7 +10,6 @@ import { tabOfPath, tabOfProtocol, tabPath, type ProtocolId, type TabSlug } from
 import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
 import { CcipApp } from './CcipApp'
-import { Gate } from './components/Gate'
 import { NttApp } from './NttApp'
 import { entryProtocol, load, save, type HistoryEntry, type Stored, type Theme } from './storage'
 import { saveLastTab } from './tabs'
@@ -39,12 +38,6 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   const [trackRequest, setTrackRequest] = useState<HistoryEntry | null>(null)
   /** What the analysis found for another protocol, carried across when its tab opens. */
   const [handoff, setHandoff] = useState<AnalysisTarget | null>(null)
-  /**
-   * The entry veil (Gate). It is up on every load, and the wordmark puts it back up: 'reloading'
-   * fades the glass in over the running app and then refreshes the page behind it, which brings
-   * the app back in this same state — veil up, nothing connected to by accident.
-   */
-  const [gate, setGate] = useState<'open' | 'reloading' | 'closed'>('open')
   const setStored = (s: Stored) => {
     setStoredState(s)
     save(s)
@@ -106,8 +99,6 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
               setStored={setStored}
               onTheme={onTheme}
               srcVm={svmSource ? 'svm' : 'evm'}
-              gated={gate !== 'closed'}
-              onReload={() => setGate('reloading')}
               onTrack={(e: HistoryEntry) => {
                 goTab(tabOfProtocol(entryProtocol(e)))
                 setTrackRequest(e)
@@ -132,7 +123,6 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                 <CcipApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} handoff={handoff} />
               )}
             </AppShell>
-            {gate === 'closed' ? null : <Gate reloading={gate === 'reloading'} onEnter={() => setGate('closed')} />}
           </SvmWalletHost>
         </RainbowKitProvider>
       </QueryClientProvider>

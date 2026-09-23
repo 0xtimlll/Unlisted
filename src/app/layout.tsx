@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SplashOverlay } from '@/ui/components/SplashOverlay'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -9,7 +10,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {/* Named so the splash can make the whole app inert while it is up. */}
+        <div id="app-root">{children}</div>
+        <SplashOverlay />
+      </body>
     </html>
   )
 }
