@@ -64,13 +64,14 @@ export function Gate({ reloading, onEnter }: { reloading: boolean; onEnter: () =
       className={`gate fixed inset-0 z-50 flex items-center justify-center ${leaving ? 'gate-leaving' : ''}`}
     >
       <div className="gate-glass absolute inset-0" />
-      <div className="gate-card relative flex w-[320px] flex-col items-center text-center">
-        <span id="gate-title" className="text-[44px] font-black leading-none tracking-tight text-ink">
+      <div className="gate-card relative flex w-[360px] flex-col items-center gap-8 rounded-[32px] px-10 py-9 text-center">
+        {/* The highlight sliding across the tile; the content below is positioned, so it stays on top. */}
+        <span className="gate-sheen" aria-hidden />
+        <span id="gate-title" className="relative text-[46px] font-black leading-none tracking-tight text-ink">
           {d.app.title}
         </span>
-        <p className="mt-3 text-sm text-muted">{d.app.tagline}</p>
         {/* The app's own call-to-action button, so the veil is the page rather than a splash screen. */}
-        <Button variant="cta" autoFocus onClick={enter} className="mt-7">
+        <Button variant="cta" autoFocus onClick={enter} className="relative">
           {d.gate.start}
         </Button>
       </div>

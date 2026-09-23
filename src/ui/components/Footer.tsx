@@ -1,4 +1,9 @@
 'use client'
+/**
+ * The disclaimer, the canonical domain and the build stamp. Not mounted anywhere at the moment —
+ * this belongs on the entry veil (components/Gate.tsx) and is put back there once the app is
+ * finished, which is why the wiring is kept intact rather than deleted.
+ */
 import { useDict } from '@/i18n'
 
 const COMMIT = process.env['NEXT_PUBLIC_COMMIT'] ?? 'dev'

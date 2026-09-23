@@ -1,13 +1,14 @@
 'use client'
 /**
  * Everything that is the same on every tab: the header (tabs, theme, settings, wallet), the
- * page frame, Recent transfers across the full width, the footer and the settings dialog.
- * The active tab renders its own two columns inside `children`.
+ * page frame, Recent transfers across the full width and the settings dialog. The active tab
+ * renders its own two columns inside `children`. The disclaimer, the canonical domain and the
+ * build stamp (components/Footer.tsx) are not mounted: they belong on the entry veil, and go
+ * back up there once the app is finished.
  */
 import { useState } from 'react'
 import type { ChainKey } from '@/core/chains'
 import type { TabSlug } from '@/core/protocols'
-import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { History } from './components/History'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -58,8 +59,6 @@ export function AppShell({
           <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} onTrack={onTrack} />
         </div>
       </main>
-
-      <Footer />
 
       {settingsOpen ? (
         <SettingsDialog
