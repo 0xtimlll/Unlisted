@@ -71,9 +71,9 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   }, [dark])
 
   // The wallet modal's two colours, re-read whenever the palette underneath it changes.
-  const [rk, setRk] = useState({ accent: '#ffc107', on: '#1a1a1a' })
+  const [rk, setRk] = useState({ accent: '#fafafa', on: '#1a1a1a' })
   useEffect(() => {
-    setRk({ accent: cssColor('--color-accent', '#ffc107'), on: cssColor('--color-page', '#1a1a1a') })
+    setRk({ accent: cssColor('--color-accent', '#fafafa'), on: cssColor('--color-page', '#1a1a1a') })
   }, [dark])
 
   /**

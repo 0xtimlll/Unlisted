@@ -12,12 +12,10 @@ import { useEffect, useRef, useState } from 'react'
 import { tabPath } from '@/core/protocols'
 import { useDict } from '@/i18n'
 import { loadLastTab } from '../tabs'
-import { TouchId } from './TouchId'
 import { Button } from './ui'
 
-/** Kept in step with globals.css: the dissolve, and the scan that runs before it. */
+/** Kept in step with the dissolve in globals.css. */
 const OUT_MS = 400
-const SCAN_MS = 900
 
 /** The id of the wrapper the root layout puts around the app. */
 const APP_ID = 'app-root'
@@ -35,7 +33,6 @@ export function SplashOverlay() {
   const d = useDict()
   const router = useRouter()
   const [leaving, setLeaving] = useState(false)
-  const [scanning, setScanning] = useState(false)
   const going = useRef(false)
   const frame = useRef<HTMLDivElement>(null)
   const timers = useRef<number[]>([])
@@ -68,26 +65,6 @@ export function SplashOverlay() {
     wait(() => router.push(tabPath(loadLastTab())), OUT_MS)
   }
 
-  /** The print fills in ring by ring first, and the screen leaves when the scan is through. */
-  const scan = () => {
-    if (going.current || scanning) return
-    setScanning(true)
-    wait(enter, SCAN_MS)
-  }
-
-  // Enter reads the print, exactly as it would on the lock screen — and only once.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        scan()
-      }
-      if (e.key === 'Escape') enter()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  })
-
   return (
     <div
       ref={frame}
@@ -95,6 +72,9 @@ export function SplashOverlay() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="splash-title"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') enter()
+      }}
       className={`splash fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 outline-none ${leaving ? 'splash-leaving' : ''}`}
     >
       <span id="splash-title" className="relative text-[56px] font-black leading-none tracking-tight text-ink">
@@ -105,9 +85,6 @@ export function SplashOverlay() {
         <Button variant="cta" onClick={enter}>
           {d.splash.start}
         </Button>
-      </div>
-      <div className="relative pt-6">
-        <TouchId scanning={scanning} onActivate={scan} label={d.splash.touchId} />
       </div>
     </div>
   )

@@ -9,7 +9,6 @@ export const en = {
     start: 'Start Bridging',
     /** The wordmark in the header goes back to the welcome screen. */
     home: 'Back to the welcome screen',
-    touchId: 'Touch to enter the bridge (or press Enter)',
   },
   tabs: {
     oft: 'OFT (LayerZero)',
@@ -468,8 +467,6 @@ export const en = {
     title: 'Recent transfers',
     empty: 'Nothing yet.',
     clear: 'Clear',
-    hide: 'Hide',
-    show: 'Show',
     all: 'All',
   },
   settings: {

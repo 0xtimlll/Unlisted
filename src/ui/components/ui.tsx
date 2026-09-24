@@ -28,6 +28,9 @@ export function Button({
  * A square icon button for the header. Desktop-sized on purpose: the hit area is 40x40 and the
  * glyph ~21px, because the old 36x28 ghost buttons were nearly unhittable on a Mac trackpad.
  * `label` is both the accessible name and the tooltip.
+ *
+ * Nothing is drawn around it on hover — no plate, no border, no shadow. Whatever the icon itself
+ * does on hover is the whole of it. The keyboard ring stays, quietly.
  */
 export function IconButton({ label, children, className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
@@ -36,7 +39,7 @@ export function IconButton({ label, children, className = '', ...p }: ButtonHTML
       {...p}
       aria-label={label}
       title={label}
-      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-transparent text-[21px] leading-none text-muted transition hover:border-line hover:bg-surface-2 hover:text-ink ${focus} ${className}`}
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[21px] leading-none text-muted transition hover:text-ink outline-none focus-visible:ring-1 focus-visible:ring-ink/25 ${className}`}
     >
       <span aria-hidden>{children}</span>
     </button>

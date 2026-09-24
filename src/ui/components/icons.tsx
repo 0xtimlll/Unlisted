@@ -48,22 +48,3 @@ export function SunIcon({ className = '' }: { className?: string }) {
     </svg>
   )
 }
-
-export function EyeIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
-      <path d="M1.8 12S5.5 5.5 12 5.5 22.2 12 22.2 12 18.5 18.5 12 18.5 1.8 12 1.8 12Z" />
-      <circle cx="12" cy="12" r="3.2" />
-    </svg>
-  )
-}
-
-export function EyeOffIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
-      <path d="M9.9 5.7A8.9 8.9 0 0 1 12 5.5c6.5 0 10.2 6.5 10.2 6.5a17 17 0 0 1-3.6 4.3M6.3 7.7A17 17 0 0 0 1.8 12S5.5 18.5 12 18.5a9 9 0 0 0 3.6-.7" />
-      <path d="M10 10a3.2 3.2 0 0 0 4.3 4.3" />
-      <line x1="3" y1="3" x2="21" y2="21" />
-    </svg>
-  )
-}

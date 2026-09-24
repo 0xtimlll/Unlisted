@@ -48,11 +48,9 @@ export type Stored = {
   customRpc: Partial<Record<ChainKey, string>>
   recentContracts: { chain: ChainKey; address: string }[]
   history: HistoryEntry[]
-  /** Transfer history collapsed to its heading. The entries themselves are untouched. */
-  historyHidden: boolean
 }
 
-export const EMPTY: Stored = { theme: DEFAULT_THEME, customRpc: {}, recentContracts: [], history: [], historyHidden: false }
+export const EMPTY: Stored = { theme: DEFAULT_THEME, customRpc: {}, recentContracts: [], history: [] }
 
 const MAX_RECENT = 8
 const MAX_HISTORY = 20
@@ -68,7 +66,6 @@ export function sanitize(raw: unknown): Stored {
   const r = raw as Record<string, unknown>
   // 'system' was a third theme once; anything but 'light' now means the default dark.
   out.theme = r['theme'] === 'light' ? 'light' : DEFAULT_THEME
-  out.historyHidden = r['historyHidden'] === true
   const rpc = r['customRpc']
   if (rpc && typeof rpc === 'object') {
     for (const [k, v] of Object.entries(rpc as Record<string, unknown>)) {

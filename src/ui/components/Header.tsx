@@ -13,9 +13,12 @@ export const CANONICAL_DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? '
 
 /**
  * One header for every tab: the wordmark (a link back to the welcome screen), the protocol tabs,
- * then the shared controls. One wallet slot — the connector follows the source chain's VM (RainbowKit for
- * EVM, wallet-adapter for Solana). Everything here is 40px tall so tabs, icons and the wallet
- * button share one baseline.
+ * then the shared controls. One wallet slot — the connector follows the source chain's VM
+ * (RainbowKit for EVM, wallet-adapter for Solana). Everything here is 40px tall so tabs, icons and
+ * the wallet button share one baseline.
+ *
+ * It is a panel that floats over the page rather than a bar stuck to its edge: same corner radius
+ * as the cards below it, one step lighter than the page, and no rule underneath (6-header-reference).
  */
 export function Header({
   tab,
@@ -34,7 +37,7 @@ export function Header({
 }) {
   const d = useDict()
   return (
-    <header className="flex w-full items-center gap-6 border-b border-line px-6 py-3">
+    <header className="flex w-full items-center gap-6 rounded-card border border-line/60 bg-raised px-5 py-2.5">
       {/* A real link: the address really does change, and the welcome screen is bookmarkable too. */}
       <Link
         href="/"

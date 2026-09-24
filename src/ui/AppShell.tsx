@@ -38,18 +38,15 @@ export function AppShell({
   return (
     // min-w: below ~1024px the page scrolls sideways instead of falling apart (desktop-only tool).
     <div className="flex min-h-screen w-full min-w-[1024px] flex-col">
-      <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} srcVm={srcVm} />
+      {/* The header floats: the same gutters as the content below, so their edges line up. */}
+      <div className="mx-auto w-full max-w-[1280px] px-6 pt-4">
+        <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} srcVm={srcVm} />
+      </div>
 
-      <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 py-8">
+      <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 pb-8 pt-6">
         {children}
         <div className="pt-10">
-          <History
-            entries={stored.history}
-            hidden={stored.historyHidden}
-            onHidden={(v: boolean) => setStored({ ...stored, historyHidden: v })}
-            onClear={() => setStored({ ...stored, history: [] })}
-            onTrack={onTrack}
-          />
+          <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} onTrack={onTrack} />
         </div>
       </main>
 
