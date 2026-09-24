@@ -38,8 +38,9 @@ export function AppShell({
   return (
     // min-w: below ~1024px the page scrolls sideways instead of falling apart (desktop-only tool).
     <div className="flex min-h-screen w-full min-w-[1024px] flex-col">
-      {/* The header floats: the same gutters as the content below, so their edges line up. */}
-      <div className="mx-auto w-full max-w-[1280px] px-6 pt-4">
+      {/* The header floats the full width of the window, on a gutter just wide enough to read as
+          a panel. Only the header is this wide; the content below keeps its column. */}
+      <div className="w-full px-4 pt-4">
         <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} srcVm={srcVm} />
       </div>
 
