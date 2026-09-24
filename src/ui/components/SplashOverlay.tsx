@@ -65,6 +65,22 @@ export function SplashOverlay() {
     wait(() => router.push(tabPath(loadLastTab())), OUT_MS)
   }
 
+  /**
+   * Enter opens the bridge without reaching for the mouse, and Escape does the same. The listener
+   * is on the document rather than on the frame below, so it answers wherever the focus has
+   * wandered to; `enter` itself only ever runs once.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault()
+        enter()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  })
+
   return (
     <div
       ref={frame}
@@ -72,9 +88,6 @@ export function SplashOverlay() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="splash-title"
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') enter()
-      }}
       className={`splash fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 outline-none ${leaving ? 'splash-leaving' : ''}`}
     >
       <span id="splash-title" className="relative text-[56px] font-black leading-none tracking-tight text-ink">
