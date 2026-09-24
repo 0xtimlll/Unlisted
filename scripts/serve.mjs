@@ -41,7 +41,8 @@ const rules = parseHeaders()
 
 createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x')
-  let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '')
+  // Trailing slashes are dropped the way Cloudflare Pages drops them, so /bridge/ resolves too.
+  let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '').replace(/(.)\/$/, '$1')
   let file = join(ROOT, path)
   if (!file.startsWith(ROOT)) { res.writeHead(403).end(); return }
   if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html')

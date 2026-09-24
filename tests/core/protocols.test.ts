@@ -34,16 +34,17 @@ describe('protocols', () => {
   })
 
   it('reads the tab out of a pathname', () => {
-    expect(tabOfPath('/oft')).toBe('oft')
+    expect(tabOfPath('/bridge')).toBe('oft')
     expect(tabOfPath('/ntt/')).toBe('ntt')
     expect(tabOfPath('/ccip?x=1#y')).toBe('ccip')
     expect(tabOfPath('/')).toBeUndefined()
-    expect(tabOfPath('/oft/extra')).toBe('oft')
+    expect(tabOfPath('/bridge/extra')).toBe('oft')
     expect(tabOfPath('/nope')).toBeUndefined()
+    expect(tabOfPath('/oft')).toBeUndefined()
   })
 
   it('paths are the slugs the export writes', () => {
-    expect(TAB_SLUGS.map(tabPath)).toEqual(['/oft', '/ntt', '/ccip'])
+    expect(TAB_SLUGS.map(tabPath)).toEqual(['/bridge', '/ntt', '/ccip'])
   })
 
   it('every protocol with a tab now has a bridge behind it', () => {

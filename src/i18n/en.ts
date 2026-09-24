@@ -6,8 +6,10 @@ export const en = {
     wip: 'Work in progress',
   },
   splash: {
-    start: 'Start Bridge',
-    reload: 'Start over — reloads the page',
+    start: 'Start Bridging',
+    /** The wordmark in the header goes back to the welcome screen. */
+    home: 'Back to the welcome screen',
+    touchId: 'Touch to enter the bridge (or press Enter)',
   },
   tabs: {
     oft: 'OFT (LayerZero)',
@@ -27,7 +29,7 @@ export const en = {
     name_ccip: 'Chainlink CCIP',
   },
   header: {
-    connect: 'Connect wallet',
+    connect: 'Connect',
     language: 'Language',
     settings: 'RPC settings',
     sourceChain: 'Source chain',
@@ -466,6 +468,8 @@ export const en = {
     title: 'Recent transfers',
     empty: 'Nothing yet.',
     clear: 'Clear',
+    hide: 'Hide',
+    show: 'Show',
     all: 'All',
   },
   settings: {
@@ -552,8 +556,7 @@ export const en = {
     track: 'Track',
     cta_send: 'Send',
     theme: 'Theme',
-    themeTooltip: 'Theme: {mode}',
-    theme_system: 'follow system',
+    themeSwitch: 'Switch to the {mode} theme',
     theme_light: 'light',
     theme_dark: 'dark',
     preview: 'Preview',

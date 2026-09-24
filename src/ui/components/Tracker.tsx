@@ -96,7 +96,7 @@ export function Tracker(p: {
           <li key={i} className="flex flex-1 items-center gap-2">
             <span
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                st.state === 'done' ? 'bg-ok text-white' : st.state === 'failed' ? 'bg-danger text-white' : st.state === 'active' ? 'bg-accent text-page' : 'bg-surface-2 text-muted'
+                st.state === 'done' ? 'bg-ok text-solid-ink' : st.state === 'failed' ? 'bg-danger text-solid-ink' : st.state === 'active' ? 'bg-accent text-page' : 'bg-surface-2 text-muted'
               }`}
             >
               {st.state === 'done' ? '✓' : st.state === 'failed' ? '!' : st.state === 'active' ? <Spinner /> : i + 1}

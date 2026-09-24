@@ -1,19 +1,19 @@
 'use client'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import Link from 'next/link'
 import { TAB_SLUGS, tabPath, type TabSlug } from '@/core/protocols'
-import { fmt, useDict } from '@/i18n'
+import { useDict } from '@/i18n'
 import type { Theme } from '../storage'
 import { SvmWalletButton } from '../svm/SvmWalletButton'
+import { GearIcon } from './icons'
+import { ThemeToggle } from './ThemeToggle'
 import { IconButton, LinkTabs } from './ui'
 
 export const CANONICAL_DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? 'localhost'
 
-const THEME_GLYPH: Record<Theme, string> = { dark: '☾', light: '☀', system: '◐' }
-const NEXT_THEME: Record<Theme, Theme> = { dark: 'light', light: 'system', system: 'dark' }
-
 /**
- * One header for every tab: the wordmark (which reloads the page, so the splash is back), the
- * protocol tabs, then the shared controls. One wallet slot — the connector follows the source chain's VM (RainbowKit for
+ * One header for every tab: the wordmark (a link back to the welcome screen), the protocol tabs,
+ * then the shared controls. One wallet slot — the connector follows the source chain's VM (RainbowKit for
  * EVM, wallet-adapter for Solana). Everything here is 40px tall so tabs, icons and the wallet
  * button share one baseline.
  */
@@ -35,26 +35,23 @@ export function Header({
   const d = useDict()
   return (
     <header className="flex w-full items-center gap-6 border-b border-line px-6 py-3">
-      <button
-        type="button"
-        onClick={() => window.location.reload()}
-        title={d.splash.reload}
-        aria-label={d.splash.reload}
-        className="-mx-1.5 rounded-lg px-1.5 text-[22px] font-black tracking-tight text-ink transition hover:text-muted outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+      {/* A real link: the address really does change, and the welcome screen is bookmarkable too. */}
+      <Link
+        href="/"
+        title={d.splash.home}
+        className="-mx-1.5 rounded-lg px-1.5 text-[22px] font-black tracking-tight text-ink outline-none transition hover:text-muted focus-visible:ring-2 focus-visible:ring-ink/30"
       >
         {d.app.title}
-      </button>
+      </Link>
       <LinkTabs
         value={tab}
         onSelect={onTab}
         items={TAB_SLUGS.map((s) => ({ value: s, label: d.tabs[s], href: tabPath(s) }))}
       />
       <div className="ml-auto flex items-center gap-1.5">
-        <IconButton label={fmt(d.ui.themeTooltip, { mode: d.ui[`theme_${theme}`] })} onClick={() => onTheme(NEXT_THEME[theme])}>
-          {THEME_GLYPH[theme]}
-        </IconButton>
-        <IconButton label={d.header.settings} onClick={onSettings}>
-          ⚙
+        <ThemeToggle theme={theme} onTheme={onTheme} />
+        <IconButton label={d.header.settings} onClick={onSettings} className="group">
+          <GearIcon className="h-6 w-6 transition-transform duration-300 group-hover:rotate-[75deg]" />
         </IconButton>
         {srcVm === 'svm' ? <SvmWalletButton /> : <WalletButton />}
       </div>

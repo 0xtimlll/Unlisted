@@ -43,7 +43,13 @@ export function AppShell({
       <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 py-8">
         {children}
         <div className="pt-10">
-          <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} onTrack={onTrack} />
+          <History
+            entries={stored.history}
+            hidden={stored.historyHidden}
+            onHidden={(v: boolean) => setStored({ ...stored, historyHidden: v })}
+            onClear={() => setStored({ ...stored, history: [] })}
+            onTrack={onTrack}
+          />
         </div>
       </main>
 

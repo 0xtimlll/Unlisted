@@ -8,9 +8,27 @@ import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { protocolBadge, useDict } from '@/i18n'
 import { entryProtocol, filterHistory, type HistoryEntry, type HistoryFilter } from '../storage'
 import { ChainIcon } from './ChainIcon'
+import { EyeIcon, EyeOffIcon } from './icons'
 
-/** Full-width list under the two columns: every transfer, whichever tab made it. */
-export function History({ entries, onClear, onTrack }: { entries: HistoryEntry[]; onClear: () => void; onTrack: (e: HistoryEntry) => void }) {
+/**
+ * Full-width list under the two columns: every transfer, whichever tab made it.
+ *
+ * Hiding and clearing are two different things. Hidden collapses the list to its heading and is
+ * remembered across reloads; the entries are still there, and Show brings them back untouched.
+ */
+export function History({
+  entries,
+  hidden,
+  onHidden,
+  onClear,
+  onTrack,
+}: {
+  entries: HistoryEntry[]
+  hidden: boolean
+  onHidden: (v: boolean) => void
+  onClear: () => void
+  onTrack: (e: HistoryEntry) => void
+}) {
   const d = useDict()
   const [filter, setFilter] = useState<HistoryFilter>('all')
   if (entries.length === 0) return null
@@ -24,31 +42,45 @@ export function History({ entries, onClear, onTrack }: { entries: HistoryEntry[]
     <section>
       <div className="mb-2 flex items-center gap-3 text-sm text-muted">
         <span className="font-semibold text-ink">{d.history.title}</span>
-        <div className="flex items-center gap-1 rounded-xl bg-surface-2 p-1">
-          {filters.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              className={`h-8 rounded-lg px-3 text-xs font-semibold transition ${filter === f.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="ml-auto text-xs hover:text-ink" onClick={onClear}>
-          {d.history.clear}
+        <span className="tnum rounded-full bg-surface-2 px-2 py-0.5 text-xs font-semibold text-muted">{entries.length}</span>
+        {hidden ? null : (
+          <div className="flex items-center gap-1 rounded-xl bg-surface-2 p-1">
+            {filters.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                onClick={() => setFilter(f.value)}
+                className={`h-8 rounded-lg px-3 text-xs font-semibold transition ${filter === f.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+        <button type="button" className="ml-auto inline-flex items-center gap-1.5 text-xs transition hover:text-ink" onClick={() => onHidden(!hidden)} aria-expanded={!hidden}>
+          {hidden ? <EyeIcon className="h-4 w-4" /> : <EyeOffIcon className="h-4 w-4" />}
+          {hidden ? d.history.show : d.history.hide}
         </button>
+        {hidden ? null : (
+          <button type="button" className="text-xs transition hover:text-ink" onClick={onClear}>
+            {d.history.clear}
+          </button>
+        )}
       </div>
-      {shown.length === 0 ? (
-        <p className="rounded-card border border-line bg-surface px-4 py-3 text-sm text-muted">{d.history.empty}</p>
-      ) : (
-        <ul className="divide-y divide-line rounded-card border border-line bg-surface">
-          {shown.map((e) => (
-            <HistoryRow key={e.txHash} entry={e} onTrack={onTrack} />
-          ))}
-        </ul>
-      )}
+      {/* Collapsed, not unmounted: the rows are still here, just at zero height. */}
+      <div className="collapse" data-hidden={hidden} aria-hidden={hidden}>
+        <div>
+          {shown.length === 0 ? (
+            <p className="rounded-card border border-line bg-surface px-4 py-3 text-sm text-muted">{d.history.empty}</p>
+          ) : (
+            <ul className="divide-y divide-line rounded-card border border-line bg-surface">
+              {shown.map((e) => (
+                <HistoryRow key={e.txHash} entry={e} onTrack={onTrack} />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </section>
   )
 }

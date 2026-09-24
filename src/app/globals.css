@@ -1,21 +1,33 @@
 @import 'tailwindcss';
 
-/* Manual theme switch (system by default): `.dark` on <html>. */
+/* Manual theme switch: `.dark` on <html>. Dark is the default and is set before hydration. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Monochrome: white page, black ink and buttons. Dark mode is the inverse. */
+/*
+ * Two colours and nothing else (1-palette.jpg): Deep Charcoal #1A1A1A and Golden Hour #FFC107.
+ * Light is the charcoal-on-white half of that pair with no gold in it at all; dark inverts it.
+ * Every colour in the app comes from a token here — components never name one.
+ */
 @theme {
+  /* The two colours the whole app is made of. Change these and everything follows. */
+  --color-charcoal: #1a1a1a;
+  --color-gold: #ffc107;
+
   --color-page: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-2: #f4f4f5;
-  --color-line: #e4e4e7;
-  --color-ink: #0a0a0a;
-  --color-muted: #6b6b70;
-  --color-faint: #a1a1aa;
-  --color-accent: #0a0a0a;
-  --color-accent-hover: #27272a;
-  --color-accent-soft: #f4f4f5;
-  --color-accent-ink: #0a0a0a;
+  --color-surface-2: #f2f2f2;
+  --color-line: #d7d7d7;
+  --color-ink: var(--color-charcoal);
+  --color-muted: rgb(26 26 26 / 0.62);
+  --color-faint: rgb(26 26 26 / 0.4);
+  --color-accent: var(--color-charcoal);
+  --color-accent-hover: #3a3a3a;
+  --color-accent-soft: #ededed;
+  --color-accent-ink: var(--color-charcoal);
+  /* Text that sits on a solid ok/warn/danger fill. */
+  --color-solid-ink: #ffffff;
+  /* The wash behind a dialog. */
+  --color-scrim: rgb(26 26 26 / 0.45);
   --color-ok: #15803d;
   --color-warn: #a16207;
   --color-danger: #b91c1c;
@@ -36,17 +48,19 @@
 }
 
 .dark {
-  --color-page: #0a0a0a;
-  --color-surface: #111113;
-  --color-surface-2: #1c1c1f;
-  --color-line: #2a2a2e;
-  --color-ink: #fafafa;
-  --color-muted: #a1a1aa;
-  --color-faint: #71717a;
-  --color-accent: #fafafa;
-  --color-accent-hover: #d4d4d8;
-  --color-accent-soft: #1c1c1f;
-  --color-accent-ink: #fafafa;
+  --color-page: var(--color-charcoal);
+  --color-surface: var(--color-charcoal);
+  --color-surface-2: #262112;
+  --color-line: rgb(255 193 7 / 0.22);
+  --color-ink: var(--color-gold);
+  --color-muted: rgb(255 193 7 / 0.62);
+  --color-faint: rgb(255 193 7 / 0.38);
+  --color-accent: var(--color-gold);
+  --color-accent-hover: #ffcf3d;
+  --color-accent-soft: rgb(255 193 7 / 0.14);
+  --color-accent-ink: var(--color-gold);
+  --color-solid-ink: var(--color-charcoal);
+  --color-scrim: rgb(0 0 0 / 0.55);
   --color-ok: #4ade80;
   --color-warn: #fbbf24;
   --color-danger: #f87171;
@@ -67,6 +81,23 @@ body {
     Arial,
     sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Switching the theme repaints every colour at once. The transition is attached only while the
+ * switch is in flight (ui/components/ThemeToggle.tsx adds the class for the length of it), so
+ * nothing else in the app ever animates a colour it did not ask to animate.
+ */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition:
+    background-color 300ms ease,
+    border-color 300ms ease,
+    color 300ms ease,
+    fill 300ms ease,
+    stroke 300ms ease,
+    box-shadow 300ms ease !important;
 }
 
 .mono {
@@ -97,21 +128,60 @@ input.amount::placeholder {
 }
 
 /*
- * The splash over the bridge (ui/components/SplashOverlay.tsx). One material: the whole screen is
- * the glass. `backdrop-filter` blurs what is already painted underneath, so the bridge itself is
+ * The splash over the bridge (ui/components/SplashOverlay.tsx). The whole screen is the glass:
+ * `backdrop-filter` blurs the bridge that is already painted underneath, so the bridge itself is
  * never filtered — its sticky column and its wallet portals behave the same once it is gone.
+ *
+ * The material follows 4-glass-reference.jpg: enough blur that what is behind becomes soft shapes
+ * rather than a haze, a fill that is darker at the bottom than at the top, one lit hairline along
+ * the top edge, a deep shadow under it and a trace of grain so the blur does not read as plastic.
+ * The highlight takes its colour from the theme's ink, so it is warm gold on dark and neutral on
+ * light.
  *
  * Nothing above this element may animate its own opacity: an ancestor with an opacity other than
  * 1 is a backdrop root, and the blur would then have an empty backdrop to work on.
  */
 .splash {
-  background: color-mix(in srgb, var(--color-page) 25%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
-  backdrop-filter: blur(24px) saturate(140%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-page) 52%, transparent),
+    color-mix(in srgb, var(--color-page) 74%, transparent)
+  );
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  backdrop-filter: blur(26px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--color-ink) 14%, transparent),
+    0 40px 120px rgb(0 0 0 / 0.4);
   transition:
     opacity 400ms ease,
     -webkit-backdrop-filter 400ms ease,
     backdrop-filter 400ms ease;
+}
+
+/* The lit top edge: brightest in the middle, gone at the corners. */
+.splash::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-ink) 42%, transparent) 28%,
+    color-mix(in srgb, var(--color-ink) 42%, transparent) 72%,
+    transparent
+  );
+}
+
+/* Grain. Static SVG noise, no texture file and no request: enough to break up the blur. */
+.splash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* On the way out the glass clears as it fades, so the bridge sharpens instead of being uncovered. */
@@ -133,5 +203,213 @@ input.amount::placeholder {
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .splash {
     background: color-mix(in srgb, var(--color-page) 94%, transparent);
+  }
+}
+
+/*
+ * The theme switch (2-theme-toggle.gif): a hairline capsule with a knob that overhangs it top and
+ * bottom and lands with a spring. The knob is Deep Charcoal in both themes — on gold when the
+ * dark theme is on, on white when it is off.
+ */
+.toggle {
+  position: relative;
+  display: inline-flex;
+  height: 30px;
+  width: 58px;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.toggle[data-on='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+/*
+ * The knob keeps its own spring while the theme repaints. The blanket rule above replaces the
+ * `transition` of everything on the page for those 300ms, and without this the knob would jump
+ * the moment it is asked to travel — which is the one moment it has to travel.
+ */
+.theme-switching .toggle-knob {
+  transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.theme-switching .toggle-icon {
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease !important;
+}
+
+.toggle-knob {
+  position: absolute;
+  left: -1px;
+  height: 34px;
+  width: 34px;
+  transform: translateX(0);
+  transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.toggle[data-on='true'] .toggle-knob {
+  transform: translateX(25px);
+}
+
+.toggle-knob-inner {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--color-charcoal);
+  color: var(--color-gold);
+  box-shadow:
+    0 3px 8px rgb(0 0 0 / 0.3),
+    0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+/* Light theme: no gold anywhere, so the glyph inside the knob is the page itself. */
+:root:not(.dark) .toggle-knob-inner {
+  color: var(--color-page);
+}
+
+/* Squash on the way out, stretch on the way back — on the inner element, so the travel above
+ * stays a plain transform transition. */
+.toggle[data-anim='true'] .toggle-knob-inner {
+  animation: knob-squash 380ms ease-out;
+}
+
+@keyframes knob-squash {
+  0% {
+    transform: scale(1, 1);
+  }
+  35% {
+    transform: scale(1.16, 0.88);
+  }
+  70% {
+    transform: scale(0.94, 1.06);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+.toggle-icon {
+  position: absolute;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
+}
+
+.toggle[data-on='true'] .toggle-icon-sun,
+.toggle[data-on='false'] .toggle-icon-moon {
+  opacity: 0;
+  transform: scale(0.6) rotate(-40deg);
+}
+
+.toggle[data-on='true'] .toggle-icon-moon,
+.toggle[data-on='false'] .toggle-icon-sun {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * Touch ID (3-touch-id-icon.jpg). Every ridge is its own line, drawn twice: a resting copy at low
+ * opacity and a gold copy on top that is masked out until the scan runs it in, innermost first.
+ */
+.touchid-rest {
+  opacity: 0.32;
+}
+
+.touchid-scan {
+  color: var(--color-accent);
+}
+
+.touchid-scan path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* Round caps paint a dot even at zero length, so a ridge that has not been reached is hidden. */
+  opacity: 0;
+}
+
+.touchid[data-scan='true'] .touchid-scan path {
+  animation: touchid-draw 260ms ease-out forwards;
+}
+
+.touchid[data-scan='true'] {
+  animation: touchid-pulse 420ms ease-out 620ms;
+}
+
+@keyframes touchid-draw {
+  from {
+    opacity: 1;
+    stroke-dashoffset: 1;
+  }
+  to {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes touchid-pulse {
+  40% {
+    transform: scale(1.06);
+    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--color-accent) 60%, transparent));
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touchid[data-scan='true'] .touchid-scan path {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+
+  .touchid[data-scan='true'] {
+    animation: none;
+  }
+
+  .toggle-knob,
+  .toggle-icon {
+    transition-duration: 1ms;
+  }
+
+  .toggle[data-anim='true'] .toggle-knob-inner {
+    animation: none;
+  }
+}
+
+/*
+ * Hiding the transfer history. `grid-template-rows: 1fr -> 0fr` collapses the real height of the
+ * list without measuring it, so the animation works whatever is inside.
+ */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 250ms ease,
+    opacity 250ms ease;
+}
+
+.collapse[data-hidden='true'] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.collapse > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition-duration: 1ms;
   }
 }

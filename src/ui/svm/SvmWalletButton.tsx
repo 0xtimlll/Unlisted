@@ -62,7 +62,7 @@ export function SvmWalletPicker({ onClose, onPick }: { onClose: () => void; onPi
   const w = useSvmWallet()
   const installed = w.wallets.filter((x) => x.installed)
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="mt-8 w-full max-w-sm rounded-card border border-line bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <span className="text-lg font-bold text-ink">{d.header.connectSolana}</span>

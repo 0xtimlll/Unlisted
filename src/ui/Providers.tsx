@@ -2,6 +2,7 @@
 import { darkTheme, lightTheme, RainbowKitProvider } from '@rainbow-me/rainbowkit'
 import '@rainbow-me/rainbowkit/styles.css'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { WagmiProvider } from 'wagmi'
 import type { ChainKey } from '@/core/chains'
@@ -16,19 +17,17 @@ import { saveLastTab } from './tabs'
 import { SvmWalletHost } from './svm/SvmWalletHost'
 import { makeWagmiConfig } from './wagmi'
 
-function useSystemDark(): boolean {
-  const [dark, setDark] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    setDark(mq.matches)
-    const h = (e: MediaQueryListEvent) => setDark(e.matches)
-    mq.addEventListener('change', h)
-    return () => mq.removeEventListener('change', h)
-  }, [])
-  return dark
+/**
+ * RainbowKit's modal is themed in JavaScript, not CSS, so the two palette colours it needs are
+ * read back off the document — the tokens in globals.css stay the only place they are written.
+ */
+function cssColor(name: string, fallback: string): string {
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+  } catch {
+    return fallback
+  }
 }
-
-const RK_ACCENT = { light: '#0a0a0a', dark: '#fafafa' }
 
 export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   const [stored, setStoredState] = useState<Stored>(() => load())
@@ -65,12 +64,28 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
     return () => window.removeEventListener('popstate', onPop)
   }, [initialTab])
 
-  const systemDark = useSystemDark()
-  const dark = stored.theme === 'dark' || (stored.theme === 'system' && systemDark)
+  const dark = stored.theme === 'dark'
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
     document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
   }, [dark])
+
+  // The wallet modal's two colours, re-read whenever the palette underneath it changes.
+  const [rk, setRk] = useState({ accent: '#ffc107', on: '#1a1a1a' })
+  useEffect(() => {
+    setRk({ accent: cssColor('--color-accent', '#ffc107'), on: cssColor('--color-page', '#1a1a1a') })
+  }, [dark])
+
+  /**
+   * Moving between the welcome screen and a tab is a real navigation (the layout keeps the app
+   * mounted through it), so the tab follows the address. Switching tabs inside the app uses
+   * history.pushState below and does not come through here.
+   */
+  const pathname = usePathname()
+  useEffect(() => {
+    const t = tabOfPath(pathname)
+    if (t) setTabState(t)
+  }, [pathname])
 
   const rpcKey = JSON.stringify(stored.customRpc)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,8 +94,8 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   const onTheme = (t: Theme) => setStored({ ...stored, theme: t })
 
   const rkTheme = dark
-    ? darkTheme({ accentColor: RK_ACCENT.dark, accentColorForeground: '#0a0a0a', borderRadius: 'large' })
-    : lightTheme({ accentColor: RK_ACCENT.light, accentColorForeground: '#ffffff', borderRadius: 'large' })
+    ? darkTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' })
+    : lightTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' })
 
   // Only the OFT tab can have a Solana source; the others are EVM-only, so the header shows the
   // EVM wallet there and the Solana stack is not loaded.

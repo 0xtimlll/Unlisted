@@ -39,16 +39,20 @@ export type HistoryEntry = {
   status?: 'delivered' | 'failed'
 }
 
-export type Theme = 'system' | 'light' | 'dark'
+/** Two themes, no "follow the system": dark is the default and the one the app is designed in. */
+export type Theme = 'light' | 'dark'
+export const DEFAULT_THEME: Theme = 'dark'
 
 export type Stored = {
   theme: Theme
   customRpc: Partial<Record<ChainKey, string>>
   recentContracts: { chain: ChainKey; address: string }[]
   history: HistoryEntry[]
+  /** Transfer history collapsed to its heading. The entries themselves are untouched. */
+  historyHidden: boolean
 }
 
-export const EMPTY: Stored = { theme: 'system', customRpc: {}, recentContracts: [], history: [] }
+export const EMPTY: Stored = { theme: DEFAULT_THEME, customRpc: {}, recentContracts: [], history: [], historyHidden: false }
 
 const MAX_RECENT = 8
 const MAX_HISTORY = 20
@@ -62,7 +66,9 @@ export function sanitize(raw: unknown): Stored {
   const out: Stored = { ...EMPTY, customRpc: {}, recentContracts: [], history: [] }
   if (!raw || typeof raw !== 'object') return out
   const r = raw as Record<string, unknown>
-  if (r['theme'] === 'light' || r['theme'] === 'dark' || r['theme'] === 'system') out.theme = r['theme']
+  // 'system' was a third theme once; anything but 'light' now means the default dark.
+  out.theme = r['theme'] === 'light' ? 'light' : DEFAULT_THEME
+  out.historyHidden = r['historyHidden'] === true
   const rpc = r['customRpc']
   if (rpc && typeof rpc === 'object') {
     for (const [k, v] of Object.entries(rpc as Record<string, unknown>)) {

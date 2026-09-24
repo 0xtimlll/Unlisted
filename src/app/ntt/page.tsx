@@ -1,6 +1,4 @@
-'use client'
-import { AppEntry } from '@/ui/AppEntry'
-
+/** The NTT tab. Like /bridge: the app is the layout's, this route only says no glass. */
 export default function Page() {
-  return <AppEntry tab="ntt" />
+  return null
 }

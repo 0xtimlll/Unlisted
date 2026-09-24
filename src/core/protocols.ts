@@ -1,7 +1,7 @@
 /**
  * The bridge protocols this app knows about, and the tab each one owns.
  *
- * One id per protocol, used everywhere: the URL of its tab (/oft, /ntt, /ccip), the badge on a
+ * One id per protocol, used everywhere: the URL of its tab (/bridge, /ntt, /ccip), the badge on a
  * history entry, and — from stage 1 on — the `protocol` field of an analysis result.
  * No imports on purpose: storage, routing and the pure analysis layer all depend on this file.
  */
@@ -41,18 +41,25 @@ export function tabOfProtocol(id: ProtocolId): TabSlug {
   return BY_PROTOCOL[id]
 }
 
-/** "/oft" — the path the tab lives at. */
+/**
+ * The path each tab lives at. The OFT tab is the bridge's own entry point, so it owns /bridge:
+ * that is the address to bookmark, and the one the welcome screen at / opens.
+ */
+const TAB_PATH: Record<TabSlug, string> = { oft: '/bridge', ntt: '/ntt', ccip: '/ccip' }
+const TAB_OF_SEGMENT: Record<string, TabSlug> = { bridge: 'oft', ntt: 'ntt', ccip: 'ccip' }
+
+/** "/bridge" — the path the tab lives at. */
 export function tabPath(slug: TabSlug): string {
-  return `/${slug}`
+  return TAB_PATH[slug]
 }
 
 /**
- * The tab a path belongs to, or undefined. Accepts an optional trailing slash and any
- * query/hash, so it can be fed `location.pathname` directly.
+ * The tab a path belongs to, or undefined (the welcome screen at / belongs to none). Accepts an
+ * optional trailing slash and any query/hash, so it can be fed `location.pathname` directly.
  */
 export function tabOfPath(pathname: string): TabSlug | undefined {
   const first = pathname.split('?')[0]!.split('#')[0]!.split('/').filter(Boolean)[0]
-  return isTabSlug(first) ? first : undefined
+  return first === undefined ? undefined : TAB_OF_SEGMENT[first]
 }
 
 /** Protocols whose bridge is implemented. Detection may still recognise the others. */

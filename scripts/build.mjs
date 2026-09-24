@@ -18,6 +18,8 @@ function commit() {
 const env = { ...process.env, NEXT_PUBLIC_COMMIT: commit(), NEXT_TELEMETRY_DISABLED: '1' }
 const steps = [
   ['npx', ['next', 'build']],
+  // The theme has to be applied before the first paint; React will not emit that script itself.
+  [process.execPath, ['scripts/inject-theme.mjs']],
   [process.execPath, ['scripts/gen-headers.mjs']],
 ]
 for (const [cmd, args] of steps) {

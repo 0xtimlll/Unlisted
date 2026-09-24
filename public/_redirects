@@ -1,0 +1,5 @@
+# Cloudflare Pages: the canonical address of every page has no trailing slash, and a hard reload
+# on the slashed form must not 404. The export emits <page>.html, which Pages serves at /<page>.
+/bridge/  /bridge  301
+/ntt/     /ntt     301
+/ccip/    /ccip    301

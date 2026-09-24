@@ -15,7 +15,7 @@ export function Button({
       : variant === 'primary'
         ? 'h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-page hover:bg-accent-hover'
         : variant === 'danger'
-          ? 'h-10 rounded-xl bg-danger px-4 text-sm font-semibold text-white hover:opacity-90'
+          ? 'h-10 rounded-xl bg-danger px-4 text-sm font-semibold text-solid-ink hover:opacity-90'
           : variant === 'ghost'
             ? 'h-9 rounded-lg px-3 text-sm text-muted hover:bg-surface-2 hover:text-ink'
             : variant === 'pill'

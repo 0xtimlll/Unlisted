@@ -45,7 +45,7 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="mt-8 w-full max-w-md rounded-card border border-line bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold text-ink">{d.settings.title}</h2>
