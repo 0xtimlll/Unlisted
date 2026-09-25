@@ -28,10 +28,19 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - name: no third-party script/style hosts in the export
+      - name: nothing third-party in the export
         run: |
-          if grep -rEo '(src|href)="https?://[^"]+"' out/*.html; then
+          # Anything the page FETCHES must be same-origin. An <a href> is a link the visitor
+          # clicks, not a resource the page loads, so anchors are held to their own rule below —
+          # the welcome screen links to this repository.
+          if grep -rEoi "<(script|link|iframe|frame|embed|object|img|source|track|video|audio)[^>]*[[:space:]](src|href|srcset|data|poster)[[:space:]]*=[[:space:]]*[\"']?https?://" out/*.html; then
             echo "external resource in HTML"; exit 1; fi
+          # Outbound links: only to the repository, and never without noopener.
+          LINKS=$(grep -rEohi "<a[^>]*[[:space:]]href[[:space:]]*=[[:space:]]*[\"']?https?://[^>]*>" out/*.html || true)
+          if printf '%s' "$LINKS" | grep -vE '^<a href="https://github\.com/'; then
+            echo "outbound link to an unexpected host"; exit 1; fi
+          if printf '%s' "$LINKS" | grep -v 'rel="noopener noreferrer"'; then
+            echo "outbound link without rel=noopener noreferrer"; exit 1; fi
           grep -q "script-src 'self'" out/_headers
       - name: nothing the audit exceptions rely on ships to users (audit-exceptions.json)
         run: |
