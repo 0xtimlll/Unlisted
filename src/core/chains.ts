@@ -30,6 +30,17 @@ type ChainCommon = {
   explorerAddrUrl: string
   /** Rough number of source confirmations before LZ DVNs verify — for the "usually ~N min" hint only. */
   srcConfirmationsHint: number
+  /**
+   * §6.21 A deliberately generous ceiling on the LayerZero fee, in this chain's smallest native
+   * unit (wei / lamports). Nothing about a quote is verifiable off-chain: `quoteSend` is whatever
+   * the OFT — or whatever RPC answered for it — chose to return, and `msg.value` follows it, so
+   * without a ceiling the only bound on the fee is the wallet's whole balance.
+   *
+   * It is set an order of magnitude above what these routes actually cost, so an ordinary send
+   * never meets it and a gas spike does not either. Crossing it does not refuse the send; it asks
+   * the user to confirm the number they are about to pay (guard 21).
+   */
+  feeCeiling: bigint
 }
 
 export type EvmChainDef = ChainCommon & {
@@ -61,6 +72,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://etherscan.io/address/',
     feeStepWei: 10n ** 14n, // 0.0001 ETH
     srcConfirmationsHint: 32,
+    feeCeiling: 10n ** 17n, // 0.1 ETH
   },
   {
     vm: 'evm',
@@ -74,6 +86,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://arbiscan.io/address/',
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 20,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {
     vm: 'evm',
@@ -87,6 +100,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://optimistic.etherscan.io/address/',
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 20,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {
     vm: 'evm',
@@ -100,6 +114,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://basescan.org/address/',
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 10,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {
     vm: 'evm',
@@ -113,6 +128,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://bscscan.com/address/',
     feeStepWei: 10n ** 15n, // 0.001 BNB
     srcConfirmationsHint: 20,
+    feeCeiling: 2n * 10n ** 17n, // 0.2 BNB
   },
   {
     vm: 'evm',
@@ -126,6 +142,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://polygonscan.com/address/',
     feeStepWei: 10n ** 16n, // 0.01 POL
     srcConfirmationsHint: 512,
+    feeCeiling: 2n * 10n ** 20n, // 200 POL
   },
   {
     vm: 'evm',
@@ -139,6 +156,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://snowtrace.io/address/',
     feeStepWei: 10n ** 15n,
     srcConfirmationsHint: 12,
+    feeCeiling: 5n * 10n ** 18n, // 5 AVAX
   },
   {
     vm: 'evm',
@@ -152,6 +170,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://hyperevmscan.io/address/',
     feeStepWei: 10n ** 16n, // 0.01 HYPE
     srcConfirmationsHint: 20,
+    feeCeiling: 5n * 10n ** 18n, // 5 HYPE
   },
   {
     vm: 'evm',
@@ -165,6 +184,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://lineascan.build/address/',
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 20,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {
     vm: 'evm',
@@ -178,6 +198,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://scrollscan.com/address/',
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 20,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {
     vm: 'svm',
@@ -193,6 +214,7 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://solscan.io/account/',
     feeStepLamports: 10_000n,
     srcConfirmationsHint: 1,
+    feeCeiling: 10n ** 9n, // 1 SOL
   },
 ] as const
 

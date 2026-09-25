@@ -3,7 +3,7 @@
  * recent contract addresses, transfer hashes. Every read/write is guarded.
  */
 import { isAddress } from 'viem'
-import type { ChainKey } from '@/core/chains'
+import { CHAINS, type ChainKey } from '@/core/chains'
 import { isProtocolId, type ProtocolId } from '@/core/protocols'
 import { validateRpcUrl } from '@/core/rpcPolicy'
 import { clearLastTab } from './tabs'
@@ -55,8 +55,15 @@ export const EMPTY: Stored = { theme: DEFAULT_THEME, customRpc: {}, recentContra
 const MAX_RECENT = 8
 const MAX_HISTORY = 20
 
+/**
+ * A chain key must be one the registry actually has. The old shape test (`/^[a-z]+$/`) also
+ * admitted `constructor`, `toString` and every other lowercase member name, so untrusted JSON
+ * could seed object keys that mean something to JavaScript rather than to this app.
+ */
+const CHAIN_KEYS: ReadonlySet<string> = new Set(CHAINS.map((c) => c.key))
+
 function isKey(s: unknown): s is ChainKey {
-  return typeof s === 'string' && /^[a-z]+$/.test(s)
+  return typeof s === 'string' && CHAIN_KEYS.has(s)
 }
 
 /** Parses untrusted JSON into a well-formed Stored; anything odd is dropped. */

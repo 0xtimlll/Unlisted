@@ -20,7 +20,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      # `ignore-scripts` is set in .npmrc; passed here too so the flag is visible in the log
+      # and survives anyone running this job with a different npm config (§7).
+      - run: npm ci --ignore-scripts
       - run: npm run audit
       - run: npm run typecheck
       - run: npm run lint
@@ -55,5 +57,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      # `ignore-scripts` is set in .npmrc; passed here too so the flag is visible in the log
+      # and survives anyone running this job with a different npm config (§7).
+      - run: npm ci --ignore-scripts
       - run: npx vitest run --project integration tests/integration/probe.live.test.ts tests/integration/decodeTx.live.test.ts

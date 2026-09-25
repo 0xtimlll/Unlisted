@@ -50,3 +50,14 @@ export type SuspiciousFlag =
   | 'svm_store_unrecognised'
   /** The same, plus LayerZero Scan confirming this very path has already delivered. */
   | 'svm_store_unrecognised_delivered'
+  /**
+   * §6.16 The contract's OWN enforced options, decoded. Unlike `extraOptions` these are appended
+   * by the OFT on every send and paid for by the sender, so they are the half of the options an
+   * attacker controls. Surfaced, never blocking — see core/options.ts inspectEnforcedOptions().
+   */
+  | 'enforced_native_drop'
+  | 'enforced_compose'
+  | 'enforced_over_cap'
+  | 'enforced_malformed'
+  /** The token's symbol or name mixes scripts that can impersonate ASCII (Cyrillic "\u0410" for "A"). */
+  | 'label_lookalike'

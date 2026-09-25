@@ -40,6 +40,18 @@ function parseHeaders() {
 const rules = parseHeaders()
 
 createServer((req, res) => {
+  try {
+    serve(req, res)
+  } catch {
+    // A malformed path (`/%`) makes decodeURIComponent throw, and an uncaught throw in this
+    // callback takes the whole process down — which is a one-request kill for anyone who can
+    // reach the port. Answer 400 and stay up.
+    if (!res.headersSent) res.writeHead(400)
+    res.end()
+  }
+}).listen(PORT, '127.0.0.1', () => console.log(`serving out/ with _headers at http://127.0.0.1:${PORT}`))
+
+function serve(req, res) {
   const url = new URL(req.url ?? '/', 'http://x')
   // Trailing slashes are dropped the way Cloudflare Pages drops them, so /bridge/ resolves too.
   let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '').replace(/(.)\/$/, '$1')
@@ -51,4 +63,4 @@ createServer((req, res) => {
   for (const r of rules) if (r.pattern.test(path)) for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v)
   res.setHeader('Content-Type', TYPES[extname(file)] ?? 'application/octet-stream')
   res.end(readFileSync(file))
-}).listen(PORT, '127.0.0.1', () => console.log(`serving out/ with _headers at http://127.0.0.1:${PORT}`))
+}

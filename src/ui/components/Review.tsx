@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { formatAmount } from '@/core/amounts'
-import { receiveTotals } from '@/core/options'
+import { describeOptions, receiveTotals, type OptionItem } from '@/core/options'
 import { byEid, type ChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
 import type { SendPlan } from '@/core/plan'
@@ -119,6 +119,22 @@ export function Details(p: {
                   </ul>
                 </Row>
               ) : null}
+              {/*
+                * What the CONTRACT adds to every send, decoded. The Solana block below covers
+                * compute units for that destination; this row is the same thing for all of them,
+                * and it is the field guard 16 now warns about — a warning is only useful next to
+                * the thing it is about.
+                */}
+              <Row label={d.step3.enforcedOptions}>
+                <ul className="mono text-xs">
+                  {describeOptions(p.info.enforced[plan.dstEid] ?? '0x').map((o, i) => (
+                    <li key={i} className={o.kind === 'nativeDrop' || o.kind === 'lzCompose' ? 'text-danger' : undefined}>
+                      {optionLine(o, d)}
+                    </li>
+                  ))}
+                  {describeOptions(p.info.enforced[plan.dstEid] ?? '0x').length === 0 ? <li className="text-muted">{d.step3.enforcedNone}</li> : null}
+                </ul>
+              </Row>
               {plan.recipientVm === 'svm' && p.svmOptions ? (
                 <Row label={d.step3.executorOptions}>
                   <div className="text-xs">
@@ -172,6 +188,24 @@ export function Details(p: {
   )
 }
 
+/** One decoded executor option as text. Amounts stay raw — this row is for reading, not maths. */
+function optionLine(o: OptionItem, d: ReturnType<typeof useDict>): string {
+  switch (o.kind) {
+    case 'lzReceive':
+      return o.value > 0n ? `lzReceive(gas ${o.gas}, value ${o.value})` : `lzReceive(gas ${o.gas})`
+    case 'nativeDrop':
+      return fmt(d.step3.opt_nativeDrop, { amount: o.amount.toString(), receiver: `0x${o.receiver.slice(-40)}` })
+    case 'lzCompose':
+      return `lzCompose(#${o.index}, gas ${o.gas}${o.value > 0n ? `, value ${o.value}` : ''})`
+    case 'ordered':
+      return 'orderedExecution'
+    case 'dvn':
+      return `dvn(#${o.dvnIdx}, type ${o.optionType})`
+    default:
+      return `unknown(worker ${o.workerId}, type ${o.optionType})`
+  }
+}
+
 /** The guards, compact. Real failures in red; reads still in flight in grey; passes in green. */
 export function Checks(p: {
   report: GuardReport
@@ -181,6 +215,10 @@ export function Checks(p: {
   onPeerBackAccepted: (v: boolean) => void
   pdaAccepted: boolean
   onPdaAccepted: (v: boolean) => void
+  highFeeAccepted: boolean
+  onHighFeeAccepted: (v: boolean) => void
+  /** Source chain + the plan's value, for the fee warning's text. */
+  feeNotice?: { fee: string; chain: string } | undefined
   show: boolean
   /** Right-hand panel: the list is the content, so it starts expanded. */
   defaultOpen?: boolean
@@ -233,6 +271,15 @@ export function Checks(p: {
           <label className="flex items-start gap-2 text-xs text-ink">
             <input type="checkbox" className="mt-0.5" checked={p.noGasAccepted} onChange={(e) => p.onNoGasAccepted(e.target.checked)} />
             {d.step3.confirmNoGas}
+          </label>
+        </div>
+      ) : null}
+      {p.report.needsHighFeeConfirmation && p.feeNotice ? (
+        <div className="mb-2 space-y-2">
+          <Alert kind="warn">{fmt(d.step3.warnHighFee, p.feeNotice)}</Alert>
+          <label className="flex items-start gap-2 text-xs text-ink">
+            <input type="checkbox" className="mt-0.5" checked={p.highFeeAccepted} onChange={(e) => p.onHighFeeAccepted(e.target.checked)} />
+            {d.step3.confirmHighFee}
           </label>
         </div>
       ) : null}
@@ -345,6 +392,8 @@ function okLabel(id: number, d: ReturnType<typeof useDict>): string | null {
       return d.guard.ok_options
     case 19:
       return d.guard.ok_recipient_class
+    case 21:
+      return d.guard.ok_fee_ceiling
     default:
       return null
   }

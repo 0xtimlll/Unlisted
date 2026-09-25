@@ -170,6 +170,49 @@ export function sanitizeOptions(sample: Hex, dstVm: Vm = 'evm'): SanitizedOption
   return { options: encodeLzReceive(gas, value), gas, value, dropped, malformed: false }
 }
 
+/**
+ * §6.16 The SAME judgement, applied to the options the CONTRACT enforces.
+ *
+ * hasDangerousOptions() below guards `extraOptions` — the field this app fills in itself, and
+ * therefore the one it already controls. `enforcedOptions(eid, SEND)` is the other half, and it is
+ * the half an attacker actually owns: the executor appends it to every send, the user pays for it
+ * through quoteSend, and until now nothing looked at it. A `nativeDrop` enforced by the contract
+ * hands the sender's native coin to a fixed address on the destination, on every single transfer.
+ *
+ * This never blocks. A legitimate OFT may enforce options this app did not expect, and refusing a
+ * working route would be worse than saying what is in it — so the result is a warning (§6.16) and
+ * the review screen prints the decoded options underneath it.
+ */
+export type EnforcedRisk = 'native_drop' | 'compose' | 'over_cap' | 'malformed'
+
+export function inspectEnforcedOptions(enforced: Hex, dstVm: Vm = 'evm'): EnforcedRisk[] {
+  if (enforced === '0x' || (enforced as string) === '') return []
+  let decoded: DecodedOptions
+  try {
+    decoded = decodeOptions(enforced)
+  } catch {
+    return ['malformed']
+  }
+  const lim = LIMITS[dstVm]
+  const out = new Set<EnforcedRisk>()
+  for (const it of decoded.items) {
+    if (it.kind === 'nativeDrop' && it.amount > 0n) out.add('native_drop')
+    else if (it.kind === 'lzCompose') out.add('compose')
+    else if (it.kind === 'lzReceive' && (it.gas > lim.maxGas || it.value > lim.maxValue)) out.add('over_cap')
+    else if (it.kind === 'unknown') out.add('malformed')
+  }
+  return [...out]
+}
+
+/** Enforced options as one line per item, for the review screen. Never throws. */
+export function describeOptions(options: Hex): OptionItem[] {
+  try {
+    return decodeOptions(options).items
+  } catch {
+    return []
+  }
+}
+
 /** True when options carry anything beyond a plain receive within the VM's caps. */
 export function hasDangerousOptions(options: Hex, dstVm: Vm = 'evm'): boolean {
   const lim = LIMITS[dstVm]

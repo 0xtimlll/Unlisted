@@ -53,7 +53,9 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
             ✕
           </Button>
         </div>
-        <p className="mb-3 text-xs text-muted">{d.settings.hint}</p>
+        <p className="mb-2 text-xs text-muted">{d.settings.hint}</p>
+        {/* A custom RPC answers every read this screen makes; say so before the fields, not after. */}
+        <p className="mb-3 rounded-xl border border-warn/40 bg-warn/5 px-3 py-2 text-xs text-warn">{d.settings.rpcTrust}</p>
         <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
           {CHAINS.map((c) => (
             <label key={c.key} className="block text-xs">

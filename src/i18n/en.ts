@@ -7,6 +7,9 @@ export const en = {
   },
   splash: {
     start: 'Start Bridging',
+    /** The link out to the source, under the button on the welcome screen. */
+    source: 'View the source on GitHub',
+    sourceLabel: 'GitHub',
     /** The wordmark in the header goes back to the welcome screen. */
     home: 'Back to the welcome screen',
   },
@@ -91,6 +94,12 @@ export const en = {
     tokenProgram: 'Token program',
     tvl: 'Tracked in escrow',
     flag_svm_source_paused: 'This OFT is PAUSED on Solana — sends will fail',
+    flag_enforced_native_drop:
+      'This contract ENFORCES a native drop on every send: part of the fee you pay is delivered as native coin to an address the contract chooses, not to you. Check the decoded options below.',
+    flag_enforced_compose: 'This contract enforces a compose call on the destination — the transfer triggers other code after it arrives',
+    flag_enforced_over_cap: 'The contract enforces more executor gas or value than this app considers normal for the destination',
+    flag_enforced_malformed: 'The contract’s enforced options could not be decoded — this app cannot tell you what they do',
+    flag_label_lookalike: 'This token’s name mixes alphabets that can imitate ordinary letters — compare the contract address, not the name',
   },
   step2: {
     title: '2. Where and how much',
@@ -146,6 +155,10 @@ export const en = {
     svmCuNote: 'On Solana the executor fee is priced in compute units (enforced {cu} CU{extra})',
     svmCuExtra: ' + {cu} from this transfer',
     warnNoGas: 'No enforced options and no extraOptions: the executor may not be paid for gas on the destination and the message could get stuck.',
+    warnHighFee: 'The LayerZero fee for this send is {fee} — far above what {chain} normally charges. A quote cannot be checked against anything off-chain, so read the number before you accept it.',
+    confirmHighFee: 'I have read the fee above and want to pay it',
+    enforcedOptions: 'Enforced by the contract',
+    enforcedNone: 'none',
     checks: 'Checks',
     limits: 'OFT limits',
     executorOptions: 'Executor options',
@@ -194,6 +207,7 @@ export const en = {
     recipient_pda_unconfirmed: 'The recipient is a program-owned account (PDA), not a regular wallet — confirm only if you know exactly why',
     no_executor_options_svm: 'Neither the contract nor this transfer carries compute units for the Solana receive — the message would never execute. Refusing.',
     svm_dest_unknown: 'Reading the Solana side of this OFT…',
+    fee_above_ceiling_unconfirmed: 'Confirm the unusually high LayerZero fee',
     ok_recipient_class: 'recipient is a wallet',
     ok_peer_back: 'destination peer points back',
     ok_options: 'options are plain',
@@ -203,6 +217,7 @@ export const en = {
     ok_sim: 'simulation ok',
     ok_selfcheck: 'self-check calldata ok',
     ok_quote: 'quote ok',
+    ok_fee_ceiling: 'fee within normal range',
   },
   tracker: {
     title: 'Delivery',
@@ -473,11 +488,14 @@ export const en = {
     title: 'RPC settings',
     customRpc: 'Custom RPC for {chain}',
     hint: 'https:// only. Stored in this browser only.',
+    rpcTrust:
+      'An RPC you set here is fully trusted: every balance, quote, peer check and simulation on this screen is whatever it answers. The allow-list below is only about what the browser’s security policy can reach — it is not a judgement about who runs the endpoint. Paste one only if you would trust it with the answer to “is this the real contract?”.',
     invalid_empty: '',
     invalid_not_url: 'Not a URL',
     invalid_insecure: 'http:// is allowed only for localhost',
     invalid_bad_scheme: 'Only https:// is allowed',
-    invalid_host_not_allowed: 'This host is not allowed by the site’s security policy (Content-Security-Policy). Known providers (Alchemy, Helius, QuickNode, dRPC, …) are allowed.',
+    invalid_host_not_allowed:
+      'The browser cannot reach this host under the site’s Content-Security-Policy, so the request would fail silently. Hosts of the known providers (Alchemy, Helius, QuickNode, dRPC, …) are reachable — reachable, not vouched for.',
     solanaHint: 'For Solana, use your own RPC (Helius, QuickNode, …): public endpoints throttle simulation and fee lookups, and only one public provider accepts browser requests.',
     export: 'Export local data',
     clearAll: 'Clear all local data',

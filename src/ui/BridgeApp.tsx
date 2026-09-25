@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { AmountError, parseAmount } from '@/core/amounts'
+import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
 import { analyzeSvmPrefill } from '@/core/analysis/svm'
@@ -95,6 +95,7 @@ export function BridgeApp({
   const [noGasAccepted, setNoGasAccepted] = useState(false)
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [pdaAccepted, setPdaAccepted] = useState(false)
+  const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored, 'lz-oft')
@@ -126,6 +127,7 @@ export function BridgeApp({
     setNoGasAccepted(false)
     setPeerBackAccepted(false)
     setPdaAccepted(false)
+    setHighFeeAccepted(false)
     setSent(null)
     setTxError('')
   }, [])
@@ -367,6 +369,22 @@ export function BridgeApp({
   // ---- guards -------------------------------------------------------------------
   const approveIntent = info && planData ? approvePlan(info, planData, allowance.data) : null
 
+  /**
+   * Guard 21's warning, in the units the user reads. `plan.value` rather than the raw quote,
+   * because `value` is what actually leaves the wallet once the fee buffer is applied.
+   */
+  const feeNotice = useMemo(
+    () =>
+      planData
+        ? { fee: `${formatAmount(planData.value, src.vm === 'svm' ? 9 : 18, { maxFraction: 6 })} ${src.nativeSymbol}`, chain: src.name }
+        : undefined,
+    [planData, src],
+  )
+  // A new quote is a new number: an acceptance must never outlive the fee it was given for.
+  useEffect(() => {
+    setHighFeeAccepted(false)
+  }, [planData?.value])
+
   const baseInput: GuardInput = useMemo(
     () => ({
       walletAddress: svmSource ? undefined : wallet,
@@ -389,10 +407,11 @@ export function BridgeApp({
       peerBackUnavailableAccepted: peerBackAccepted,
       svmRecipientClass: svmRecipient.data?.class,
       svmRecipientPdaAccepted: pdaAccepted,
+      highFeeAccepted,
       svmDestinationKnown: dstVm !== 'svm' || !!svmDest.data,
       svmDestinationRecognised: dstVm !== 'svm' || !svmDestUnknown,
     }),
-    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, dstVm, svmDest.data, svmDestUnknown],
+    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, highFeeAccepted, dstVm, svmDest.data, svmDestUnknown],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -666,6 +685,9 @@ export function BridgeApp({
                 onPeerBackAccepted={setPeerBackAccepted}
                 pdaAccepted={pdaAccepted}
                 onPdaAccepted={setPdaAccepted}
+                highFeeAccepted={highFeeAccepted}
+                onHighFeeAccepted={setHighFeeAccepted}
+                feeNotice={feeNotice}
                 show={!!planData}
                 defaultOpen
               />

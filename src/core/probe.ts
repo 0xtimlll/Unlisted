@@ -28,10 +28,33 @@ const IMPL_SLOT: Hex = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca
 const BEACON_SLOT: Hex = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50'
 const ZERO_SLOT = `0x${'0'.repeat(64)}`
 
-/** Chain text is rendered as text only, trimmed to 32 chars, no control characters (§7). */
+/**
+ * Chain text is rendered as text only, trimmed to 32 chars, and stripped of every character that
+ * can make a label read as something it is not (§7).
+ *
+ * Control characters are the obvious half. The other half is invisible: a token whose symbol is
+ * "USDC\u202Etoor" renders as "USDCroot", and one with a zero-width space inside renders as an
+ * exact look-alike of a name that is already trusted. The whole premise of this app is that the
+ * user checks what the contract says, so a contract must not be able to choose how its own name
+ * is laid out. Bidi controls, isolates, joiners, soft hyphen and the BOM all go.
+ *
+ * Ordinary non-ASCII is kept — plenty of honest tokens use it — and flagged instead by
+ * labelLooksSpoofed(), which never blocks.
+ */
+const UNSAFE_LABEL_CHARS = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g
+
 export function sanitizeLabel(s: unknown, max = 32): string {
   if (typeof s !== 'string') return ''
-  return s.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, max)
+  return s.replace(UNSAFE_LABEL_CHARS, '').trim().slice(0, max)
+}
+
+/**
+ * True when a label carries characters that can impersonate ASCII — Cyrillic \u0410, Greek \u039F
+ * and friends look exactly like A and O in most fonts. Informational only (§6.16): the label is
+ * shown either way, with a flag next to it.
+ */
+export function labelLooksSpoofed(label: string): boolean {
+  return /[\u0370-\u03ff\u0400-\u04ff\u0500-\u052f\u2100-\u214f\uff00-\uffef]/.test(label)
 }
 
 export async function probeOft(
@@ -118,6 +141,8 @@ export async function probeOft(
   })
 
   const flags = await suspiciousFlags(client, oft, owner)
+  // A name that mixes scripts can impersonate a token the user already trusts. Say so; never refuse.
+  if (labelLooksSpoofed(symbol) || labelLooksSpoofed(name)) flags.push('label_lookalike')
   // A lock/unlock adapter that holds nothing has never bridged anything — or is not the real one.
   const lockedInAdapter = kind === 'OFTAdapter' && approvalRequired && mLocked?.status === 'success' ? mLocked.result : undefined
   if (lockedInAdapter === 0n) flags.push('adapter_empty')

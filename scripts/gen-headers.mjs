@@ -89,7 +89,13 @@ const headers = [
   '  Referrer-Policy: no-referrer',
   '  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()',
   '  Cross-Origin-Opener-Policy: same-origin',
-  '  Strict-Transport-Security: max-age=63072000; includeSubDomains',
+  // Nothing here is meant to be embedded by another site; COEP is left off on purpose, because
+  // it would also break the wallet popups this app depends on.
+  '  Cross-Origin-Resource-Policy: same-origin',
+  // Its own agent cluster: keeps this origin out of any shared process a document.domain trick
+  // could reach, and it costs nothing.
+  '  Origin-Agent-Cluster: ?1',
+  '  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload',
   '',
   '/_next/static/*',
   '  Cache-Control: public, max-age=31536000, immutable',

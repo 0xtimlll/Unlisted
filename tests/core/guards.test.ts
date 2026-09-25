@@ -21,6 +21,9 @@ import {
   g13Simulation,
   g14SelfCheck,
   g15ExecutorGas,
+  g16Suspicious,
+  g21FeeCeiling,
+  feeAboveCeiling,
   MAX_SLIPPAGE_BPS,
   runGuards,
   selfCheck,
@@ -50,11 +53,12 @@ const code = (r: GuardResult) => (r.ok ? 'ok' : r.code)
 describe('runGuards on a good snapshot', () => {
   it('passes everything and enables Send', () => {
     const rep = runGuards(goodInput())
-    expect(rep.results).toHaveLength(20)
-    expect(rep.results.map(code)).toEqual(Array(20).fill('ok'))
+    expect(rep.results).toHaveLength(21)
+    expect(rep.results.map(code)).toEqual(Array(21).fill('ok'))
     expect(rep.canSend).toBe(true)
     expect(rep.warnings).toEqual([])
     expect(rep.needsNoGasConfirmation).toBe(false)
+    expect(rep.needsHighFeeConfirmation).toBe(false)
   })
 
   it('recipient is stored as bytes32 and equals SendParam.to', () => {
@@ -458,5 +462,67 @@ describe('chain id constant sanity', () => {
   it('HyperEVM fixtures match the registry', () => {
     expect(HYPER_CHAIN_ID).toBe(999)
     expect(HYPER_EID).toBe(30367)
+  })
+})
+
+
+/**
+ * Guard 21 (§6.21). A quote is unverifiable off-chain, so the only thing standing between the
+ * user and `msg.value = whole balance` is guard 8. The ceiling puts the number in front of them.
+ */
+describe('g21 fee ceiling', () => {
+  // HyperEVM's ceiling is 5 HYPE; the fixture's fee is far below it.
+  const overCeiling = 6n * 10n ** 18n
+
+  it('passes an ordinary fee without asking anything', () => {
+    expect(code(g21FeeCeiling(goodInput()))).toBe('ok')
+    expect(feeAboveCeiling(treadPlan())).toBe(false)
+  })
+
+  it('stops a fee above the chain ceiling until it is accepted', () => {
+    const plan = treadPlan({ value: overCeiling })
+    expect(feeAboveCeiling(plan)).toBe(true)
+    expect(code(g21FeeCeiling(goodInput({ plan })))).toBe('fee_above_ceiling_unconfirmed')
+    expect(code(g21FeeCeiling(goodInput({ plan, highFeeAccepted: true })))).toBe('ok')
+  })
+
+  it('blocks Send and reports the confirmation is needed', () => {
+    const rep = runGuards(goodInput({ plan: treadPlan({ value: overCeiling }) }))
+    expect(rep.canSend).toBe(false)
+    expect(rep.needsHighFeeConfirmation).toBe(true)
+  })
+})
+
+/**
+ * §6.16 The contract's OWN enforced options. Guard 18 only ever looked at `extraOptions`, which
+ * this app builds itself; these are the ones an attacker controls.
+ */
+describe('g16 surfaces the contract enforced options', () => {
+  /**
+   * What a hostile OFT would actually enforce: enough executor gas that the message delivers
+   * (so guard 15 is satisfied and nothing looks wrong), plus a native drop to an address of its
+   * choosing on every single send.
+   *   type 3 | worker 1 | size 0x0011 | type 1 lzReceive | gas u128
+   *          | worker 1 | size 0x0031 | type 2 nativeDrop | amount u128 | receiver b32
+   */
+  const gas = 200_000n.toString(16).padStart(32, '0')
+  const drop = (10n ** 18n).toString(16).padStart(32, '0')
+  const nativeDrop = ('0x0003' + '01' + '0011' + '01' + gas + '01' + '0031' + '02' + drop + 'ff'.repeat(32)) as Hex
+
+  it('says nothing when the contract enforces a plain receive', () => {
+    expect(g16Suspicious(goodInput()).warnings).toEqual([])
+  })
+
+  it('warns on an enforced native drop, and still lets the send through', () => {
+    const info = { ...treadOftInfo(), enforced: { [ETH_EID]: nativeDrop } }
+    const rep = runGuards(goodInput({ info }))
+    expect(rep.warnings).toContain('enforced_native_drop')
+    // §6.16 is explicit that flags never block.
+    expect(rep.results.every((r) => r.ok)).toBe(true)
+  })
+
+  it('warns when the enforced options cannot be decoded at all', () => {
+    const info = { ...treadOftInfo(), enforced: { [ETH_EID]: '0x0003ff' as Hex } }
+    expect(runGuards(goodInput({ info })).warnings).toContain('enforced_malformed')
   })
 })

@@ -7,7 +7,7 @@ import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
 import { byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
-import { hasDangerousOptions, receiveTotals } from './options'
+import { hasDangerousOptions, inspectEnforcedOptions, receiveTotals, type EnforcedRisk } from './options'
 import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type SendPlan } from './plan'
 import type { SourceInfo, SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
@@ -58,6 +58,7 @@ export type GuardCode =
   | 'recipient_pda_unconfirmed'
   | 'no_executor_options_svm'
   | 'svm_dest_unknown'
+  | 'fee_above_ceiling_unconfirmed'
 
 /** Codes that mean "not known yet" (a read is in flight), not "wrong". The UI shows them muted. */
 export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
@@ -115,6 +116,8 @@ export type GuardInput = {
   peerBack: PeerBackResult | undefined
   /** User accepted that the back-link could not be verified (RPC down), see guard 17. */
   peerBackUnavailableAccepted: boolean
+  /** User read and accepted a fee above the source chain's ceiling (§6.21, guard 21). */
+  highFeeAccepted?: boolean
   /** Solana destinations only: what kind of account the recipient is (svm/recipient.ts). */
   svmRecipientClass?: SvmRecipientClass | undefined
   /** User explicitly accepted sending to a program-owned (PDA) Solana account. */
@@ -137,6 +140,8 @@ export type GuardReport = {
   canSend: boolean
   /** True iff the "no executor gas" warning applies (regardless of acceptance). */
   needsNoGasConfirmation: boolean
+  /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
+  needsHighFeeConfirmation: boolean
 }
 
 const ok = (id: number): GuardResult => ({ id, ok: true })
@@ -328,9 +333,33 @@ export function g15ExecutorGas(i: GuardInput): GuardResult {
   return ok(15)
 }
 
+/** inspectEnforcedOptions() risks, as the flags the review screen already knows how to print. */
+const ENFORCED_FLAG: Record<EnforcedRisk, SuspiciousFlag> = {
+  native_drop: 'enforced_native_drop',
+  compose: 'enforced_compose',
+  over_cap: 'enforced_over_cap',
+  malformed: 'enforced_malformed',
+}
+
+/**
+ * §6.21 The options the CONTRACT enforces for this destination, decoded.
+ *
+ * Guard 18 covers `extraOptions`, which this app builds itself. These are the other half: the OFT
+ * appends them to every send and the sender pays for them, so an enforced `nativeDrop` quietly
+ * routes native coin to a fixed address on each transfer. Warnings only — a legitimate OFT may
+ * enforce something unexpected, and refusing a route that works would be the worse failure.
+ */
+export function enforcedOptionFlags(i: GuardInput): SuspiciousFlag[] {
+  if (!i.info || !i.plan) return []
+  const dstVm = byEid(i.plan.dstEid)?.vm ?? 'evm'
+  return inspectEnforcedOptions(i.info.enforced[i.plan.dstEid] ?? '0x', dstVm).map((r) => ENFORCED_FLAG[r])
+}
+
 // 16. suspicious flags: never block, always surface
 export function g16Suspicious(i: GuardInput): { result: GuardResult; warnings: SuspiciousFlag[] } {
-  return { result: ok(16), warnings: [...i.flags] }
+  const warnings = [...i.flags]
+  for (const f of enforcedOptionFlags(i)) if (!warnings.includes(f)) warnings.push(f)
+  return { result: ok(16), warnings }
 }
 
 // 17. the destination peer names our OFT as its peer (defeats look-alike / fake adapters)
@@ -378,6 +407,27 @@ export function g20SvmSend(i: GuardInput): GuardResult {
   return ok(20)
 }
 
+/**
+ * True when the value this plan commits to exceeds the source chain's ceiling (core/chains.ts).
+ * `value` rather than `quote.nativeFee`, because `value` is the number that actually leaves the
+ * wallet once the fee buffer is applied.
+ */
+export function feeAboveCeiling(plan: SendPlan | undefined): boolean {
+  if (!plan) return false
+  const src = byEid(plan.srcEid)
+  return !!src && plan.value > src.feeCeiling
+}
+
+// 21. the fee is within the chain's ceiling, or the user has read the number and accepted it.
+//     Nothing off-chain can verify a quote, so this is the only bound on it that is not "the
+//     whole balance" (guard 8). A confirmation, never a refusal: fees are genuinely volatile.
+export function g21FeeCeiling(i: GuardInput): GuardResult {
+  if (!i.plan) return fail(21, 'plan_missing')
+  if (!feeAboveCeiling(i.plan)) return ok(21)
+  if (!i.highFeeAccepted) return fail(21, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
+  return ok(21)
+}
+
 export function runGuards(i: GuardInput): GuardReport {
   const g16 = g16Suspicious(i)
   const results: GuardResult[] = [
@@ -401,12 +451,14 @@ export function runGuards(i: GuardInput): GuardReport {
     g18Options(i),
     g19RecipientVm(i),
     g20SvmSend(i),
+    g21FeeCeiling(i),
   ]
   return {
     results,
     warnings: g16.warnings,
     canSend: results.every((r) => r.ok),
     needsNoGasConfirmation: needsNoGasConfirmation(i.info, i.plan),
+    needsHighFeeConfirmation: feeAboveCeiling(i.plan),
   }
 }
 
