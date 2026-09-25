@@ -10,7 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Unlisted — bridging TREAD from HyperEVM to Ethereum" width="720">
+  <img src="docs/screenshot.png" alt="Unlisted — TREAD read from its contract on HyperEVM, ready to bridge to Ethereum" width="820">
+</p>
+
+<p align="center">
+  <sub>Nothing in that panel was typed in or looked up in a list — every field was read from the contract.</sub>
 </p>
 
 ---
@@ -26,7 +30,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 1. **Connect** a browser wallet and choose the source chain: MetaMask, Rabby, … for EVM chains; Phantom, Solflare, Backpack, … when the source is Solana.
 2. **Paste** anything that identifies the token: the OFT / OFTAdapter contract address (on Solana: the OFT Store address), the hash of any past bridge transaction on any supported chain, a Solana signature, or a LayerZero Scan link. Transactions are read from their **logs**, so a bridge that went through a router, an aggregator or a smart wallet is still resolved to the contract underneath — and a transaction sent on a different network is found there and offered with a "switch" button.
 3. **Choose** a destination (only chains the contract actually has a peer on) and an amount.
-4. **Review.** The quote, the fee, the recipient and the raw `amountLD` / `minAmountLD` are shown exactly as they will be sent, in a panel that stays in view. Twenty checks run, including a live simulation whose reverts are decoded into named errors (`NoPeer`, `SlippageExceeded`, `ERC20InsufficientAllowance`, `EnforcedPause`, …) with what to do about each.
+4. **Review.** The quote, the fee, the recipient and the raw `amountLD` / `minAmountLD` are shown exactly as they will be sent, in a panel that stays in view. Twenty-one checks run, including a live simulation whose reverts are decoded into named errors (`NoPeer`, `SlippageExceeded`, `ERC20InsufficientAllowance`, `EnforcedPause`, …) with what to do about each.
 5. **Send.** Delivery is tracked through LayerZero Scan until the tokens land on the other side.
 
 ## Supported networks
@@ -111,10 +115,15 @@ Every event signature, error signature, chain id and selector used for this come
 - The destination-side peer must name your contract back — a look-alike adapter can point at the real token, but the real bridge will never point at the fake.
 - Contract facts are read from two independent RPC providers; if they disagree, nothing is sent.
 - Options copied from a sample transaction are stripped down to a receive-gas hint; `nativeDrop` and `compose` payloads (a way to route your fee to a stranger) are dropped and shown in red.
+- **The options the contract enforces are read too**, and printed in full on the review screen. `extraOptions` is the field this app fills in itself; `enforcedOptions` is the one the OFT appends to every send and you pay for — an enforced `nativeDrop` quietly routes native coin to an address the contract chose, on every transfer. It is decoded, named and warned about rather than refused, because a legitimate OFT may enforce something unexpected and a working route should not be blocked over it.
+- **The fee has a ceiling.** A quote cannot be checked against anything off-chain — `quoteSend` is whatever the contract, or whatever RPC answered for it, chose to return, and `msg.value` follows it. Each chain carries a limit an order of magnitude above what these routes actually cost; above it the number is put in front of you and has to be accepted by hand. The acceptance dies with the quote it was given for.
+- **A token does not get to choose how its own name is drawn.** Symbols and names are stripped of bidi overrides, isolates, zero-width characters and the BOM, so `USDC<RLO>toor` cannot render as `USDCroot` and an invisible space cannot clone a symbol you trust. Ordinary non-ASCII is kept and flagged instead — honest tokens use it.
 - For lock/unlock adapters the app shows how much the adapter holds and flags an empty one.
 - Slippage is capped at 5%. Sending to an address other than your own wallet requires an explicit switch and re-typing the address's last characters.
 
 **Nothing leaves your browser** except calls to the chain's RPC, the transaction hash to LayerZero Scan for tracking, Wormhole's own explorer for the official NTT token list and delivery status, and — only when a simulation reverts with an error none of the built-in ABIs can name — the chain id and that contract's address to [Sourcify](https://sourcify.dev), to read the contract's own verified error ABI so the failure can be shown by name instead of as four bytes of hex. No key, no account, no amount, and nothing at all when the revert is already understood. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
+
+**The build is defended, not just the page.** No dependency may run code at install time: `ignore-scripts` is set in [`.npmrc`](.npmrc) and passed explicitly in CI. A `postinstall` in any transitive package executes on the machine that deploys, and that machine is where a compromise would rewrite `out/` — and recompute the very CSP hashes that protect it. Every native addon in the tree ships a pure-JS fallback, so nothing is lost by refusing.
 
 **Auditable.** The footer shows the commit the site was built from and links to it here. Dependencies are pinned to exact versions and audited in CI; the few advisories that do not apply (native-addon or server-only code that never reaches the browser bundle, which CI verifies) are listed with reasons and expiry dates in [`audit-exceptions.json`](audit-exceptions.json). The Solana stack (LayerZero SDK, umi, wallet adapter) is downloaded only when Solana is chosen as the source; a few helper packages the SDK declares but never needs are replaced by tiny stand-ins at build time (see [`shims/`](shims/README.md)) so that no mnemonic or key-derivation code is ever shipped.
 
@@ -123,11 +132,12 @@ Every event signature, error signature, chain id and selector used for this come
 - Tell a real token from a fake one with the same name. For a plain OFT your balance under the contract is the proof — the contract *is* the token. For an OFTAdapter your balance belongs to the token, not the bridge: take adapter addresses from the project's official sources.
 - Guarantee delivery. Rate limits, paused destinations or missing executor gas are the contract's and LayerZero's domain. The app warns where it can and links to LayerZero Scan.
 - Undo anything. Cross-chain transfers are irreversible; try a small amount first.
+- Protect you from an RPC you chose yourself. If you set a custom endpoint in settings, it answers every balance, quote, peer check and simulation on the screen — the checks are only as honest as it is. The allow-list behind that field is about what the browser's security policy can reach, not about who runs the endpoint, and the settings dialog says so. The two things a hostile RPC still cannot touch are the self-check, which is arithmetic on your own calldata, and the recipient's type, which is decided before any request goes out.
 
 ## Development
 
 ```sh
-npm ci
+npm ci                  # `ignore-scripts` is on: no dependency runs code while installing
 npm run dev             # http://localhost:3000
 npm test                # write-whitelist check + unit tests
 npm run audit           # npm audit against the reviewed exception list
@@ -141,15 +151,15 @@ Build-time configuration lives in [`.env.production`](.env.production) (all valu
 
 | var | purpose |
 |---|---|
-| `NEXT_PUBLIC_CANONICAL_DOMAIN` | shown in the footer so users can spot phishing clones |
-| `NEXT_PUBLIC_REPO_URL` | source link in the footer |
+| `NEXT_PUBLIC_CANONICAL_DOMAIN` | shown on the welcome screen and in the footer, so users can spot phishing clones |
+| `NEXT_PUBLIC_REPO_URL` | the GitHub link on the welcome screen, and the source link in the footer |
 | `NEXT_PUBLIC_WC_PROJECT_ID` | enables WalletConnect (mobile wallets via QR); off by default |
 | `CSP_CONNECT_EXTRA` | extra `connect-src` hosts for the generated CSP (e.g. your own RPC) |
 
 ### Layout
 
 ```
-src/app      one static page per protocol tab (/oft, /ntt, /ccip); / redirects to the last one used
+src/app      / is the welcome screen; /bridge, /ntt and /ccip are the three protocol tabs (/oft still redirects to /bridge)
 src/core     pure logic, no React: abi, chains, protocols, amounts, plan, guards, probe, options, quorum, track
 src/core/svm Solana: base58, PDAs, account layouts, discovery, the send plan codec/self-check, the SDK boundary (send.ts)
 src/ui       wagmi/RainbowKit providers, the shell (header/tabs/history), the Solana wallet slot, hooks, components, local storage
@@ -157,6 +167,11 @@ shims        build-time stand-ins for LayerZero helper packages the Solana SDK d
 scripts      build, security headers, write-whitelist check, local server
 tests/core   unit tests · tests/integration  live-RPC and anvil fork tests
 ```
+
+`/` is a sheet of glass, not a page of its own: the bridge is already mounted behind it, so leaving
+the welcome screen is a dissolve and a change of address rather than a reload, and anything already
+connected stays connected. `/bridge` is served without the glass, which is what makes it the address
+worth bookmarking.
 
 The interface is desktop-only by design: a ~1280px two-column layout (form left, live preview right)
 with a 1024px floor — below that the page scrolls sideways rather than reflowing. Switching tabs
