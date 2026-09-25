@@ -12,10 +12,15 @@ import { useEffect, useRef, useState } from 'react'
 import { tabPath } from '@/core/protocols'
 import { useDict } from '@/i18n'
 import { loadLastTab } from '../tabs'
+import { GithubIcon } from './icons'
 import { Button } from './ui'
 
 /** Kept in step with the dissolve in globals.css. */
 const OUT_MS = 400
+
+/** Build-time, public, and the same two values the footer uses. Absent ones simply do not render. */
+const REPO = process.env['NEXT_PUBLIC_REPO_URL'] ?? ''
+const DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? ''
 
 /** The id of the wrapper the root layout puts around the app. */
 const APP_ID = 'app-root'
@@ -72,10 +77,18 @@ export function SplashOverlay() {
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === 'Escape') {
+      if (e.key === 'Escape') {
         e.preventDefault()
         enter()
+        return
       }
+      if (e.key !== 'Enter') return
+      // Enter belongs to whatever is focused, when that is something Enter already activates:
+      // otherwise the GitHub link below could be tabbed to but never opened, because this
+      // listener would preventDefault() it and open the bridge instead.
+      if ((e.target as HTMLElement | null)?.closest('a[href], button')) return
+      e.preventDefault()
+      enter()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -98,6 +111,31 @@ export function SplashOverlay() {
         <Button variant="cta" onClick={enter}>
           {d.splash.start}
         </Button>
+      </div>
+
+      {/*
+        * Where the app comes from, at the foot of the glass. It is an <a>, not a Button, so it
+        * keeps a real link's middle-click and context menu — but it wears the secondary Button's
+        * shape and hover exactly, and a translucent fill so it sits ON the glass instead of
+        * punching a plate through it.
+        *
+        * `absolute` keeps it out of the centred column: the wordmark and the call to action stay
+        * optically centred on the screen whether or not these two lines are there.
+        */}
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 px-4 pb-9">
+        {REPO ? (
+          <a
+            href={REPO}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={d.splash.source}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-surface/60 px-4 text-sm font-medium text-ink transition hover:border-ink/25 hover:bg-surface-2/80 outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+          >
+            <GithubIcon className="h-[17px] w-[17px]" />
+            {d.splash.sourceLabel}
+          </a>
+        ) : null}
+        {DOMAIN ? <span className="mono text-xs tracking-wide text-faint">{DOMAIN}</span> : null}
       </div>
     </div>
   )
