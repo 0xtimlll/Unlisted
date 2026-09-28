@@ -9,13 +9,19 @@ import { byEid, byKey, type ChainKey } from '../chains'
 import { IMPLEMENTED, type ProtocolId } from '../protocols'
 import { detectFindings, logEmitters, topSelector, type Finding, type TxLike } from './detect'
 import { FOREIGN_LINK } from './foreign'
-import { result, type AnalysisDetails, type AnalysisResult } from './result'
+import { isForeignProtocol, result, type AnalysisDetails, type AnalysisResult } from './result'
 
 export type AnalyzeOptions = {
   /** The chain the transaction was actually found on. */
   chain: ChainKey
   /** The chain the user had selected. A difference becomes the "switch network" action. */
   selected?: ChainKey
+  /**
+   * The protocol tab this was pasted into. Every tab reads the same transaction the same way —
+   * what changes is what can be done about it, because a form belongs to one protocol. Defaults
+   * to the OFT tab, which is the only one that used to analyse anything.
+   */
+  tab?: ProtocolId
 }
 
 /** Details shared by every result for this transaction. */
@@ -48,22 +54,25 @@ function dropRedundantPackets(findings: Finding[]): Finding[] {
   })
 }
 
-/** The result for a protocol we have a tab for: open it, or say its bridge is not built yet. */
-function protocolResult(
-  protocol: ProtocolId,
-  chain: ChainKey,
-  details: AnalysisDetails,
-  vars: Record<string, string>,
-  target?: AnalysisResult['target'],
-): AnalysisResult {
-  const implemented = IMPLEMENTED.has(protocol)
-  return result(implemented ? 'can_bridge' : 'cannot_bridge', implemented ? 'switch_protocol' : 'protocol_not_implemented', {
-    protocol,
-    vars,
-    details,
-    action: { kind: 'open_tab', protocol },
-    ...(target ? { target } : {}),
-  })
+/**
+ * The same verdict, re-answered for the tab it was pasted into.
+ *
+ * `fromFinding` describes a transaction as its own protocol's tab would read it — that is the
+ * honest reading, and it is the one the tab that owns the protocol needs. But a form belongs to
+ * one protocol: an OFT send cannot be rebuilt from the CCIP tab any more than a CCIP transfer can
+ * be rebuilt from the OFT tab. So when the protocol is not this tab's, the one useful thing left
+ * is to say which tab it is and carry the target over — the verdict itself is not touched, because
+ * where a transaction was pasted says nothing about what it contains.
+ */
+export function forTab(r: AnalysisResult, tab: ProtocolId): AnalysisResult {
+  const p = r.protocol
+  // Nothing recognised, or a protocol we never bridge (it already links to its own app), or the
+  // tab that owns it — all answered where they are.
+  if (!p || isForeignProtocol(p) || p === tab) return r
+  if (!IMPLEMENTED.has(p)) {
+    return { ...r, verdict: 'cannot_bridge', code: 'protocol_not_implemented', action: { kind: 'open_tab', protocol: p } }
+  }
+  return { ...r, code: 'switch_protocol', action: { kind: 'open_tab', protocol: p } }
 }
 
 function fromFinding(f: Finding, tx: TxLike, opts: AnalyzeOptions): AnalysisResult {
@@ -130,11 +139,12 @@ function fromFinding(f: Finding, tx: TxLike, opts: AnalyzeOptions): AnalysisResu
         ...(f.amount !== undefined ? { amount: f.amount.toString() } : {}),
         ...(f.digest ? { digest: f.digest } : {}),
       }
-      return protocolResult('wormhole-ntt', chain, details, { address: f.emitter, chain: chainName, destination: f.destChain ? byKey(f.destChain).name : '' }, {
-        chain,
-        address: f.emitter,
-        kind: 'ntt-manager',
-        ...(f.destChain ? { dstChain: f.destChain } : {}),
+      return result('can_bridge', 'ntt_transfer', {
+        protocol: 'wormhole-ntt',
+        vars: { address: f.emitter, chain: chainName, destination: f.destChain ? byKey(f.destChain).name : '' },
+        details,
+        target: { chain, address: f.emitter, kind: 'ntt-manager', ...(f.destChain ? { dstChain: f.destChain } : {}) },
+        action: switchAction ?? { kind: 'use_address', chain, address: f.emitter },
       })
     }
     case 'ccip_sent': {
@@ -142,15 +152,26 @@ function fromFinding(f: Finding, tx: TxLike, opts: AnalyzeOptions): AnalysisResu
         messageId: f.messageId,
         version: f.version,
         ...(f.destChainSelector !== undefined ? { destChainSelector: f.destChainSelector.toString() } : {}),
-        ...(f.tokens.length ? { tokens: f.tokens.map((t) => `${t.token}:${t.amount}`).join(' ') } : {}),
+        ...(f.transfers.length ? { [f.transfers[0]!.is === 'token' ? 'tokens' : 'pools']: f.transfers.map((t) => `${t.address}:${t.amount}`).join(' ') } : {}),
       }
-      const token = f.tokens[0]?.token
-      return protocolResult('ccip', chain, details, { address: f.emitter, chain: chainName, destination: f.destChain ? byKey(f.destChain).name : '' }, {
-        chain,
-        address: f.emitter,
-        kind: 'ccip-token',
-        ...(token ? { token } : {}),
-        ...(f.destChain ? { dstChain: f.destChain } : {}),
+      // Only a real token may be carried into the CCIP tab's form — its field is an ERC-20, and a
+      // pool address pasted there finds no pool at all. The newer on-ramps name no token, so the
+      // tab opens on the right chain with an empty field rather than a wrong one.
+      const first = f.transfers[0]
+      const token = first?.is === 'token' ? first.address : undefined
+      return result('can_bridge', 'ccip_send', {
+        protocol: 'ccip',
+        vars: {
+          address: token ?? f.emitter,
+          chain: chainName,
+          // The selector when we do not serve that chain, so the sentence never trails off — v1.5
+          // alone carries neither, because its event names no destination at all.
+          destination: f.destChain ? byKey(f.destChain).name : f.destChainSelector !== undefined ? String(f.destChainSelector) : '',
+        },
+        details,
+        target: { chain, address: f.emitter, kind: 'ccip-token', ...(token ? { token } : {}), ...(f.destChain ? { dstChain: f.destChain } : {}) },
+        // The CCIP form starts from the TOKEN; the emitter is the onRamp, which it never takes.
+        ...(switchAction ? { action: switchAction } : token ? { action: { kind: 'use_address' as const, chain, address: token } } : {}),
       })
     }
     case 'foreign': {
@@ -177,7 +198,8 @@ export function analyzeTx(tx: TxLike, opts: AnalyzeOptions): AnalysisResult[] {
   if (findings.length === 0) {
     return [result('unknown', 'unknown', { vars: { chain: byKey(opts.chain).name }, details: baseDetails(tx, opts.chain) })]
   }
-  return findings.map((f) => fromFinding(f, tx, opts))
+  const tab = opts.tab ?? 'lz-oft'
+  return findings.map((f) => forTab(fromFinding(f, tx, opts), tab))
 }
 
 /** True when the user has to choose which bridge in the transaction they mean. */

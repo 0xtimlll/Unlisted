@@ -8,12 +8,13 @@
  */
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
-import { isAddress } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi } from '@/core/abi'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
-import type { AnalysisTarget } from '@/core/analysis/result'
+import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
+import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
+import type { ProtocolId } from '@/core/protocols'
 import { tryRecipient, type Recipient } from '@/core/recipient'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { ccipRouterAbi } from '@/protocols/ccip/abi'
@@ -26,7 +27,9 @@ import { Address as AddressView } from './components/Address'
 import { ChainIcon } from './components/ChainIcon'
 import { ProtocolBadge } from './components/History'
 import { Panel, TwoColumn } from './components/Layout'
+import { VerdictCard } from './components/Verdict'
 import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
+import { useAnalysis } from './useAnalysis'
 import { useCcipCheck, useCcipPlan, useCcipRemote, useCcipToken, useTokenMeta } from './ccipHooks'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { pushHistory, type Stored } from './storage'
@@ -37,12 +40,18 @@ export function CcipApp({
   srcKey,
   setSrcKey,
   handoff,
+  onHandoffConsumed,
+  onOpenTab,
 }: {
   stored: Stored
   setStored: (s: Stored) => void
   srcKey: ChainKey
   setSrcKey: (k: ChainKey) => void
+  /** What another tab's analysis found for CCIP, carried across when this tab opened. */
   handoff: AnalysisTarget | null
+  onHandoffConsumed: () => void
+  /** The other direction: this tab recognised a transfer that belongs to another protocol. */
+  onOpenTab: (protocol: ProtocolId, target: AnalysisTarget | undefined) => void
 }) {
   const d = useDict()
   const { address: wallet, chainId: walletChainId } = useAccount()
@@ -70,17 +79,76 @@ export function CcipApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletChainId])
 
-  // Arriving from the OFT tab's analysis with a CCIP transfer it recognised.
+  // Arriving from another tab's analysis with a CCIP transfer it recognised.
   useEffect(() => {
-    if (!handoff || handoff.kind !== 'ccip-token') return
-    setSrcKey(handoff.chain)
-    if (handoff.token) {
-      setInput(handoff.token)
-      setTarget(handoff.token)
+    if (!handoff) return
+    if (handoff.kind === 'ccip-token') {
+      setSrcKey(handoff.chain)
+      if (handoff.token) {
+        setInput(handoff.token)
+        setTarget(handoff.token)
+      }
+      if (handoff.dstChain) setDstChain(handoff.dstChain)
     }
-    if (handoff.dstChain) setDstChain(handoff.dstChain)
+    // Consumed either way: a target this tab cannot use must not sit there and re-apply itself
+    // over something the user types next.
+    onHandoffConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoff?.address, handoff?.chain])
+
+
+  // ---- whatever was pasted ----------------------------------------------------
+  const [analysisInput, setAnalysisInput] = useState<AnalysisInput | null>(null)
+  const [inputError, setInputError] = useState('')
+  const analysis = useAnalysis(analysisInput, 'ccip', srcKey, stored.customRpc)
+  const verdict = analysis.data?.results[0]
+
+  /**
+   * One field, two kinds of answer. An address is this tab's own business and goes straight to the
+   * lookup below. A transaction hash or a LayerZero Scan link goes to the shared analysis, which
+   * reads the same logs here as anywhere else — and when it turns out to be another protocol, the
+   * verdict card is the way across, instead of a dead button that teaches the user nothing.
+   */
+  const go = () => {
+    const v = input.trim()
+    if (v === '') return
+    const r = parseAnalysisInput(v)
+    if (!r.ok) {
+      setInputError(d.analysis[`input_${r.code}`])
+      return
+    }
+    setInputError('')
+    if (r.input.kind === 'evm_address') {
+      setAnalysisInput(null)
+      setTarget(r.input.address)
+      return
+    }
+    if (r.input.kind === 'evm_tx' || r.input.kind === 'lz_guid') {
+      setTarget(null)
+      setAnalysisInput(r.input)
+      return
+    }
+    // A Solana address or signature: this tab bridges EVM to EVM only.
+    setInputError(d.analysis.input_unrecognised)
+  }
+
+  const onAnalysisAction = (a: AnalysisAction) => {
+    switch (a.kind) {
+      case 'open_tab':
+        onOpenTab(a.protocol, verdict?.target)
+        return
+      case 'switch_chain':
+        setSrcKey(a.chain)
+        return
+      case 'use_address':
+        setInput(a.address)
+        setTarget(a.address)
+        if (verdict?.target?.dstChain) setDstChain(verdict.target.dstChain)
+        return
+      default:
+        return
+    }
+  }
 
   const discovery = useCcipToken(srcKey, target, stored.customRpc)
   const token = discovery.data?.kind === 'token' ? discovery.data.token : undefined
@@ -289,7 +357,7 @@ export function CcipApp({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && isAddress(input.trim(), { strict: false })) setTarget(input.trim())
+              if (e.key === 'Enter') go()
             }}
             placeholder={d.ccip.placeholder}
             spellCheck={false}
@@ -300,12 +368,17 @@ export function CcipApp({
           <Button
             variant="primary"
             className="h-9 rounded-full px-4"
-            disabled={!isAddress(input.trim(), { strict: false }) || discovery.isFetching}
-            onClick={() => setTarget(input.trim())}
+            disabled={input.trim() === '' || discovery.isFetching || analysis.isFetching}
+            onClick={go}
           >
-            {discovery.isFetching ? <Spinner /> : d.analysis.button}
+            {discovery.isFetching || analysis.isFetching ? <Spinner /> : d.analysis.button}
           </Button>
         </div>
+        {inputError ? (
+          <div className="mt-2 text-xs">
+            <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
+          </div>
+        ) : null}
         {discovery.data?.kind === 'no_pool' ? (
           <div className="mt-2">
             <Alert kind="error">{d.ccip.noPool}</Alert>
@@ -421,8 +494,9 @@ export function CcipApp({
   const right = (
     <Panel title={d.ui.preview} badge={<ProtocolBadge id="ccip" />}>
       <div className="space-y-4">
+        {verdict ? <VerdictCard result={verdict} onAction={onAnalysisAction} /> : null}
         {!token ? (
-          <p className="text-sm text-muted">{d.ccip.previewEmpty}</p>
+          verdict ? null : <p className="text-sm text-muted">{d.ccip.previewEmpty}</p>
         ) : (
           <>
             <div>

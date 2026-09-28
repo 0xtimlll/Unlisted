@@ -57,6 +57,13 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
     }
   }
 
+  /** Every tab hands over the same way, in every direction: carry the target, then open the tab. */
+  const openTab = (protocol: ProtocolId, target: AnalysisTarget | undefined) => {
+    setHandoff(target ?? null)
+    goTab(tabOfProtocol(protocol))
+  }
+  const handoffProps = { handoff, onHandoffConsumed: () => setHandoff(null), onOpenTab: openTab }
+
   useEffect(() => {
     saveLastTab(initialTab)
     const onPop = () => setTabState(tabOfPath(window.location.pathname) ?? initialTab)
@@ -127,15 +134,12 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                   setSrcKey={setSrcKey}
                   trackRequest={trackRequest}
                   onTrackConsumed={() => setTrackRequest(null)}
-                  onOpenTab={(protocol: ProtocolId, target: AnalysisTarget | undefined) => {
-                    setHandoff(target ?? null)
-                    goTab(tabOfProtocol(protocol))
-                  }}
+                  {...handoffProps}
                 />
               ) : tab === 'ntt' ? (
-                <NttApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} handoff={handoff} />
+                <NttApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} {...handoffProps} />
               ) : (
-                <CcipApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} handoff={handoff} />
+                <CcipApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} {...handoffProps} />
               )}
             </AppShell>
           </SvmWalletHost>

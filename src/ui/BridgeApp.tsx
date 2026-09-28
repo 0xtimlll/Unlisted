@@ -65,6 +65,8 @@ export function BridgeApp({
   setSrcKey,
   trackRequest,
   onTrackConsumed,
+  handoff,
+  onHandoffConsumed,
   onOpenTab,
 }: {
   stored: Stored
@@ -74,6 +76,9 @@ export function BridgeApp({
   /** A past transfer the user asked to track from Recent transfers. */
   trackRequest: HistoryEntry | null
   onTrackConsumed: () => void
+  /** A LayerZero contract another tab's analysis found, carried across when this tab opened. */
+  handoff: AnalysisTarget | null
+  onHandoffConsumed: () => void
   /** The analysis found another protocol: hand the tab and what was found to the shell. */
   onOpenTab: (protocol: ProtocolId, target: AnalysisTarget | undefined) => void
 }) {
@@ -139,7 +144,7 @@ export function BridgeApp({
   }
 
   // ---- step 1: analyse whatever was pasted ------------------------------------
-  const analysis = useAnalysis(analysisInput, srcKey, stored.customRpc)
+  const analysis = useAnalysis(analysisInput, 'lz-oft', srcKey, stored.customRpc)
   const [chosen, setChosen] = useState(0)
 
   /** Point the form at a contract the analysis found, on its own chain. */
@@ -152,6 +157,21 @@ export function BridgeApp({
     },
     [srcKey, setSrcKey],
   )
+
+  /**
+   * Arriving from the NTT or CCIP tab, which recognised a LayerZero transfer they cannot build.
+   * `oft-store` is deliberately left out: a Solana source is set up by its own decode path.
+   */
+  const [handedOver, setHandedOver] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (!handoff) return
+    if (handoff.kind === 'oft' || handoff.kind === 'lz-oapp') {
+      applyTarget(handoff)
+      setHandedOver(handoff.address)
+    }
+    onHandoffConsumed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff?.address, handoff?.chain])
 
   const onInput = (i: AnalysisInput) => {
     setTxError('')
@@ -580,6 +600,7 @@ export function BridgeApp({
       <TokenStep
         chain={src}
         onInput={onInput}
+        prefill={handedOver}
         busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
         recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
         info={info}

@@ -6,10 +6,22 @@
  *         contracts/src/v0.8/ccip/onRamp/EVM2EVMOnRamp.sol (release/contracts-ccip-1.5.0)
  *   v1.6  OnRamp.CCIPMessageSent(uint64 indexed, uint64 indexed, Internal.EVM2AnyRampMessage)
  *         contracts/src/v0.8/ccip/onRamp/OnRamp.sol
+ *   2.0   OnRamp.CCIPMessageSent(uint64 indexed, address indexed, bytes32 indexed, address, uint256,
+ *         bytes, Receipt[], bytes[]) — smartcontractkit/chainlink-ccip,
+ *         chains/evm/contracts/onRamp/OnRamp.sol ("OnRamp 2.0.0"), the verifier-based generation.
+ *         Robinhood Chain runs this one; the topic was confirmed against a real send there.
  * Structs: contracts/src/v0.8/ccip/libraries/Internal.sol and .../Client.sol
  *
  * The v1.5 event carries no destination selector — the on-ramp it was emitted by is what fixes the
  * destination — so a v1.5 transfer is reported with an unknown destination rather than a guess.
+ *
+ * What each generation says about the TOKEN is not the same thing, which is why findings carry it
+ * with a label rather than as a bare address:
+ *   v1.5  names the token itself
+ *   v1.6  names the source POOL (`sourcePoolAddress`), never the token
+ *   2.0   names neither — the transfer lives inside `encodedMessage`, in MessageV1 encoding this
+ *         app does not implement, so a 2.0 send is reported without any transfer at all rather
+ *         than with a guess pulled out of the other logs.
  */
 import { encodeEventTopics, parseAbi, type Hex } from 'viem'
 
@@ -24,17 +36,34 @@ export const ccipEventsAbi = parseAbi([
   'event CCIPSendRequested(EVM2EVMMessage message)',
 ])
 
-export type CcipEventName = 'CCIPMessageSent' | 'CCIPSendRequested'
+/**
+ * The 2.0 on-ramp's event carries the SAME NAME with a different shape, and an event's name is
+ * part of the signature it is hashed from — so it cannot be aliased into the ABI above without
+ * changing the topic it computes to. It gets its own ABI instead, under its real name.
+ */
+export const ccipRamp2EventsAbi = parseAbi([
+  'struct Receipt { address issuer; uint32 destGasLimit; uint32 destBytesOverhead; uint256 feeTokenAmount; bytes extraArgs; }',
+  'event CCIPMessageSent(uint64 indexed destChainSelector, address indexed sender, bytes32 indexed messageId, address feeToken, uint256 tokenAmountBeforeTokenPoolFees, bytes encodedMessage, Receipt[] receipts, bytes[] verifierBlobs)',
+])
 
-export function ccipTopic(name: CcipEventName): Hex {
+export type CcipEventName = 'CCIPMessageSent' | 'CCIPSendRequested' | 'CCIPMessageSentRamp2'
+
+export function ccipTopic(name: 'CCIPMessageSent' | 'CCIPSendRequested'): Hex {
   const [topic] = encodeEventTopics({ abi: ccipEventsAbi, eventName: name })
   if (!topic) throw new Error(`no topic0 for ${name}`)
+  return topic
+}
+
+function ramp2Topic(): Hex {
+  const [topic] = encodeEventTopics({ abi: ccipRamp2EventsAbi, eventName: 'CCIPMessageSent' })
+  if (!topic) throw new Error('no topic0 for the 2.0 CCIPMessageSent')
   return topic
 }
 
 export const CCIP_TOPICS: Readonly<Record<CcipEventName, Hex>> = Object.freeze({
   CCIPMessageSent: ccipTopic('CCIPMessageSent'),
   CCIPSendRequested: ccipTopic('CCIPSendRequested'),
+  CCIPMessageSentRamp2: ramp2Topic(),
 })
 
 /**

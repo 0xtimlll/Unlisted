@@ -8,12 +8,13 @@
  */
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
-import { isAddress } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi } from '@/core/abi'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
-import type { AnalysisTarget } from '@/core/analysis/result'
+import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
+import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
+import type { ProtocolId } from '@/core/protocols'
 import { tryRecipient, type Recipient } from '@/core/recipient'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { nttManagerAbi } from '@/protocols/wormhole-ntt/abi'
@@ -25,8 +26,10 @@ import { Address as AddressView } from './components/Address'
 import { ChainIcon } from './components/ChainIcon'
 import { ProtocolBadge } from './components/History'
 import { Panel, TwoColumn } from './components/Layout'
+import { VerdictCard } from './components/Verdict'
 import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
+import { useAnalysis } from './useAnalysis'
 import { nttDestinations, useNttCheck, useNttDiscovery, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
 import { pushHistory, type Stored } from './storage'
 
@@ -36,13 +39,18 @@ export function NttApp({
   srcKey,
   setSrcKey,
   handoff,
+  onHandoffConsumed,
+  onOpenTab,
 }: {
   stored: Stored
   setStored: (s: Stored) => void
   srcKey: ChainKey
   setSrcKey: (k: ChainKey) => void
-  /** What the OFT tab's analysis found, when the user arrived through the banner. */
+  /** What another tab's analysis found for NTT, when the user arrived through the verdict card. */
   handoff: AnalysisTarget | null
+  onHandoffConsumed: () => void
+  /** The other direction: this tab recognised a transfer that belongs to another protocol. */
+  onOpenTab: (protocol: ProtocolId, target: AnalysisTarget | undefined) => void
 }) {
   const d = useDict()
   const { address: wallet, chainId: walletChainId } = useAccount()
@@ -72,13 +80,72 @@ export function NttApp({
 
   // Arriving from the OFT tab's analysis: take the manager and the destination it found.
   useEffect(() => {
-    if (!handoff || handoff.kind !== 'ntt-manager') return
-    setSrcKey(handoff.chain)
-    setInput(handoff.address)
-    setTarget(handoff.address)
-    if (handoff.dstChain) setDstChain(handoff.dstChain)
+    if (!handoff) return
+    if (handoff.kind === 'ntt-manager') {
+      setSrcKey(handoff.chain)
+      setInput(handoff.address)
+      setTarget(handoff.address)
+      if (handoff.dstChain) setDstChain(handoff.dstChain)
+    }
+    // Consumed either way: a target this tab cannot use must not sit there and re-apply itself
+    // over something the user types next.
+    onHandoffConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoff?.address, handoff?.chain])
+
+
+  // ---- whatever was pasted ----------------------------------------------------
+  const [analysisInput, setAnalysisInput] = useState<AnalysisInput | null>(null)
+  const [inputError, setInputError] = useState('')
+  const analysis = useAnalysis(analysisInput, 'wormhole-ntt', srcKey, stored.customRpc)
+  const verdict = analysis.data?.results[0]
+
+  /**
+   * One field, two kinds of answer. An address is this tab's own business and goes straight to the
+   * manager lookup below. A transaction hash or a LayerZero Scan link goes to the shared analysis,
+   * which reads the same logs here as anywhere else — and when it turns out to be another protocol,
+   * the verdict card is the way across, instead of a dead button that teaches the user nothing.
+   */
+  const go = () => {
+    const v = input.trim()
+    if (v === '') return
+    const r = parseAnalysisInput(v)
+    if (!r.ok) {
+      setInputError(d.analysis[`input_${r.code}`])
+      return
+    }
+    setInputError('')
+    if (r.input.kind === 'evm_address') {
+      setAnalysisInput(null)
+      setTarget(r.input.address)
+      return
+    }
+    if (r.input.kind === 'evm_tx' || r.input.kind === 'lz_guid') {
+      setTarget(null)
+      setAnalysisInput(r.input)
+      return
+    }
+    // A Solana address or signature: this tab bridges EVM to EVM only.
+    setInputError(d.analysis.input_unrecognised)
+  }
+
+  const onAnalysisAction = (a: AnalysisAction) => {
+    switch (a.kind) {
+      case 'open_tab':
+        onOpenTab(a.protocol, verdict?.target)
+        return
+      case 'switch_chain':
+        setSrcKey(a.chain)
+        return
+      case 'use_address':
+        setInput(a.address)
+        setTarget(a.address)
+        if (verdict?.target?.dstChain) setDstChain(verdict.target.dstChain)
+        return
+      default:
+        return
+    }
+  }
 
   const tokenList = useNttTokenList()
   const discovery = useNttDiscovery(srcKey, dstChain, target, tokenList.data, stored.customRpc)
@@ -286,7 +353,7 @@ export function NttApp({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && isAddress(input.trim(), { strict: false })) setTarget(input.trim())
+              if (e.key === 'Enter') go()
             }}
             placeholder={d.ntt.placeholder}
             spellCheck={false}
@@ -297,12 +364,17 @@ export function NttApp({
           <Button
             variant="primary"
             className="h-9 rounded-full px-4"
-            disabled={!isAddress(input.trim(), { strict: false }) || discovery.isFetching || tokenList.isLoading}
-            onClick={() => setTarget(input.trim())}
+            disabled={input.trim() === '' || discovery.isFetching || tokenList.isLoading || analysis.isFetching}
+            onClick={go}
           >
-            {discovery.isFetching || tokenList.isLoading ? <Spinner /> : d.analysis.button}
+            {discovery.isFetching || tokenList.isLoading || analysis.isFetching ? <Spinner /> : d.analysis.button}
           </Button>
         </div>
+        {inputError ? (
+          <div className="mt-2 text-xs">
+            <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
+          </div>
+        ) : null}
         {tokenList.isError ? (
           <div className="mt-2">
             <Alert kind="error">{d.ntt.listUnavailable}</Alert>
@@ -423,7 +495,13 @@ export function NttApp({
   const right = (
     <Panel title={d.ui.preview} badge={<ProtocolBadge id="wormhole-ntt" />}>
       <div className="space-y-4">
-        <VerificationCard verification={verification.data} loading={verification.isFetching} hasTarget={!!manager && !!dstChain} />
+        {/* A pasted transaction is answered by the verdict; the manager gate has nothing to say
+            about it, and showing "not verified" next to "this is CCIP" would only muddle both. */}
+        {verdict ? (
+          <VerdictCard result={verdict} onAction={onAnalysisAction} />
+        ) : (
+          <VerificationCard verification={verification.data} loading={verification.isFetching} hasTarget={!!manager && !!dstChain} />
+        )}
         {verified && planData ? (
           <>
             <div>

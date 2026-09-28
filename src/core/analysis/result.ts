@@ -35,8 +35,11 @@ export type AnalysisCode =
   | 'lz_oft_receive' // the receiving side of a transfer: the OFT on THIS chain
   | 'lz_packet_no_oft' // a LayerZero packet whose OApp still has to be probed
   | 'lz_oapp_not_oft' // a LayerZero app, but not an OFT — bridge on the project's own site
+  // --- Wormhole NTT / Chainlink CCIP, read in their own tab -------------------
+  | 'ntt_transfer'
+  | 'ccip_send'
   // --- another protocol we support -------------------------------------------
-  | 'switch_protocol' // recognised and implemented: open that tab
+  | 'switch_protocol' // recognised and implemented, but pasted into the wrong tab: open that one
   | 'protocol_not_implemented' // recognised, its bridge is not built yet
   // --- protocols we will never bridge ----------------------------------------
   | 'foreign_protocol'
@@ -52,6 +55,11 @@ export type AnalysisCode =
  * "found on another chain" and "more than one bridge here" are not codes: the first is the
  * `switch_chain` action on an otherwise normal result, the second is simply more than one result.
  * A failed lookup is reported through SearchResult.failed, never as a verdict.
+ *
+ * "wrong tab" is not a code of its own either. Every finding is first read as if it had been
+ * pasted into its own protocol's tab (`lz_oft_send`, `ntt_transfer`, `ccip_send`), and only then
+ * re-answered for the tab it was actually pasted into — which turns it into `switch_protocol`
+ * plus an `open_tab` action, carrying the same target across.
  */
 
 /** What the user can do about it. The UI renders exactly one button from this. */
