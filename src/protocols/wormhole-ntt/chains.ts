@@ -80,6 +80,14 @@ export const WORMHOLE_CHAINS: Partial<Record<ChainKey, WormholeChainConfig>> = {
     wormholeChainId: 1,
     coreBridge: 'worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth',
   },
+  robinhood: {
+    // Confirmed on chain rather than taken on trust: this core bridge answers chainId() with 72,
+    // it carries the same guardian set index as Ethereum's, and Wormholescan holds VAAs signed for
+    // emitter chain 72 — so the guardians observe this network, they do not merely have an address
+    // on it. No Token Bridge is published for Robinhood, so Portal cannot originate here at all.
+    wormholeChainId: 72,
+    coreBridge: '0x141fBa8AD5D61bdaB45A047cF60b5Ad9784987FB',
+  },
   // scroll: Wormhole does not list a chain id for Scroll.
 }
 

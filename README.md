@@ -42,7 +42,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 | Optimism | 30111 | | HyperEVM | 30367 |
 | Base | 30184 | | Linea | 30183 |
 | BNB Chain | 30102 | | Scroll | 30214 |
-| Solana | 30168 | | | |
+| Solana | 30168 | | Robinhood Chain | 30416 |
 
 Any OFT (LayerZero V2) deployed on these chains works, in both directions between EVM and Solana:
 
