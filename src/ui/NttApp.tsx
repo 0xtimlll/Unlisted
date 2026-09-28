@@ -60,6 +60,7 @@ export function NttApp({
   const [confirmLast6, setConfirmLast6] = useState('')
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
+  const [highFeeAccepted, setHighFeeAccepted] = useState(false)
 
   // Follow the wallet's chain when it is one we support.
   useEffect(() => {
@@ -123,6 +124,12 @@ export function NttApp({
   const plan = useNttPlan({ verification: verification.data, sender: wallet, recipient, amountRaw, customRpc: stored.customRpc })
   const planData = plan.data
 
+  // A fee the user accepted was a specific number; the moment it changes they have not read it.
+  const planValue = plan.data?.value
+  useEffect(() => {
+    setHighFeeAccepted(false)
+  }, [planValue])
+
   const tokenBalance = useTokenBalance(evmSrc, verified?.token, wallet)
   const nativeBalance = useNativeBalance(evmSrc, wallet)
   const allowance = useAllowance(evmSrc, verified?.token, wallet, verified?.manager)
@@ -144,9 +151,12 @@ export function NttApp({
     ...(approveIntent ? { approveIntent } : {}),
     simulation: undefined,
     selfCheck: undefined,
+    highFeeAccepted,
   }
   const pre = runNttGuards(baseInput)
-  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13).every((r) => r.ok)
+  // 14 is excluded like the others: the fee confirmation must not gate the simulation, or the
+  // user would be asked to accept a number before anything could tell them whether it works.
+  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok)
   const check = useNttCheck(planData, preOk, stored.customRpc)
   const report = runNttGuards({
     ...baseInput,
@@ -442,6 +452,15 @@ export function NttApp({
                 </Row>
               </div>
             </div>
+            {report.needsHighFeeConfirmation ? (
+              <div className="space-y-2">
+                <Alert kind="warn">{fmt(d.ntt.warnHighFee, { fee: `${formatAmount(planData.value, 18, { maxFraction: 6 })} ${src.nativeSymbol}`, chain: src.name })}</Alert>
+                <label className="flex items-start gap-2 text-xs text-ink">
+                  <input type="checkbox" className="mt-0.5" checked={highFeeAccepted} onChange={(e) => setHighFeeAccepted(e.target.checked)} />
+                  {d.ntt.confirmHighFee}
+                </label>
+              </div>
+            ) : null}
             <div>
               <ul className="grid gap-x-3 gap-y-0.5 text-xs">
                 {report.results.map((r) => (
@@ -496,6 +515,8 @@ function VerificationCard({ verification, loading, hasTarget }: { verification: 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-sm font-bold text-ok">✓ {d.ntt.verified}</div>
+      {/* The gate passed, but only one provider answered — say so rather than imply two agreed. */}
+      {verification.crossChecked === false ? <p className="text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p> : null}
       <div className="rounded-xl bg-surface-2 px-3 py-1">
         <Row label={d.ntt.manager} mono>
           <AddressView value={v.manager} href={byKey(v.chain).explorerAddrUrl + v.manager} short />

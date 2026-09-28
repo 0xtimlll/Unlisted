@@ -358,6 +358,8 @@ export const en = {
     cta_find: 'Find the manager',
     cta_verifying: 'Checking the manager…',
     sentHint: 'Sent. Wormhole’s relayer delivers it automatically; watch it on Wormholescan.',
+    warnHighFee: 'The delivery fee for this transfer is {fee} — far above what {chain} normally charges. A quote cannot be checked against anything off-chain, so read the number before you accept it.',
+    confirmHighFee: 'I have read the fee above and want to pay it',
   },
   nttReject: {
     chain_unsupported: 'Wormhole does not serve one of these networks.',
@@ -402,6 +404,7 @@ export const en = {
     simulation_failed: 'Simulation failed',
     selfcheck_missing: 'Self-check pending…',
     selfcheck_failed: 'Self-check failed: calldata does not match the plan',
+    fee_above_ceiling_unconfirmed: 'Confirm the unusually high delivery fee',
     ok_2: 'manager verified',
     ok_5: 'amount ok',
     ok_6: 'within both rate limits',
@@ -409,6 +412,7 @@ export const en = {
     ok_9: 'allowance ok',
     ok_12: 'simulation ok',
     ok_13: 'self-check calldata ok',
+    ok_14: 'fee within normal range',
   },
   ccip: {
     inputLabel: 'Token address',
@@ -433,6 +437,8 @@ export const en = {
     messagePlain: 'tokens only — no data, no call on the other side',
     cta_find: 'Find the token pool',
     sentHint: 'Sent. Follow it on the CCIP Explorer; the messageId appears there once the transaction is indexed.',
+    warnHighFee: 'The CCIP fee for this transfer is {fee} — far above what {chain} normally charges. The router keeps whatever it is sent, so this is not refunded. Read the number before you accept it.',
+    confirmHighFee: 'I have read the fee above and want to pay it',
   },
   ccipReject: {
     unreadable: 'Could not read that address on this network.',
@@ -469,6 +475,7 @@ export const en = {
     simulation_failed: 'Simulation failed',
     selfcheck_missing: 'Self-check pending…',
     selfcheck_failed: 'Self-check failed: calldata does not match the plan',
+    fee_above_ceiling_unconfirmed: 'Confirm the unusually high CCIP fee',
     ok_2: 'route and router from the directory',
     ok_5: 'amount ok',
     ok_6: 'within both pool rate limits',
@@ -477,6 +484,7 @@ export const en = {
     ok_11: 'message is a plain transfer',
     ok_12: 'simulation ok',
     ok_13: 'self-check calldata ok',
+    ok_14: 'fee within normal range',
   },
   history: {
     title: 'Recent transfers',

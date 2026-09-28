@@ -12,6 +12,7 @@ import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
 import { simulateSend, type SimOutcome } from '@/core/sim/preview'
 import type { DecodedRevert } from '@/core/sim/revert'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
+import { sanitizeText } from '@/core/text'
 import type { Recipient } from '@/core/recipient'
 import type { SvmOftInfo, SvmUnknownStore } from '@/core/svm/discover'
 import type { SvmRecipientCheck } from '@/core/svm/recipient'
@@ -279,7 +280,9 @@ export function shortError(e: unknown): string {
   const short = first(anyE.shortMessage)
   const details = first(anyE.details)
   const both = short && details && !short.includes(details) ? `${short} ${details}` : short || details || first(anyE.message) || String(e)
-  return both.slice(0, 240)
+  // A revert reason is a string the CONTRACT chose, and it lands in an alert next to the amount.
+  // Same rule as a token symbol: it may say what it likes, not lay itself out how it likes.
+  return sanitizeText(both, 240)
 }
 
 export function isUserRejection(e: unknown): boolean {

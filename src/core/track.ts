@@ -3,6 +3,7 @@
  * anywhere except the tx hash itself. Network errors mean "no data yet", not failure.
  */
 import type { Hash, Hex } from 'viem'
+import { sanitizeText } from './text.ts'
 
 export const LZ_SCAN_API = 'https://scan.layerzero-api.com'
 export const LZ_SCAN_UI = 'https://layerzeroscan.com'
@@ -78,7 +79,8 @@ const isSolanaSig = (v: unknown): v is string => typeof v === 'string' && /^[1-9
 /** An EVM address or a Solana base58 key — anything else from the API is dropped. */
 const isAccountish = (v: string): boolean => /^0x[0-9a-fA-F]{40}$/.test(v) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v.slice(0, 256) : undefined)
+/** Scan's prose is shown verbatim, so it is stripped of layout controls before it can be. */
+const str = (v: unknown): string | undefined => (typeof v === 'string' ? sanitizeText(v, 256) : undefined)
 
 /**
  * Pure parser for the Scan API response. Treats everything as untrusted data.

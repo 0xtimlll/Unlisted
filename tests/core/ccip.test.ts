@@ -6,7 +6,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { encodeAbiParameters, encodeFunctionData, getAddress, type Abi, type Address } from 'viem'
+import type { ReadClient } from '@/core/client'
 import { ccipRouterAbi, EVM_EXTRA_ARGS_V2_TAG } from '@/protocols/ccip/abi'
+import { discoverCcipTokenQuorum } from '@/protocols/ccip/discover'
 import { CCIP_CHAINS, ccipConfig, ccipSelector, chainOfCcipSelector, isCcipRouter } from '@/protocols/ccip/chains'
 import { ccipApprovePlan, runCcipGuards, type CcipGuardInput } from '@/protocols/ccip/guards'
 import {
@@ -225,6 +227,107 @@ describe('CCIP guards', () => {
 })
 
 // -------------------------------------------------------------- self-check ----
+
+describe('the pool, asked twice (RPC quorum)', () => {
+  type Answers = Record<string, unknown>
+
+  /** Answers `${address}.${functionName}`; anything unset throws, like an unreachable provider. */
+  function mockClient(answers: Answers): ReadClient {
+    return {
+      readContract: async ({ address, functionName }: { address: string; functionName: string }) => {
+        const key = `${address.toLowerCase()}.${functionName}`
+        if (!(key in answers)) throw new Error(`no answer for ${key}`)
+        const v = answers[key]
+        if (v instanceof Error) throw v
+        return v
+      },
+    } as unknown as ReadClient
+  }
+
+  const answers = (over: Answers = {}): Answers => ({
+    [`${getAddress(ETH.tokenAdminRegistry).toLowerCase()}.getPool`]: POOL,
+    [`${POOL.toLowerCase()}.getToken`]: TOKEN,
+    [`${POOL.toLowerCase()}.getRouter`]: ROUTER,
+    [`${POOL.toLowerCase()}.getTokenDecimals`]: 18,
+    [`${POOL.toLowerCase()}.getSupportedChains`]: [BASE.selector],
+    ...over,
+  })
+
+  const quorum = (primary: Answers, second?: Answers) =>
+    discoverCcipTokenQuorum(mockClient(primary), second ? mockClient(second) : undefined, 'ethereum', TOKEN)
+
+  it('finds the pool and flags that nobody confirmed it', async () => {
+    const r = await quorum(answers())
+    expect(r).toMatchObject({ kind: 'token', pool: POOL, decimals: 18 })
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('marks the pool cross-checked when two providers agree', async () => {
+    const r = await quorum(answers(), answers())
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    expect(r.crossChecked).toBe(true)
+  })
+
+  it('does NOT block when the second provider is simply down', async () => {
+    const r = await quorum(answers(), {})
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('blocks when the second provider names a different pool', async () => {
+    const other = answers({
+      [`${getAddress(ETH.tokenAdminRegistry).toLowerCase()}.getPool`]: DST_POOL,
+      [`${DST_POOL.toLowerCase()}.getToken`]: TOKEN,
+      [`${DST_POOL.toLowerCase()}.getRouter`]: ROUTER,
+      [`${DST_POOL.toLowerCase()}.getTokenDecimals`]: 18,
+      [`${DST_POOL.toLowerCase()}.getSupportedChains`]: [BASE.selector],
+    })
+    const r = await quorum(answers(), other)
+    expect(r.kind).toBe('unknown')
+    expect(r.crossChecked).toBe(true)
+  })
+
+  it('blocks when the second provider says the pool is wired to another router', async () => {
+    const r = await quorum(answers(), answers({ [`${POOL.toLowerCase()}.getRouter`]: OTHER }))
+    expect(r).toMatchObject({ kind: 'unknown', reason: 'pool_wrong_router' })
+  })
+
+  it('ignores a route one provider has not indexed yet — that is lag, not disagreement', async () => {
+    const r = await quorum(answers(), answers({ [`${POOL.toLowerCase()}.getSupportedChains`]: [] }))
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    expect(r.crossChecked).toBe(true)
+  })
+})
+
+describe('CCIP fee ceiling (guard 14)', () => {
+  // Guard 7 requires value === fee exactly, and the router keeps it: nothing here is refunded.
+  const high = { fee: 5n * 10n ** 17n, value: 5n * 10n ** 17n }
+
+  it('passes silently while the fee is ordinary', () => {
+    const r = runCcipGuards(guardInput())
+    expect(r.needsHighFeeConfirmation).toBe(false)
+    expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
+  })
+
+  it('blocks a fee above the chain ceiling until it is read', () => {
+    const r = runCcipGuards(guardInput({ plan: planFixture(high) }))
+    expect(r.needsHighFeeConfirmation).toBe(true)
+    expect(r.canSend).toBe(false)
+    expect(r.results.find((x) => x.id === 14)).toMatchObject({ ok: false, code: 'fee_above_ceiling_unconfirmed' })
+  })
+
+  it('lets the same fee through once the user accepts it', () => {
+    const r = runCcipGuards(guardInput({ plan: planFixture(high), highFeeAccepted: true }))
+    expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
+    expect(r.canSend).toBe(true)
+  })
+
+  it('still blocks a fee the balance could cover — the ceiling is not the balance', () => {
+    const r = runCcipGuards(guardInput({ plan: planFixture(high) }))
+    expect(r.results.find((x) => x.id === 8)?.ok).toBe(true)
+    expect(r.canSend).toBe(false)
+  })
+})
 
 describe('CCIP self-check', () => {
   it('accepts the calldata built from the plan', () => {

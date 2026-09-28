@@ -12,6 +12,7 @@
  *    that it really did.
  */
 import { isAddressEqual, type Address } from 'viem'
+import { aboveFeeCeiling } from '../../core/chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from '../../core/encoding'
 import { receivedAmount } from './amounts'
 import type { NttPlan } from './plan'
@@ -45,6 +46,7 @@ export type NttGuardCode =
   | 'simulation_failed'
   | 'selfcheck_missing'
   | 'selfcheck_failed'
+  | 'fee_above_ceiling_unconfirmed'
 
 /** Codes that mean "not known yet", shown muted rather than red. */
 export const NTT_PENDING: ReadonlySet<NttGuardCode> = new Set<NttGuardCode>([
@@ -81,9 +83,16 @@ export type NttGuardInput = {
   approveIntent?: NttApproveIntent | undefined
   simulation: { ok: true } | { ok: false; reason: string } | undefined
   selfCheck: { ok: true } | { ok: false; mismatches: string[] } | undefined
+  /** User read and accepted a delivery fee above the source chain's ceiling (guard 14). */
+  highFeeAccepted?: boolean
 }
 
-export type NttGuardReport = { results: NttGuardResult[]; canSend: boolean }
+export type NttGuardReport = {
+  results: NttGuardResult[]
+  canSend: boolean
+  /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
+  needsHighFeeConfirmation: boolean
+}
 
 const ok = (id: number): NttGuardResult => ({ id, ok: true })
 const fail = (id: number, code: NttGuardCode, detail?: string): NttGuardResult =>
@@ -117,7 +126,9 @@ export function n4RecipientNotContract(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(4, 'plan_missing')
   const r = i.plan.recipient
   if (isZeroBytes32(r)) return fail(4, 'recipient_zero')
-  for (const c of [i.plan.token, i.plan.manager, i.plan.dst.manager]) {
+  // Both sides: the token and manager here, and the manager AND token on the destination — a
+  // transfer to the destination token's own address arrives nowhere a person can spend it.
+  for (const c of [i.plan.token, i.plan.manager, i.plan.dst.manager, i.plan.dst.token]) {
     if (sameAddress(r, addressToBytes32(c))) return fail(4, 'recipient_is_contract', c)
   }
   return ok(4)
@@ -206,13 +217,32 @@ export function n13SelfCheck(i: NttGuardInput): NttGuardResult {
   return i.selfCheck.ok ? ok(13) : fail(13, 'selfcheck_failed', i.selfCheck.mismatches.join(', '))
 }
 
+/**
+ * True when the value this plan commits to exceeds the source chain's ceiling (core/chains.ts).
+ * `value` rather than `fee`, because `value` is the number that actually leaves the wallet once
+ * the buffer is applied — the manager refunds the difference, but only if it is honest.
+ */
+export function nttFeeAboveCeiling(plan: NttPlan | undefined): boolean {
+  return !!plan && aboveFeeCeiling(plan.chain, plan.value)
+}
+
+// 14. the delivery fee is within the chain's ceiling, or the user has read the number and accepted
+//     it. quoteDeliveryPrice() is whatever the manager — or whatever RPC answered for it — chose to
+//     return, and msg.value follows it, so guard 8 (the whole balance) was the only bound until now.
+export function n14FeeCeiling(i: NttGuardInput): NttGuardResult {
+  if (!i.plan) return fail(14, 'plan_missing')
+  if (!nttFeeAboveCeiling(i.plan)) return ok(14)
+  if (!i.highFeeAccepted) return fail(14, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
+  return ok(14)
+}
+
 export function runNttGuards(i: NttGuardInput): NttGuardReport {
   const results = [
     n1Chain(i), n2Verified(i), n3Recipient(i), n4RecipientNotContract(i), n5Amount(i),
     n6RateLimits(i), n7Fee(i), n8Native(i), n9Allowance(i), n10Spender(i),
-    n11NoQueue(i), n12Simulation(i), n13SelfCheck(i),
+    n11NoQueue(i), n12Simulation(i), n13SelfCheck(i), n14FeeCeiling(i),
   ]
-  return { results, canSend: results.every((r) => r.ok) }
+  return { results, canSend: results.every((r) => r.ok), needsHighFeeConfirmation: nttFeeAboveCeiling(i.plan) }
 }
 
 /**

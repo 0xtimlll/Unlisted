@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import { byKey, evmByKey, requireEvm, type ChainKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
+import { clientPair } from '@/core/quorum'
 import type { Recipient } from '@/core/recipient'
 import { wormholeChainId } from '@/protocols/wormhole-ntt/chains'
 import { discoverNtt, type NttDiscovery } from '@/protocols/wormhole-ntt/discover'
@@ -11,9 +12,17 @@ import { buildNttPlan, type NttPlan } from '@/protocols/wormhole-ntt/plan'
 import { previewNttTransfer, type NttPreview } from '@/protocols/wormhole-ntt/preview'
 import { fetchNttStatus } from '@/protocols/wormhole-ntt/track'
 import { fetchNttTokenList, listedChains, type NttToken } from '@/protocols/wormhole-ntt/tokenList'
-import { verifyNttManager, type NttVerification } from '@/protocols/wormhole-ntt/verify'
+import { verifyNttManagerQuorum, type NttVerification, type NttVerificationQuorum } from '@/protocols/wormhole-ntt/verify'
 
 const clientFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) => makeReadClient(evmByKey(chain), customRpc[chain])
+
+/**
+ * A second, unrelated provider for this chain, or undefined when the registry has none to spare.
+ * `clientPair` excludes the primary's own URL, so the two opinions really are independent — and
+ * when the user has set a custom RPC, the spare is always one of ours.
+ */
+const secondFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) =>
+  clientPair(evmByKey(chain), customRpc[chain]).secondaries[0]
 
 /** The official NTT token list. Cached for the session: it is a catalogue, not live state. */
 export function useNttTokenList() {
@@ -62,15 +71,21 @@ export function useNttVerification(
 ) {
   return useQuery({
     queryKey: ['nttVerify', srcChain, dstChain, manager, !!tokenList],
-    queryFn: (): Promise<NttVerification> =>
-      verifyNttManager({
-        srcChain,
-        dstChain: dstChain!,
-        manager: manager!,
-        srcClient: clientFor(srcChain, customRpc),
-        dstClient: clientFor(dstChain!, customRpc),
-        tokenList: tokenList!,
-      }),
+    queryFn: (): Promise<NttVerificationQuorum> => {
+      const srcSecond = secondFor(srcChain, customRpc)
+      const dstSecond = secondFor(dstChain!, customRpc)
+      return verifyNttManagerQuorum(
+        {
+          srcChain,
+          dstChain: dstChain!,
+          manager: manager!,
+          srcClient: clientFor(srcChain, customRpc),
+          dstClient: clientFor(dstChain!, customRpc),
+          tokenList: tokenList!,
+        },
+        srcSecond && dstSecond ? { srcClient: srcSecond, dstClient: dstSecond } : undefined,
+      )
+    },
     enabled: !!manager && !!dstChain && !!tokenList,
     staleTime: 60_000,
     retry: false,

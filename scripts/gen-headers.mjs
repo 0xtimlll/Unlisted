@@ -34,7 +34,22 @@ function htmlFiles(dir, acc = []) {
 }
 
 const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi
+
+/**
+ * The ONLY inline script this export is allowed to contain: Next's React flight data, which is
+ * either the bootstrap `(self.__next_f=self.__next_f||[]).push(...)` or a `self.__next_f.push(...)`
+ * chunk. The app itself ships no inline script (the theme is a file, see inject-theme.mjs).
+ *
+ * This matters because of what the loop below does: it HASHES whatever inline script it finds and
+ * puts that hash in script-src. Without this check the CSP is generated from the very artifact it
+ * is supposed to constrain, so anything that managed to inject an inline script into the build —
+ * a compromised dependency, a bad plugin — would be granted permission to run by this script,
+ * automatically and silently. An unrecognised inline script fails the build instead.
+ */
+const ALLOWED_INLINE = /^\s*(\(self\.__next_f=self\.__next_f\|\|\[\]\)|self\.__next_f)\.push\(/
+
 const hashes = new Set()
+const rejected = []
 let inlineCount = 0
 for (const f of htmlFiles(OUT)) {
   const html = readFileSync(f, 'utf8')
@@ -43,9 +58,21 @@ for (const f of htmlFiles(OUT)) {
     const body = m[2] ?? ''
     if (/type=["'](application\/json|application\/ld\+json)["']/i.test(attrs)) continue // data, not code
     if (body.trim() === '') continue
+    if (!ALLOWED_INLINE.test(body)) {
+      rejected.push(`${f.slice(OUT.length + 1)}: ${body.trim().slice(0, 120)}`)
+      continue
+    }
     inlineCount++
     hashes.add(`'sha256-${createHash('sha256').update(body, 'utf8').digest('base64')}'`)
   }
+}
+
+if (rejected.length) {
+  console.error('gen-headers: FAILED — inline script(s) that are not Next flight data:')
+  for (const r of rejected) console.error('  ' + r)
+  console.error('\nNothing was written. Either the script is legitimate (move it to a file under public/,')
+  console.error('as public/theme.js already is) or the build produced something it should not have.')
+  process.exit(1)
 }
 
 // WalletConnect hosts are opened ONLY when the connector is actually enabled (project id set).

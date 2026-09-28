@@ -61,6 +61,7 @@ export function CcipApp({
   const [confirmLast6, setConfirmLast6] = useState('')
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
+  const [highFeeAccepted, setHighFeeAccepted] = useState(false)
 
   useEffect(() => {
     if (walletChainId === undefined) return
@@ -127,6 +128,12 @@ export function CcipApp({
   })
   const planData = plan.data
 
+  // A fee the user accepted was a specific number; the moment it changes they have not read it.
+  const planValue = plan.data?.value
+  useEffect(() => {
+    setHighFeeAccepted(false)
+  }, [planValue])
+
   const tokenBalance = useTokenBalance(evmSrc, token, wallet)
   const nativeBalance = useNativeBalance(evmSrc, wallet)
   const allowance = useAllowance(evmSrc, token, wallet, cfg ? (cfg.router as `0x${string}`) : undefined)
@@ -147,9 +154,12 @@ export function CcipApp({
     ...(approveIntent ? { approveIntent } : {}),
     simulation: undefined,
     selfCheck: undefined,
+    highFeeAccepted,
   }
   const pre = runCcipGuards(baseInput)
-  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13).every((r) => r.ok)
+  // 14 is excluded like the others: the fee confirmation must not gate the simulation, or the
+  // user would be asked to accept a number before anything could tell them whether it works.
+  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok)
   const check = useCcipCheck(planData, preOk, stored.customRpc)
   const report = runCcipGuards({
     ...baseInput,
@@ -311,6 +321,10 @@ export function CcipApp({
             {d.ccip.foundPool} <AddressView value={pool} href={src.explorerAddrUrl + pool} short />
           </p>
         ) : null}
+        {/* The pool was found, but only one provider answered — say so rather than imply two agreed. */}
+        {token && pool && discovery.data?.crossChecked === false ? (
+          <p className="mt-1 text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p>
+        ) : null}
       </Box>
 
       <Box>
@@ -464,6 +478,16 @@ export function CcipApp({
                   </Row>
                   <Row label={d.ccip.messageShape}>{d.ccip.messagePlain}</Row>
                 </div>
+              </div>
+            ) : null}
+
+            {report.needsHighFeeConfirmation && planData ? (
+              <div className="space-y-2">
+                <Alert kind="warn">{fmt(d.ccip.warnHighFee, { fee: `${formatAmount(planData.value, 18, { maxFraction: 6 })} ${src.nativeSymbol}`, chain: src.name })}</Alert>
+                <label className="flex items-start gap-2 text-xs text-ink">
+                  <input type="checkbox" className="mt-0.5" checked={highFeeAccepted} onChange={(e) => setHighFeeAccepted(e.target.checked)} />
+                  {d.ccip.confirmHighFee}
+                </label>
               </div>
             ) : null}
 

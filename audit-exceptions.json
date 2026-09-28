@@ -10,5 +10,11 @@
     "package": "stream-json",
     "reason": "CPU DoS in stream-json's filter streamers, used only by jayson's server-side stream parsing. @solana/web3.js uses jayson's browser client over fetch; the app never parses streamed JSON and the module is not in the shipped bundle (CI greps the export for it). jayson 4.x pins stream-json 1.x; 3.x renames the files jayson requires, so it cannot be overridden without breaking jayson.",
     "expires": "2027-03-22"
+  },
+  {
+    "id": "GHSA-848j-6mx2-7j84",
+    "package": "elliptic",
+    "reason": "ECDSA signature-verification flaws (malleability, malformed signatures accepted). Unlike the other two entries this code IS in the shipped bundle: @layerzerolabs/oft-v2-solana-sdk -> lz-v2-utilities -> @ethersproject/abi drags in the whole ethers signing stack for its ABI coder alone. It is unreachable in practice: this app never creates or verifies a signature — the wallet signs, and nothing here calls signing-key, recoverAddress, verifyMessage or ecrecover (scripts/check-whitelist.mjs forbids every signing primitive by name). The advisory only matters to code that VERIFIES a signature and trusts the result; nothing here does. Revisit if the ethers ABI coder is ever replaced, which would drop the dependency entirely.",
+    "expires": "2027-03-22"
   }
 ]

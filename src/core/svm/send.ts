@@ -21,6 +21,7 @@ import type { Hex } from 'viem'
 import { byEid, byKey } from '../chains'
 import { computeAmounts, computeValue, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, EMPTY_BYTES, MAX_SLIPPAGE_BPS_PLAN, PlanError, type SendQuote } from '../plan'
 import type { Recipient } from '../recipient'
+import { sanitizeLabel } from '../text'
 import { encodeBase58 } from './base58'
 import { decodeLookupTable } from './layouts'
 import { MAX_COMPUTE_UNITS, PRIORITY_FEE_MAX, PRIORITY_FEE_MIN, svmTxFee } from './fees'
@@ -133,7 +134,7 @@ export async function buildSvmSendPlan(ctx: SvmSendContext, p: BuildSvmSendPlanI
     amountReceivedLD: quoteOft.oftReceipt.amountReceivedLd,
     limitMinLD: quoteOft.oftLimits.minAmountLd,
     limitMaxLD: quoteOft.oftLimits.maxAmountLd,
-    feeDetails: quoteOft.oftFeeDetails.map((d) => ({ amountLD: d.feeAmountLd, description: d.description.slice(0, 64) })),
+    feeDetails: quoteOft.oftFeeDetails.map((d) => ({ amountLD: d.feeAmountLd, description: sanitizeLabel(d.description, 64) })),
     nativeFee: fee.nativeFee,
   }
 

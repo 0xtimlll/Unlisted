@@ -13,7 +13,7 @@ import { nttApprovePlan, runNttGuards, type NttGuardInput } from '@/protocols/wo
 import { assembleNttTransferArgs, nttSelfCheck, NO_TRANSCEIVER_INSTRUCTIONS, type NttPlan } from '@/protocols/wormhole-ntt/plan'
 import { parseNttOperations, wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { findListedToken, listedChains, parseTokenList } from '@/protocols/wormhole-ntt/tokenList'
-import { verifyNttManager, type NttVerification } from '@/protocols/wormhole-ntt/verify'
+import { verifyNttManager, type NttVerification, verifyNttManagerQuorum } from '@/protocols/wormhole-ntt/verify'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
 import type { ReadClient } from '@/core/client'
 
@@ -268,7 +268,7 @@ const verifiedFixture = (): NttVerification => ({
     tokenSymbol: 'W',
     mode: 'burning',
     tokenDecimals: 18,
-    dst: { chain: 'bsc', wormholeChainId: BSC_WH, manager: DST_MANAGER, tokenDecimals: 18 },
+    dst: { chain: 'bsc', wormholeChainId: BSC_WH, manager: DST_MANAGER, token: DST_TOKEN, tokenDecimals: 18 },
     transceiver: TRANSCEIVER,
     anchor: { side: 'source', kind: 'minter' },
   },
@@ -290,7 +290,7 @@ function planFixture(over: Partial<NttPlan> = {}): NttPlan {
     dust: 0n,
     received: receivedAmount(amount, trim, 18),
     trim,
-    dst: { chain: 'bsc', wormholeChainId: BSC_WH, manager: DST_MANAGER, tokenDecimals: 18 },
+    dst: { chain: 'bsc', wormholeChainId: BSC_WH, manager: DST_MANAGER, token: DST_TOKEN, tokenDecimals: 18 },
     recipient: pad(WALLET.toLowerCase() as Address, { size: 32 }),
     recipientDisplay: WALLET,
     refundAddress: pad(WALLET.toLowerCase() as Address, { size: 32 }),
@@ -380,6 +380,108 @@ describe('NTT guards', () => {
 })
 
 // ------------------------------------------------------------- self-check ----
+
+describe('NTT recipient is never a contract in play (guard 4)', () => {
+  const asRecipient = (a: Address) => ({ plan: planFixture({ recipient: pad(a.toLowerCase() as Address, { size: 32 }) }), recipientIsCustom: true, customRecipientConfirmed: true })
+
+  it('refuses each of the four contracts on both sides', () => {
+    for (const c of [TOKEN, MANAGER, DST_MANAGER, DST_TOKEN]) {
+      expect(runNttGuards(guardInput(asRecipient(c))).results.find((x) => x.id === 4)).toMatchObject({ ok: false, code: 'recipient_is_contract' })
+    }
+  })
+
+  it('still allows an ordinary address', () => {
+    expect(runNttGuards(guardInput(asRecipient(WALLET))).results.find((x) => x.id === 4)?.ok).toBe(true)
+  })
+})
+
+describe('the gate, asked twice (RPC quorum)', () => {
+  const SECOND_TRANSCEIVER = getAddress('0xabcdef0000000000000000000000000000000009')
+
+  const quorum = (src: Answers, dst: Answers, second?: { src: Answers; dst: Answers }) =>
+    verifyNttManagerQuorum(
+      { srcChain: 'ethereum', dstChain: 'bsc', manager: MANAGER, srcClient: mockClient(src), dstClient: mockClient(dst), tokenList: listWithBoth },
+      second ? { srcClient: mockClient(second.src), dstClient: mockClient(second.dst) } : undefined,
+    )
+
+  it('passes unflagged when the registry has no second provider to ask', async () => {
+    const r = await quorum(srcAnswers(), dstAnswers())
+    expect(r.ok).toBe(true)
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('marks the verdict cross-checked when two providers agree', async () => {
+    const r = await quorum(srcAnswers(), dstAnswers(), { src: srcAnswers(), dst: dstAnswers() })
+    expect(r.ok).toBe(true)
+    expect(r.crossChecked).toBe(true)
+  })
+
+  it('does NOT block when the second provider is simply down — an outage only drops the flag', async () => {
+    // Every read throws, which is exactly what a throttled endpoint looks like: 'unverifiable'.
+    const r = await quorum(srcAnswers(), dstAnswers(), { src: {}, dst: {} })
+    expect(r.ok).toBe(true)
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('blocks when the second provider names a different contract', async () => {
+    const second = srcAnswers({
+      [`${MANAGER.toLowerCase()}.getTransceivers`]: [SECOND_TRANSCEIVER],
+      [`${SECOND_TRANSCEIVER.toLowerCase()}.getTransceiverType`]: 'wormhole',
+      [`${SECOND_TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
+      [`${SECOND_TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
+      [`${SECOND_TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
+    })
+    const r = await quorum(srcAnswers(), dstAnswers(), { src: second, dst: dstAnswers() })
+    expect(r).toMatchObject({ ok: false, code: 'unverifiable' })
+    expect(r.crossChecked).toBe(true)
+  })
+
+  it('blocks when the second provider returns a definite rejection of its own', async () => {
+    const second = srcAnswers({ [`${MANAGER.toLowerCase()}.token`]: DST_TOKEN })
+    const r = await quorum(srcAnswers(), dstAnswers(), { src: second, dst: dstAnswers() })
+    expect(r).toMatchObject({ ok: false, code: 'token_not_listed' })
+  })
+
+  it('never turns the primary’s rejection into a pass', async () => {
+    const rejected = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: WALLET, [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('none') })
+    const r = await quorum(rejected, dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: WALLET, [`${DST_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('none') }), {
+      src: srcAnswers(),
+      dst: dstAnswers(),
+    })
+    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
+  })
+})
+
+describe('NTT fee ceiling (guard 14)', () => {
+  // Ethereum's ceiling is 0.1 ETH; the fixture pays 0.0012, and the wallet holds 1.
+  const high = { fee: 4n * 10n ** 17n, value: 5n * 10n ** 17n }
+
+  it('passes silently while the fee is ordinary', () => {
+    const r = runNttGuards(guardInput())
+    expect(r.needsHighFeeConfirmation).toBe(false)
+    expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
+  })
+
+  it('blocks a fee above the chain ceiling until it is read', () => {
+    const r = runNttGuards(guardInput({ plan: planFixture(high) }))
+    expect(r.needsHighFeeConfirmation).toBe(true)
+    expect(r.canSend).toBe(false)
+    expect(r.results.find((x) => x.id === 14)).toMatchObject({ ok: false, code: 'fee_above_ceiling_unconfirmed' })
+  })
+
+  it('lets the same fee through once the user accepts it', () => {
+    const r = runNttGuards(guardInput({ plan: planFixture(high), highFeeAccepted: true }))
+    expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
+    expect(r.canSend).toBe(true)
+  })
+
+  it('still blocks a fee the balance could cover — the ceiling is not the balance', () => {
+    // Guard 8 would allow this: 0.5 + gas < 1 ETH. Guard 14 is the only thing that objects.
+    const r = runNttGuards(guardInput({ plan: planFixture(high) }))
+    expect(r.results.find((x) => x.id === 8)?.ok).toBe(true)
+    expect(r.canSend).toBe(false)
+  })
+})
 
 describe('NTT self-check', () => {
   const calldataFor = (args: ReturnType<typeof assembleNttTransferArgs>) =>

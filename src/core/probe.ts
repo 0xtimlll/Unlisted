@@ -7,6 +7,7 @@ import { erc20Abi, MSG_TYPE_SEND, oftAbi } from './abi'
 import { ALL_EIDS } from './chains'
 import type { ReadClient } from './client'
 import { isZeroBytes32, sameAddress } from './encoding'
+import { labelLooksSpoofed as looksSpoofed, sanitizeLabel as sanitize } from './text'
 import type { OftInfo, SuspiciousFlag } from './types'
 
 export type ProbeErrorCode = 'invalid_address' | 'not_contract' | 'not_oft' | 'token_unreadable' | 'rate_mismatch' | 'rpc_mismatch'
@@ -30,32 +31,11 @@ const ZERO_SLOT = `0x${'0'.repeat(64)}`
 
 /**
  * Chain text is rendered as text only, trimmed to 32 chars, and stripped of every character that
- * can make a label read as something it is not (§7).
- *
- * Control characters are the obvious half. The other half is invisible: a token whose symbol is
- * "USDC\u202Etoor" renders as "USDCroot", and one with a zero-width space inside renders as an
- * exact look-alike of a name that is already trusted. The whole premise of this app is that the
- * user checks what the contract says, so a contract must not be able to choose how its own name
- * is laid out. Bidi controls, isolates, joiners, soft hyphen and the BOM all go.
- *
- * Ordinary non-ASCII is kept — plenty of honest tokens use it — and flagged instead by
- * labelLooksSpoofed(), which never blocks.
+ * can make a label read as something it is not (§7). The stripper lives in core/text.ts, because
+ * a token symbol is not the only string a contract gets to choose: fee descriptions, revert
+ * reasons and explorer messages are all the same problem, and they are all held to it now.
  */
-const UNSAFE_LABEL_CHARS = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/g
-
-export function sanitizeLabel(s: unknown, max = 32): string {
-  if (typeof s !== 'string') return ''
-  return s.replace(UNSAFE_LABEL_CHARS, '').trim().slice(0, max)
-}
-
-/**
- * True when a label carries characters that can impersonate ASCII — Cyrillic \u0410, Greek \u039F
- * and friends look exactly like A and O in most fonts. Informational only (§6.16): the label is
- * shown either way, with a flag next to it.
- */
-export function labelLooksSpoofed(label: string): boolean {
-  return /[\u0370-\u03ff\u0400-\u04ff\u0500-\u052f\u2100-\u214f\uff00-\uffef]/.test(label)
-}
+export { labelLooksSpoofed, sanitizeLabel } from './text'
 
 export async function probeOft(
   client: ReadClient,
@@ -122,8 +102,8 @@ export async function probeOft(
   const [mDec, mSym, mName, mLocked] = meta
   if (!mDec || mDec.status !== 'success') throw new ProbeError('token_unreadable', 'token.decimals() failed')
   const decimals = Number(mDec.result)
-  const symbol = sanitizeLabel(mSym?.status === 'success' ? mSym.result : '')
-  const name = sanitizeLabel(mName?.status === 'success' ? mName.result : '')
+  const symbol = sanitize(mSym?.status === 'success' ? mSym.result : '')
+  const name = sanitize(mName?.status === 'success' ? mName.result : '')
 
   // OFT defines rate = 10^(decimals - sharedDecimals). Anything else is not an OFT we understand.
   if (decimals < sharedDecimals || conversionRate !== 10n ** BigInt(decimals - sharedDecimals)) {
@@ -142,7 +122,7 @@ export async function probeOft(
 
   const flags = await suspiciousFlags(client, oft, owner)
   // A name that mixes scripts can impersonate a token the user already trusts. Say so; never refuse.
-  if (labelLooksSpoofed(symbol) || labelLooksSpoofed(name)) flags.push('label_lookalike')
+  if (looksSpoofed(symbol) || looksSpoofed(name)) flags.push('label_lookalike')
   // A lock/unlock adapter that holds nothing has never bridged anything — or is not the real one.
   const lockedInAdapter = kind === 'OFTAdapter' && approvalRequired && mLocked?.status === 'success' ? mLocked.result : undefined
   if (lockedInAdapter === 0n) flags.push('adapter_empty')

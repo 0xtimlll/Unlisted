@@ -9,6 +9,7 @@ import { applyBps, ceilToStep, parseAmount, trimDust } from './amounts'
 import { byEid, type EvmChainDef } from './chains'
 import type { ReadClient } from './client'
 import { checksum, isBytes32 } from './encoding'
+import { sanitizeLabel } from './text'
 import type { Recipient } from './recipient'
 import type { SvmSendPlan } from './svm/plan'
 import type { OftInfo } from './types'
@@ -219,7 +220,7 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
     amountReceivedLD: receipt.amountReceivedLD,
     limitMinLD: limit.minAmountLD,
     limitMaxLD: limit.maxAmountLD,
-    feeDetails: feeDetails.map((d) => ({ amountLD: d.feeAmountLD, description: d.description.slice(0, 64) })),
+    feeDetails: feeDetails.map((d) => ({ amountLD: d.feeAmountLD, description: sanitizeLabel(d.description, 64) })),
     nativeFee: feeQuote.nativeFee,
   }
 
