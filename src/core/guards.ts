@@ -5,7 +5,7 @@
  */
 import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
-import { byChainId, byEid } from './chains'
+import { aboveFeeCeiling, byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions, inspectEnforcedOptions, receiveTotals, type EnforcedRisk } from './options'
 import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type SendPlan } from './plan'
@@ -185,7 +185,10 @@ export function g3Recipient(i: GuardInput): GuardResult {
   if (!i.plan) return fail(3, 'plan_missing')
   if (!isBytes32(i.plan.recipient)) return fail(3, 'recipient_invalid')
   // From Solana the recipient is an EVM address: it can never be "my wallet", so it is always custom.
-  const differsFromWallet = i.plan.vm === 'svm' || (i.walletAddress !== undefined && !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress)))
+  // No wallet to compare against counts as "differs": this guard must not depend on guard 1 having
+  // already failed to be safe. NTT and CCIP write the same line the same way.
+  const differsFromWallet =
+    i.plan.vm === 'svm' || i.walletAddress === undefined || !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress))
   if (differsFromWallet) {
     // Recipient differs from wallet: must be flagged as custom AND confirmed.
     if (!i.recipientIsCustom || !i.customRecipientConfirmed) return fail(3, 'recipient_unconfirmed')
@@ -415,7 +418,7 @@ export function g20SvmSend(i: GuardInput): GuardResult {
 export function feeAboveCeiling(plan: SendPlan | undefined): boolean {
   if (!plan) return false
   const src = byEid(plan.srcEid)
-  return !!src && plan.value > src.feeCeiling
+  return !!src && aboveFeeCeiling(src.key, plan.value)
 }
 
 // 21. the fee is within the chain's ceiling, or the user has read the number and accepted it.

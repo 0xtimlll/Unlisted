@@ -20,6 +20,7 @@ import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanErr
 import { ProbeError } from '@/core/probe'
 import type { DvnConfig } from '@/core/lz/dvn'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
+import { sanitizeText } from '@/core/text'
 import { fmt, useDict, type Dict } from '@/i18n'
 import { FromBox, ToBox, type DestinationState } from './components/FromTo'
 import { ProtocolBadge } from './components/History'
@@ -766,7 +767,7 @@ function describeError(d: Dict, e: unknown): string {
   if (e instanceof ProbeError) return d.errors[`probe_${e.code}`]
   if (e instanceof SvmDiscoverError) return d.errors[`svm_${e.code}`]
   if (e instanceof DecodeTxError) return d.errors[`decode_${e.code}`]
-  if (e instanceof PlanError) return `${d.errors[`plan_${e.code}`]}${e.code === 'quote_failed' ? ` (${e.message.slice(0, 160)})` : ''}`
+  if (e instanceof PlanError) return `${d.errors[`plan_${e.code}`]}${e.code === 'quote_failed' ? ` (${sanitizeText(e.message, 160)})` : ''}`
   if (e instanceof AmountError) return d.errors[`amount_${e.code}`]
   return `${d.errors.generic} ${shortError(e)}`
 }

@@ -58,6 +58,8 @@ export type VerifiedNttManager = {
     chain: ChainKey
     wormholeChainId: number
     manager: Address
+    /** The listed token on the destination — a contract, so never a valid recipient (guard 4). */
+    token: Address
     /** The destination token's decimals, as the peer entry records them. */
     tokenDecimals: number
   }
@@ -189,7 +191,7 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
       tokenSymbol: listed.token.symbol,
       mode,
       tokenDecimals: Number(tokenDecimals),
-      dst: { chain: p.dstChain, wormholeChainId: dstWh, manager: dstManager, tokenDecimals: peer.tokenDecimals },
+      dst: { chain: p.dstChain, wormholeChainId: dstWh, manager: dstManager, token: dstListed.address, tokenDecimals: peer.tokenDecimals },
       transceiver: wormholeTransceiver,
       anchor,
     },
@@ -208,4 +210,76 @@ async function tokenAnchors(client: ReadClient, token: Address, manager: Address
   if (!role) return undefined
   const has = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'hasRole', args: [role, manager] }))
   return has === true ? 'role' : undefined
+}
+
+// ------------------------------------------------------------------ quorum ----
+
+/**
+ * The same gate, answered twice by unrelated providers (core/quorum.ts does this for the OFT tab).
+ *
+ * This verification is the only thing that lets an approve name a spender at all, and until now it
+ * ran entirely on one endpoint — which, when the user has set a custom RPC, is an endpoint they
+ * were told to paste. One provider that lies about `token()`, `getPeer()` and `minter()` together
+ * can walk a fake manager through all four parts. Two unrelated providers is a much higher bar.
+ *
+ * The rules are the OFT ones, deliberately:
+ *   - the primary's verdict is the verdict; a second opinion can only ever take a pass away
+ *   - a second provider that is down or throttled answers `unverifiable`, which is an OUTAGE:
+ *     the cross-checked flag drops and nothing blocks
+ *   - a second provider that answers with any other rejection, or with a different manager/token/
+ *     peer, is a DISAGREEMENT and blocks
+ */
+export type NttVerificationQuorum = NttVerification & { crossChecked: boolean }
+
+function withFlag(v: NttVerification, crossChecked: boolean): NttVerificationQuorum {
+  return v.ok
+    ? { ok: true, verified: v.verified, crossChecked }
+    : { ok: false, code: v.code, ...(v.detail !== undefined ? { detail: v.detail } : {}), crossChecked }
+}
+
+/**
+ * Do two opinions name the same contracts? Only the fields that decide where money and allowance
+ * go are compared.
+ *
+ * `anchor` and `tokenSymbol` are deliberately left out. The anchor is a REASON, not a destination,
+ * and it has a benign way to differ: tokenAnchors() swallows read errors, so a flaky source-side
+ * token read alone flips a provider from `source` to `destination` without either being wrong.
+ * Blocking on that would turn a slow RPC into a broken tab.
+ */
+export function sameNttVerdict(a: VerifiedNttManager, b: VerifiedNttManager): boolean {
+  return (
+    isAddressEqual(a.manager, b.manager) &&
+    isAddressEqual(a.token, b.token) &&
+    isAddressEqual(a.transceiver, b.transceiver) &&
+    a.mode === b.mode &&
+    a.tokenDecimals === b.tokenDecimals &&
+    a.dst.chain === b.dst.chain &&
+    a.dst.wormholeChainId === b.dst.wormholeChainId &&
+    a.dst.tokenDecimals === b.dst.tokenDecimals &&
+    isAddressEqual(a.dst.manager, b.dst.manager) &&
+    isAddressEqual(a.dst.token, b.dst.token)
+  )
+}
+
+/** A second, independent view of the same two chains. Absent when the registry has no spare RPC. */
+export type NttSecondOpinion = { srcClient: ReadClient; dstClient: ReadClient }
+
+export async function verifyNttManagerQuorum(p: VerifyInput, second: NttSecondOpinion | undefined): Promise<NttVerificationQuorum> {
+  const [first, other] = await Promise.all([
+    verifyNttManager(p),
+    second
+      ? verifyNttManager({ ...p, srcClient: second.srcClient, dstClient: second.dstClient }).catch((): undefined => undefined)
+      : Promise.resolve(undefined),
+  ])
+
+  if (!first.ok || !other) return withFlag(first, false)
+  if (!other.ok) {
+    // Exactly what an unreachable provider produces — an outage, not a second opinion.
+    if (other.code === 'unverifiable') return withFlag(first, false)
+    return withFlag({ ok: false, code: other.code, detail: `another RPC: ${other.detail ?? other.code}` }, true)
+  }
+  if (!sameNttVerdict(first.verified, other.verified)) {
+    return withFlag({ ok: false, code: 'unverifiable', detail: 'RPC providers disagree about this manager' }, true)
+  }
+  return withFlag(first, true)
 }

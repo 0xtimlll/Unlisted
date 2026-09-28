@@ -119,3 +119,51 @@ export async function readRemoteSide(
   }
   return out
 }
+
+// ------------------------------------------------------------------ quorum ----
+
+/**
+ * The same discovery, answered twice by unrelated providers (core/quorum.ts does this for the OFT
+ * tab). The approve spender here already comes from the config rather than the chain, so this is
+ * not about the spender — it is about the POOL: `pool_token_mismatch` and `pool_wrong_router` are
+ * the two verdicts that stop a token being bridged at all, and a single provider that answers
+ * `getPool` with an address of its choosing decides both of them on its own.
+ *
+ * Same rules as everywhere else: the primary's answer is the answer, an unreachable second
+ * provider (`unreadable`) only drops the flag, and a second provider that answers differently
+ * blocks.
+ */
+export type CcipDiscoveryQuorum = CcipDiscovery & { crossChecked: boolean }
+
+/** Do two opinions name the same pool for the same token? Routes are not compared: a provider one
+ * block behind can legitimately see a destination the other has not indexed yet, and the route set
+ * only decides what is offered in a dropdown, never where anything is sent. */
+function sameDiscovery(a: CcipDiscovery, b: CcipDiscovery): boolean {
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'token' && b.kind === 'token') {
+    return isAddressEqual(a.token, b.token) && isAddressEqual(a.pool, b.pool) && a.decimals === b.decimals
+  }
+  if (a.kind === 'no_pool' && b.kind === 'no_pool') return isAddressEqual(a.token, b.token)
+  return true
+}
+
+export async function discoverCcipTokenQuorum(
+  primary: ReadClient,
+  secondary: ReadClient | undefined,
+  chain: ChainKey,
+  tokenAddress: string,
+): Promise<CcipDiscoveryQuorum> {
+  const [first, other] = await Promise.all([
+    discoverCcipToken(primary, chain, tokenAddress),
+    secondary ? discoverCcipToken(secondary, chain, tokenAddress).catch((): undefined => undefined) : Promise.resolve(undefined),
+  ])
+
+  if (!other) return { ...first, crossChecked: false }
+  // What an unreachable provider produces. An outage, not a second opinion.
+  if (other.kind === 'unknown' && other.reason === 'unreadable') return { ...first, crossChecked: false }
+  if (!sameDiscovery(first, other)) {
+    const reason = other.kind === 'unknown' ? other.reason : 'unreadable'
+    return { kind: 'unknown', reason, crossChecked: true }
+  }
+  return { ...first, crossChecked: true }
+}

@@ -69,6 +69,9 @@ export function validateRpcUrl(input: string): RpcValidation {
     return { ok: false, reason: 'not_url' }
   }
   if (u.username || u.password) return { ok: false, reason: 'not_url' }
+  // "no hash" was documented above but not done: a fragment is never sent to the server, yet it is
+  // stored and shown back, so it is dropped here rather than kept as decoration.
+  u.hash = ''
   if (u.protocol === 'https:') {
     if (!isAllowedRpcHost(u.hostname)) return { ok: false, reason: 'host_not_allowed' }
     return { ok: true, url: u.toString() }

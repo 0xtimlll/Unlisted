@@ -11,6 +11,7 @@
 import { decodeErrorResult, type Abi, type Hex } from 'viem'
 import { knownErrorsAbi, meaningOf, type RevertMeaning } from './errors'
 import { fetchContractErrorAbi, type SourcifyFetch } from './sourcify'
+import { sanitizeText } from '../text'
 
 export type { RevertMeaning }
 
@@ -100,8 +101,18 @@ export function revertMeaning(r: DecodedRevert | undefined): RevertMeaning | und
   return r.kind === 'unknown' ? 'generic' : r.meaning
 }
 
-/** One line for the raw details block: "SlippageExceeded(1000, 1001)". */
+/**
+ * One line for the raw details block: "SlippageExceeded(1000, 1001)".
+ *
+ * The result is stripped of layout controls (core/text.ts) because the
+ * two branches that carry free text — a Solidity `require` message and a string argument — are
+ * written by the contract that reverted, and this line is shown next to the amount.
+ */
 export function formatRevert(r: DecodedRevert): string {
+  return sanitizeText(formatRevertRaw(r), 512)
+}
+
+function formatRevertRaw(r: DecodedRevert): string {
   switch (r.kind) {
     case 'error':
       return `${r.name}(${r.args.map(stringifyArg).join(', ')})`

@@ -264,3 +264,15 @@ export function allRpcHosts(): string[] {
   for (const c of CHAINS) for (const u of c.rpcUrls) hosts.add(new URL(u).origin)
   return [...hosts].sort()
 }
+
+/**
+ * §6.21 True when a transaction's `value` exceeds this chain's fee ceiling.
+ *
+ * The ceiling is deliberately generous (an order of magnitude above what these routes cost), and
+ * crossing it never refuses a send — it asks the user to read the number. Every protocol needs the
+ * same bound for the same reason: a quote is whatever the contract, or whatever RPC answered for
+ * it, chose to return, so without a ceiling the only limit on a fee is the wallet's whole balance.
+ */
+export function aboveFeeCeiling(key: ChainKey, value: bigint): boolean {
+  return value > byKey(key).feeCeiling
+}

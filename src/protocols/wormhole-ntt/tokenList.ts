@@ -13,6 +13,7 @@
  */
 import { getAddress, isAddress, type Address } from 'viem'
 import type { ChainKey } from '../../core/chains.ts'
+import { sanitizeText } from '../../core/text.ts'
 import { WORMHOLESCAN_API } from './chains.ts'
 
 export { WORMHOLESCAN_API }
@@ -44,7 +45,11 @@ export type NttToken = {
   platforms: Record<string, string>
 }
 
-const str = (v: unknown, max = 64): string => (typeof v === 'string' ? v.slice(0, max) : '')
+/**
+ * Every string from this API is shown somewhere — the symbol ends up in the approve button's own
+ * label — so it is stripped of layout controls, not merely shortened.
+ */
+const str = (v: unknown, max = 64): string => sanitizeText(v, max)
 
 /** Parses the API response. Never throws on shape; a malformed entry is simply not in the result. */
 export function parseTokenList(json: unknown): NttToken[] {

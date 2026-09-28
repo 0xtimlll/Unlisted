@@ -6,7 +6,7 @@
  * that at the moment of use, not at the moment of rendering.
  */
 import { isAddressEqual, type Address } from 'viem'
-import type { ChainKey } from '../../core/chains'
+import { aboveFeeCeiling, type ChainKey } from '../../core/chains'
 import { ccipConfig } from './chains'
 import type { CcipPlan } from './plan'
 import { scaleAmount } from './plan'
@@ -40,6 +40,7 @@ export type CcipGuardCode =
   | 'simulation_failed'
   | 'selfcheck_missing'
   | 'selfcheck_failed'
+  | 'fee_above_ceiling_unconfirmed'
 
 export const CCIP_PENDING: ReadonlySet<CcipGuardCode> = new Set<CcipGuardCode>([
   'plan_missing',
@@ -75,9 +76,16 @@ export type CcipGuardInput = {
   approveIntent?: CcipApproveIntent | undefined
   simulation: { ok: true } | { ok: false; reason: string } | undefined
   selfCheck: { ok: true } | { ok: false; mismatches: string[] } | undefined
+  /** User read and accepted a fee above the source chain's ceiling (guard 14). */
+  highFeeAccepted?: boolean
 }
 
-export type CcipGuardReport = { results: CcipGuardResult[]; canSend: boolean }
+export type CcipGuardReport = {
+  results: CcipGuardResult[]
+  canSend: boolean
+  /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
+  needsHighFeeConfirmation: boolean
+}
 
 const ok = (id: number): CcipGuardResult => ({ id, ok: true })
 const fail = (id: number, code: CcipGuardCode, detail?: string): CcipGuardResult =>
@@ -220,13 +228,33 @@ export function c13SelfCheck(i: CcipGuardInput): CcipGuardResult {
   return i.selfCheck.ok ? ok(13) : fail(13, 'selfcheck_failed', i.selfCheck.mismatches.join(', '))
 }
 
+/**
+ * True when the value this plan commits to exceeds the source chain's ceiling (core/chains.ts).
+ * On CCIP this is the sharpest version of the problem: guard 7 requires `value` to equal the
+ * quoted fee EXACTLY and the router keeps whatever it is sent, so an inflated `getFee()` is not
+ * refunded — it is simply gone.
+ */
+export function ccipFeeAboveCeiling(plan: CcipPlan | undefined): boolean {
+  return !!plan && aboveFeeCeiling(plan.chain, plan.value)
+}
+
+// 14. the fee is within the chain's ceiling, or the user has read the number and accepted it.
+//     Nothing off-chain can verify a quote, so without this guard 8 (the whole balance) was the
+//     only bound on what the router could charge.
+export function c14FeeCeiling(i: CcipGuardInput): CcipGuardResult {
+  if (!i.plan) return fail(14, 'plan_missing')
+  if (!ccipFeeAboveCeiling(i.plan)) return ok(14)
+  if (!i.highFeeAccepted) return fail(14, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
+  return ok(14)
+}
+
 export function runCcipGuards(i: CcipGuardInput): CcipGuardReport {
   const results = [
     c1Chain(i), c2Route(i), c3Recipient(i), c4RecipientNotContract(i), c5Amount(i),
     c6RateLimits(i), c7Fee(i), c8Native(i), c9Allowance(i), c10Spender(i),
-    c11PlainMessage(i), c12Simulation(i), c13SelfCheck(i),
+    c11PlainMessage(i), c12Simulation(i), c13SelfCheck(i), c14FeeCeiling(i),
   ]
-  return { results, canSend: results.every((r) => r.ok) }
+  return { results, canSend: results.every((r) => r.ok), needsHighFeeConfirmation: ccipFeeAboveCeiling(i.plan) }
 }
 
 /**
