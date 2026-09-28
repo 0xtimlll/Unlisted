@@ -10,13 +10,14 @@
  * some chains" are different answers and never share a message.
  */
 import { useQuery } from '@tanstack/react-query'
-import { analyzeTx } from '@/core/analysis/analyze'
+import { analyzeTx, forTab } from '@/core/analysis/analyze'
 import { fetchEvmTx } from '@/core/analysis/evmTx'
 import type { AnalysisInput } from '@/core/analysis/input'
 import { result, type AnalysisResult } from '@/core/analysis/result'
 import { searchTx, type SearchFailure } from '@/core/analysis/search'
 import { byEid, byKey, evmChains, type ChainKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
+import type { ProtocolId } from '@/core/protocols'
 import { fetchStatusByGuid } from '@/core/track'
 
 export type AnalysisOutcome = {
@@ -25,12 +26,18 @@ export type AnalysisOutcome = {
   failed: SearchFailure[]
 }
 
-export function useAnalysis(input: AnalysisInput | null, selected: ChainKey, customRpc: Partial<Record<ChainKey, string>>) {
+/**
+ * `tab` is the protocol the user is looking at. The lookup and the reading are identical in every
+ * tab — it only decides whether the answer is a form to fill in here or a door to the tab that can
+ * actually build this transfer (core/analysis/analyze.ts, forTab).
+ */
+export function useAnalysis(input: AnalysisInput | null, tab: ProtocolId, selected: ChainKey, customRpc: Partial<Record<ChainKey, string>>) {
   return useQuery({
-    queryKey: ['analysis', input ? JSON.stringify(input) : '', selected, JSON.stringify(customRpc)],
+    queryKey: ['analysis', input ? JSON.stringify(input) : '', tab, selected, JSON.stringify(customRpc)],
     queryFn: async (): Promise<AnalysisOutcome> => {
       const i = input!
-      if (i.kind === 'lz_guid') return { results: [await fromGuid(i.guid)], failed: [] }
+      // A Scan link names a LayerZero message; in another tab that is still a door, not a form.
+      if (i.kind === 'lz_guid') return { results: [forTab(await fromGuid(i.guid), tab)], failed: [] }
       if (i.kind !== 'evm_tx') throw new Error('this input is handled elsewhere')
 
       const chains = evmChains().map((c) => c.key)
@@ -45,12 +52,12 @@ export function useAnalysis(input: AnalysisInput | null, selected: ChainKey, cus
       })
 
       if (found.status === 'found') {
-        return { results: analyzeTx(found.tx, { chain: found.chain, selected }), failed: found.failed }
+        return { results: analyzeTx(found.tx, { chain: found.chain, selected, tab }), failed: found.failed }
       }
       // Not on any chain we could reach. A bare bytes32 may still be a LayerZero message id.
       if (i.mayBeGuid) {
         const viaGuid = await fromGuid(i.hash).catch(() => undefined)
-        if (viaGuid && viaGuid.code !== 'tx_not_found') return { results: [viaGuid], failed: found.failed }
+        if (viaGuid && viaGuid.code !== 'tx_not_found') return { results: [forTab(viaGuid, tab)], failed: found.failed }
       }
       return {
         results: [

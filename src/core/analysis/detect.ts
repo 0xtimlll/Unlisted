@@ -9,7 +9,7 @@ import { decodeEventLog, encodeEventTopics, getAddress, parseAbi, type Address, 
 import type { ChainKey } from '../chains'
 import { decodePacket, PacketError, type LzPacket } from '../lz/packet'
 import { LZ_TOPICS, lzEventsAbi } from '../lz/events'
-import { CCIP_TOPICS, ccipEventsAbi } from '../../protocols/ccip/abi'
+import { CCIP_TOPICS, ccipEventsAbi, ccipRamp2EventsAbi } from '../../protocols/ccip/abi'
 import { chainOfCcipSelector } from '../../protocols/ccip/chains'
 import { NTT_TOPIC_COUNT, NTT_TOPICS, nttTransferSentV1Abi, nttTransferSentV2Abi } from '../../protocols/wormhole-ntt/abi'
 import { chainOfWormholeId, isCoreBridge, isTokenBridge } from '../../protocols/wormhole-ntt/chains'
@@ -44,7 +44,20 @@ export type Finding =
   | { kind: 'lz_packet_sent'; emitter: Address; packet: LzPacket }
   | { kind: 'lz_packet_delivered'; emitter: Address; srcEid: number; sender: Hex; nonce: bigint; receiver: Address }
   | { kind: 'ntt_transfer'; emitter: Address; recipientChain?: number; destChain?: ChainKey; amount?: bigint; digest?: Hex }
-  | { kind: 'ccip_sent'; emitter: Address; version: '1.5' | '1.6'; messageId: Hex; destChainSelector?: bigint; destChain?: ChainKey; tokens: { token: string; amount: bigint }[] }
+  /**
+   * `transfers` is labelled because the three on-ramp generations name different things: v1.5 the
+   * token, v1.6 the source pool, 2.0 nothing at all (see protocols/ccip/abi.ts). Only an entry
+   * labelled `token` may ever be treated as one.
+   */
+  | {
+      kind: 'ccip_sent'
+      emitter: Address
+      version: '1.5' | '1.6' | '2.0'
+      messageId: Hex
+      destChainSelector?: bigint
+      destChain?: ChainKey
+      transfers: { address: string; amount: bigint; is: 'token' | 'pool' }[]
+    }
   | { kind: 'foreign'; protocol: ForeignProtocolId; emitter: Address; label?: string; vars: Record<string, string> }
   | { kind: 'erc20'; what: 'approve' | 'transfer'; emitter: Address }
 
@@ -157,7 +170,29 @@ export function detectFindings(tx: TxLike, chain: ChainKey): Finding[] {
           messageId: d.args.message.header.messageId,
           destChainSelector: selector,
           ...(destChain ? { destChain } : {}),
-          tokens: d.args.message.tokenAmounts.map((t) => ({ token: t.sourcePoolAddress, amount: t.amount })),
+          // v1.6 names the pool, never the token — labelled as such so nothing downstream can
+          // mistake it for the ERC-20 the user has to approve.
+          transfers: d.args.message.tokenAmounts.map((t) => ({ address: t.sourcePoolAddress, amount: t.amount, is: 'pool' as const })),
+        })
+        continue
+      }
+    }
+    if (t0 === CCIP_TOPICS.CCIPMessageSentRamp2.toLowerCase()) {
+      const d = tryDecode(() => decodeEventLog({ abi: ccipRamp2EventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: 'CCIPMessageSent' }))
+      if (d) {
+        const selector = d.args.destChainSelector
+        const destChain = chainOfCcipSelector(selector)
+        out.push({
+          kind: 'ccip_sent',
+          emitter,
+          version: '2.0',
+          messageId: d.args.messageId,
+          destChainSelector: selector,
+          ...(destChain ? { destChain } : {}),
+          // The transfer is inside `encodedMessage` (MessageV1), which is not decoded here. Saying
+          // "a CCIP send, destination known, token unknown" is the honest answer; picking an
+          // address out of the surrounding ERC-20 logs would be a guess wearing a fact's clothes.
+          transfers: [],
         })
         continue
       }
@@ -171,7 +206,7 @@ export function detectFindings(tx: TxLike, chain: ChainKey): Finding[] {
           emitter,
           version: '1.5',
           messageId: d.args.message.messageId,
-          tokens: d.args.message.tokenAmounts.map((t) => ({ token: t.token, amount: t.amount })),
+          transfers: d.args.message.tokenAmounts.map((t) => ({ address: t.token, amount: t.amount, is: 'token' as const })),
         })
         continue
       }

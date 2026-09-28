@@ -1,6 +1,6 @@
 /** Input parsing, the cross-chain lookup, verdict assembly and revert decoding. All offline. */
 import { describe, expect, it } from 'vitest'
-import { encodeErrorResult, getAddress, pad, type Abi, type Address, type Hex } from 'viem'
+import { encodeErrorResult, getAddress, pad, parseAbi, type Abi, type Address, type Hex } from 'viem'
 import { analyzeTx, needsChoice } from '@/core/analysis/analyze'
 import type { TxLike } from '@/core/analysis/detect'
 import { foreignEventsAbi } from '@/core/analysis/foreign'
@@ -170,6 +170,59 @@ describe('verdicts', () => {
     expect(r).toMatchObject({ verdict: 'can_bridge', code: 'switch_protocol', protocol: 'wormhole-ntt' })
     expect(r?.action).toEqual({ kind: 'open_tab', protocol: 'wormhole-ntt' })
     expect(r?.target).toMatchObject({ kind: 'ntt-manager', dstChain: 'base' })
+  })
+
+  /**
+   * The same transaction, pasted into each tab. This is the whole point of `tab`: the reading never
+   * changes, only what can be done about it — and the target has to survive the crossing, or the
+   * user lands in the right tab with an empty form.
+   */
+  describe('pasted into the wrong tab', () => {
+    const nttTx = {
+      logs: [
+        makeLog(ROUTER, nttTransferSentV1Abi as Abi, 'TransferSent', {
+          recipient: pad(WALLET, { size: 32 }), refundAddress: pad(WALLET, { size: 32 }), amount: 7n, fee: 0n, recipientChain: 30, msgSequence: 1n,
+        }),
+      ],
+    }
+
+    it('an NTT transfer read in its OWN tab is a form to fill in, not a door', () => {
+      const [r] = analyzeTx(nttTx, { chain: 'ethereum', tab: 'wormhole-ntt' })
+      expect(r).toMatchObject({ verdict: 'can_bridge', code: 'ntt_transfer', protocol: 'wormhole-ntt' })
+      expect(r?.action).toEqual({ kind: 'use_address', chain: 'ethereum', address: ROUTER })
+      expect(r?.target).toMatchObject({ kind: 'ntt-manager', dstChain: 'base' })
+    })
+
+    it('the same transfer in the CCIP tab is a door to the NTT tab, target and all', () => {
+      const [r] = analyzeTx(nttTx, { chain: 'ethereum', tab: 'ccip' })
+      expect(r).toMatchObject({ code: 'switch_protocol', protocol: 'wormhole-ntt' })
+      expect(r?.action).toEqual({ kind: 'open_tab', protocol: 'wormhole-ntt' })
+      expect(r?.target).toMatchObject({ kind: 'ntt-manager', dstChain: 'base' })
+    })
+
+    it('an OFT send in the CCIP or NTT tab points back at the OFT tab', () => {
+      for (const tab of ['ccip', 'wormhole-ntt'] as const) {
+        const [r] = analyzeTx({ hash: HASH, to: OFT, logs: [oftSent()] }, { chain: 'hyperevm', tab })
+        expect(r, tab).toMatchObject({ verdict: 'can_bridge', code: 'switch_protocol', protocol: 'lz-oft' })
+        expect(r?.action, tab).toEqual({ kind: 'open_tab', protocol: 'lz-oft' })
+        expect(r?.target, tab).toEqual({ chain: 'hyperevm', address: OFT, kind: 'oft', dstChain: 'ethereum' })
+      }
+    })
+
+    it('the OFT tab is still the default, so nothing that worked before changed', () => {
+      const [withTab] = analyzeTx({ hash: HASH, to: OFT, logs: [oftSent()] }, { chain: 'hyperevm', tab: 'lz-oft' })
+      const [without] = analyzeTx({ hash: HASH, to: OFT, logs: [oftSent()] }, { chain: 'hyperevm' })
+      expect(without).toEqual(withTab)
+      expect(withTab?.code).toBe('lz_oft_send')
+    })
+
+    it('a plain transfer belongs to no protocol, so no tab is suggested', () => {
+      const erc20 = parseAbi(['event Transfer(address indexed from, address indexed to, uint256 value)'])
+      const transfer = makeLog(OFT, erc20 as Abi, 'Transfer', { from: WALLET, to: ROUTER, value: 1n })
+      const [r] = analyzeTx({ logs: [transfer] }, { chain: 'ethereum', tab: 'ccip' })
+      expect(r?.protocol).toBeNull()
+      expect(r?.action).toBeUndefined()
+    })
   })
 
   it('a protocol we will never bridge points at its own app', () => {

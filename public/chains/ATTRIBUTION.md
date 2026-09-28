@@ -19,8 +19,8 @@ to identify that network.
 | scroll.png | blockchains/scroll/info/logo.png |
 | solana.png | blockchains/solana/info/logo.png |
 
-`robinhood.png` is **not** in that set and is **not** an official mark: Trust Wallet assets carries no
-logo for Robinhood Chain, and putting a financial brand's own logo on a third-party bridge would
-suggest an endorsement that does not exist. It is a plain generated placeholder — a slate disc with
-an `R` — drawn to match the others in size and shape. Dropping an officially licensed PNG in its
-place is a one-file change and needs nothing else touched.
+`robinhood.png` is **not** from that set: Trust Wallet assets carries no logo for Robinhood Chain,
+so it is the network's own official mark, supplied by this repository's owner and used — like every
+other logo here — solely to identify the network, self-hosted so nothing is fetched from a third
+party. It is a trademark of Robinhood Markets, Inc.; Unlisted is not affiliated with or endorsed by
+them.

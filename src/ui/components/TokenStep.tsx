@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { byEid, type ChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
@@ -19,6 +19,12 @@ export function TokenStep(p: {
    * link or a message GUID. What it is decides where it goes; the caller routes it.
    */
   onInput: (input: AnalysisInput) => void
+  /**
+   * An address another tab handed over. The form is already pointed at it, so the box has to show
+   * it too — otherwise the user arrives at a filled-in form above an empty search field and cannot
+   * tell what it is looking at.
+   */
+  prefill?: string | undefined
   busy: boolean
   recent: string[]
   info: SourceInfo | undefined
@@ -33,6 +39,12 @@ export function TokenStep(p: {
   const d = useDict()
   const [value, setValue] = useState('')
   const [formatError, setFormatError] = useState('')
+  useEffect(() => {
+    if (p.prefill) {
+      setValue(p.prefill)
+      setFormatError('')
+    }
+  }, [p.prefill])
   const v = value.trim()
   const svm = p.chain.vm === 'svm'
   const go = () => {

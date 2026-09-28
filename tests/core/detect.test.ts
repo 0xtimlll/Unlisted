@@ -9,7 +9,7 @@ import { detectFindings, logEmitters, topSelector, type LogLike, type TxLike } f
 import { foreignEventsAbi } from '@/core/analysis/foreign'
 import { lzEventsAbi, LZ_TOPICS } from '@/core/lz/events'
 import { decodePacket, encodePacket, PacketError, type LzPacket } from '@/core/lz/packet'
-import { ccipEventsAbi, CCIP_TOPICS } from '@/protocols/ccip/abi'
+import { ccipEventsAbi, ccipRamp2EventsAbi, CCIP_TOPICS } from '@/protocols/ccip/abi'
 import { nttTransferSentDigestAbi, nttTransferSentV1Abi, nttTransferSentV2Abi, NTT_TOPICS } from '@/protocols/wormhole-ntt/abi'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
 import { makeLog } from './logs'
@@ -140,7 +140,7 @@ describe('other protocols', () => {
     expect(detectFindings(tx([sent]), 'ethereum')[0]).toMatchObject({ kind: 'ntt_transfer', digest: GUID })
   })
 
-  it('a CCIP v1.6 send carries messageId, destination and the tokens', () => {
+  it('a CCIP v1.6 send carries messageId, destination and the POOL — never a token', () => {
     const sent = ev(ROUTER, ccipEventsAbi as Abi, 'CCIPMessageSent', {
         destChainSelector: 15971525489660198786n, // Base, from selectors.yml
         sequenceNumber: 1n,
@@ -159,7 +159,33 @@ describe('other protocols', () => {
     const f = detectFindings(tx([sent]), 'ethereum')
     expect(f[0]).toMatchObject({ kind: 'ccip_sent', version: '1.6', messageId: GUID, destChain: 'base' })
     if (f[0]?.kind !== 'ccip_sent') throw new Error('unreachable')
-    expect(f[0].tokens).toEqual([{ token: OFT, amount: 500n }])
+    // sourcePoolAddress is a pool. Labelling it makes it impossible to hand it to a form that
+    // wants an ERC-20.
+    expect(f[0].transfers).toEqual([{ address: OFT, amount: 500n, is: 'pool' }])
+  })
+
+  it('a CCIP 2.0 send (the verifier on-ramp) is recognised, with no token claimed', () => {
+    const sent = ev(ROUTER, ccipRamp2EventsAbi as Abi, 'CCIPMessageSent', {
+      destChainSelector: 15971525489660198786n, // Base
+      sender: WALLET,
+      messageId: GUID,
+      feeToken: '0x0000000000000000000000000000000000000000',
+      tokenAmountBeforeTokenPoolFees: 500n,
+      encodedMessage: '0xdeadbeef',
+      receipts: [{ issuer: OFT, destGasLimit: 0, destBytesOverhead: 0, feeTokenAmount: 1n, extraArgs: '0x' }],
+      verifierBlobs: [],
+    })
+    const f = detectFindings(tx([sent]), 'ethereum')
+    expect(f[0]).toMatchObject({ kind: 'ccip_sent', version: '2.0', messageId: GUID, destChain: 'base' })
+    if (f[0]?.kind !== 'ccip_sent') throw new Error('unreachable')
+    expect(f[0].transfers).toEqual([])
+  })
+
+  it('the three on-ramp generations have three different topics', () => {
+    const seen = new Set(Object.values(CCIP_TOPICS))
+    expect(seen.size).toBe(3)
+    // The topic the newest on-ramp really emits, read off a mainnet transaction on Robinhood Chain.
+    expect(CCIP_TOPICS.CCIPMessageSentRamp2).toBe('0x371bc2ff0a006f4ef863b1d27a065d4e9f938b6d883eb154572b4aea593b32cc')
   })
 
   it('Axelar, CCTP and Hyperlane are each named', () => {
