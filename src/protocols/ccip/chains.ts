@@ -122,6 +122,15 @@ export const CCIP_CHAINS: Partial<Record<ChainKey, CcipChainConfig>> = {
     tokenAdminRegistry: '0xcE44363496ABc3a9e53B3F404a740F992D977bDF',
     tokenAdminRegistryVersion: '1.5.0',
   },
+  robinhood: {
+    selector: 6180753054346818345n,
+    registryName: 'robinhood-mainnet',
+    directoryKey: 'robinhood-mainnet',
+    router: '0x06fC836cf9839B1cd891C440A0a45242DA6Ae1c9',
+    routerVersion: '1.2.0',
+    tokenAdminRegistry: '0x1912C3cFafE8A76A32a92861d815aC2837F237Ca',
+    tokenAdminRegistryVersion: '1.5.0',
+  },
   // solana: CCIP serves Solana, but this app only bridges EVM to EVM over CCIP.
 }
 

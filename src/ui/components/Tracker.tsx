@@ -44,7 +44,9 @@ export function Tracker(p: {
   const phase: TrackPhase = sourceFailed ? 'failed' : (s?.phase ?? 'no_data')
   const final = phase === 'delivered' || phase === 'failed'
   const elapsed = useElapsed(p.startedAt)
-  const minutes = Math.max(1, Math.round((p.src.srcConfirmationsHint * 12) / 60))
+  // Confirmations are counted in blocks, so the block time has to come from the chain: 20 of them
+  // is four minutes on Ethereum and two seconds on a chain that produces one every 100ms.
+  const minutes = Math.max(1, Math.round((p.src.srcConfirmationsHint * (p.src.blockTimeSec ?? 12)) / 60))
 
   useEffect(() => {
     if (phase === 'delivered' || phase === 'failed') p.onFinal(phase)

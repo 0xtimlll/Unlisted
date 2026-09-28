@@ -35,6 +35,7 @@ export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
   linea: 'linea',
   scroll: 'scroll',
   hyperevm: 'hyperevm',
+  robinhood: 'robinhood',
   solana: 'solana',
 }
 

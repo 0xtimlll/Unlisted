@@ -18,3 +18,9 @@ to identify that network.
 | linea.png | blockchains/linea/info/logo.png |
 | scroll.png | blockchains/scroll/info/logo.png |
 | solana.png | blockchains/solana/info/logo.png |
+
+`robinhood.png` is **not** in that set and is **not** an official mark: Trust Wallet assets carries no
+logo for Robinhood Chain, and putting a financial brand's own logo on a third-party bridge would
+suggest an endorsement that does not exist. It is a plain generated placeholder — a slate disc with
+an `R` — drawn to match the others in size and shape. Dropping an officially licensed PNG in its
+place is a one-file change and needs nothing else touched.

@@ -14,6 +14,7 @@ export type ChainKey =
   | 'hyperevm'
   | 'linea'
   | 'scroll'
+  | 'robinhood'
   | 'solana'
 
 type ChainCommon = {
@@ -30,6 +31,12 @@ type ChainCommon = {
   explorerAddrUrl: string
   /** Rough number of source confirmations before LZ DVNs verify — for the "usually ~N min" hint only. */
   srcConfirmationsHint: number
+  /**
+   * Seconds per block, for the same ETA hint and nothing else. Omitted means the 12s the hint has
+   * always assumed. It exists because that assumption is off by two orders of magnitude on a chain
+   * that produces a block every 100ms: 20 confirmations there is two seconds, not four minutes.
+   */
+  blockTimeSec?: number
   /**
    * §6.21 A deliberately generous ceiling on the LayerZero fee, in this chain's smallest native
    * unit (wei / lamports). Nothing about a quote is verifiable off-chain: `quoteSend` is whatever
@@ -58,6 +65,29 @@ export type SvmChainDef = ChainCommon & {
 
 /** Discriminated by `vm`. Everything that needs a chainId or wei must narrow with isEvm() first. */
 export type ChainDef = EvmChainDef | SvmChainDef
+
+/**
+ * An optional build-time RPC, from a NEXT_PUBLIC_ variable. Robinhood Chain's public endpoint is
+ * the only one its operator publishes and it is rate-limited, so a deployment can put its own node
+ * in front of it without editing this file:
+ *
+ *   NEXT_PUBLIC_RPC_ROBINHOOD=https://my-node.example
+ *
+ * Next inlines this literal `process.env['NEXT_PUBLIC_...']` access at build time, and
+ * scripts/gen-headers.mjs reads the same variable with plain Node — so whatever is set here also
+ * lands in the CSP's connect-src and in validateRpcUrl's allow-list, and can never become a host
+ * the browser silently blocks. A value that is not an https URL is dropped rather than shipped:
+ * one broken entry here would take the whole chain's reads down.
+ */
+function envRpc(value: string | undefined): readonly string[] {
+  if (!value) return []
+  try {
+    const u = new URL(value.trim())
+    return u.protocol === 'https:' ? [u.toString()] : []
+  } catch {
+    return []
+  }
+}
 
 export const CHAINS: readonly ChainDef[] = [
   {
@@ -198,6 +228,26 @@ export const CHAINS: readonly ChainDef[] = [
     explorerAddrUrl: 'https://scrollscan.com/address/',
     feeStepWei: 10n ** 13n,
     srcConfirmationsHint: 20,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
+  },
+  {
+    vm: 'evm',
+    key: 'robinhood',
+    // "Robinhood Chain" in its own documentation; the pill shows the short form.
+    name: 'Robinhood',
+    chainId: 4663,
+    eid: 30416,
+    nativeSymbol: 'ETH',
+    // The operator publishes one RPC and rate-limits it; drpc serves the chain as a second opinion,
+    // which the quorum checks need (one provider must never be the only one asked about a spender).
+    rpcUrls: [...envRpc(process.env['NEXT_PUBLIC_RPC_ROBINHOOD']), 'https://rpc.mainnet.chain.robinhood.com', 'https://robinhood.drpc.org'],
+    explorerTxUrl: 'https://robinhoodchain.blockscout.com/tx/',
+    explorerAddrUrl: 'https://robinhoodchain.blockscout.com/address/',
+    feeStepWei: 10n ** 13n,
+    // Read from the chain, not assumed: the ULN send config for live routes off this chain asks for
+    // 20 confirmations, and a block is ~0.101s, so the wait is seconds rather than minutes.
+    srcConfirmationsHint: 20,
+    blockTimeSec: 0.1,
     feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {
