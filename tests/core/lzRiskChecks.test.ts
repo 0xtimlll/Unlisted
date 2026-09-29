@@ -109,12 +109,16 @@ describe('an RPC that does not answer', () => {
       const state = input.checks[id]
       expect(state.status === 'unchecked' && state.reason.length, id).toBeGreaterThan(0)
     }
-    const risk = assessRisk(input)
+    // Corroboration is a separate question from the checks; hold it true to isolate the fold.
+    const risk = assessRisk({ ...input, linkCrossChecked: true })
     expect(risk.tier).toBe('UNVERIFIED')
     expect(risk.hardUnchecked.sort()).toEqual([...HARD_CHECKS].sort())
     // And it cannot be typed away.
     expect(risk.overridable).toBe(false)
     expect(risk.testLimitOnly).toBe(true)
+    // And when the dead provider was also the only one asked, there is nothing to cap: the
+    // contract itself is uncorroborated, which is a block rather than a small allowance.
+    expect(assessRisk({ ...input, linkCrossChecked: false }).tier).toBe('BLOCKED')
     // Every grey row says why, and those reasons are what the panel prints.
     expect(risk.reasons.length).toBeGreaterThanOrEqual(HARD_CHECKS.length)
     for (const r of risk.reasons.filter((x) => x.check && HARD_CHECKS.includes(x.check))) {

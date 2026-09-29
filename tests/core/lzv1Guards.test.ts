@@ -30,7 +30,7 @@ function cleanRisk(over: Parameters<typeof assessRisk>[0] | undefined = undefine
   if (over) return assessRisk(over)
   const checks = {} as Record<CheckId, CheckState>
   for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
 }
 
 /** The verdict a route gets when a hard check could not be made: capped, and not overridable. */
@@ -38,14 +38,14 @@ function cappedRisk(): RouteRisk {
   const checks = {} as Record<CheckId, CheckState>
   for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
   checks['delivery_sim'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
-  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
 }
 
 function blockedRisk(): RouteRisk {
   const checks = {} as Record<CheckId, CheckState>
   for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
   checks['path'] = { status: 'fail', reason: 'a packet is stuck in front of this transfer' }
-  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
 }
 
 /** What the wallet would be handed. */

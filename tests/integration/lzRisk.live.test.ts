@@ -73,7 +73,8 @@ async function v1Risk(srcKey: Parameters<typeof evmByKey>[0], oft: string, dstKe
     recipient: evmRecipient(SOMEONE),
     client: srcClient,
   })
-  return assessRoute({ protocol: 'lz-v1', info, plan, srcClient, dstClient })
+  // These live tests are about the CHECKS, not the quorum, so the link is taken as corroborated.
+  return assessRoute({ protocol: 'lz-v1', info, plan, srcClient, dstClient, linkCrossChecked: true })
 }
 
 describe('a real v1 route', () => {
@@ -170,7 +171,7 @@ describe('a real V2 route', () => {
     })
     const dstOft = dstOftOf(info, dstDef.eid)
     expect(dstOft, 'the destination peer should be an EVM address').toBeDefined()
-    return assessRoute({ protocol: 'lz-oft', info, plan, srcChain: srcKey, dstChain: dstKey, srcClient, dstClient, dstOft: dstOft! })
+    return assessRoute({ protocol: 'lz-oft', info, plan, srcChain: srcKey, dstChain: dstKey, srcClient, dstClient, dstOft: dstOft!, linkCrossChecked: true })
   }
 
   it('produces a verdict that satisfies every §4 invariant', async () => {

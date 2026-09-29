@@ -116,6 +116,20 @@ export type RiskInput = {
   nearLimit: boolean
   /** A test transfer on this exact route was confirmed delivered within the last 24 hours. */
   testVerified: boolean
+  /**
+   * Did a SECOND, independent operator confirm the contract↔token link this whole verdict rests on?
+   *
+   * Every check below is read through some RPC. If only one operator answered — because the others
+   * were down, or because the reads went to a user-supplied endpoint nobody corroborated — then
+   * `peers`, `path` and the rest are not eight findings, they are one provider's story told eight
+   * times. A single endpoint that lies can pass all of them at once, which is exactly the fake-route
+   * attack the indicator exists to catch.
+   *
+   * So this is BLOCKED, not a cap: an uncorroborated link is not a small route, it is an unknown
+   * one, and a test amount into an unknown contract is still a loss. Nothing lifts it except
+   * another operator answering — see the note on `blocking` below.
+   */
+  linkCrossChecked: boolean
 }
 
 export type RouteRisk = {
@@ -188,6 +202,14 @@ export function assessRisk(i: RiskInput): RouteRisk {
     blocking.push({ text: 'a party that verifies this route is one LayerZero has deprecated', check: 'config' })
   }
   if (i.configMismatch) blocking.push({ text: 'the send config on the source does not match the receive config on the destination', check: 'config' })
+  // No independent operator stood behind the contract↔token link, so none of the checks below
+  // mean more than the single endpoint that answered them.
+  if (!i.linkCrossChecked) {
+    blocking.push({
+      text: 'no second, independent RPC operator confirmed this contract and its peers — one endpoint answering alone cannot establish that this route is what it claims to be',
+      check: 'peers',
+    })
+  }
   if (blocking.length > 0) {
     // Not `testLimitOnly`: §4 disables a blocked route entirely, test amount included.
     return {
@@ -347,6 +369,8 @@ export function emptyRiskInput(reason = 'not run yet'): RiskInput {
     unknownDvnSet: false,
     history: { kind: 'unknown', reason },
     recentChange: false,
+    // Nothing known means nothing corroborated, which is the blocking answer, not the neutral one.
+    linkCrossChecked: false,
     delayed: undefined,
     thinGas: false,
     nearLimit: false,

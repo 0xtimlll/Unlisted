@@ -475,6 +475,9 @@ export async function assessV1Route(c: V1RiskContext): Promise<V1Assessment> {
       thinGas: false,
       nearLimit: false,
       testVerified: false,
+      // Placeholders; assessRoute() overrides both. `false` is the safe default for each:
+      // an unverified route and an uncorroborated one, so forgetting to pass them fails closed.
+      linkCrossChecked: false,
       ...extra,
     },
     dstGasEstimate,

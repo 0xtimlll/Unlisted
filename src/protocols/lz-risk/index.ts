@@ -21,9 +21,13 @@ export { assessV2Route, dstChainOf, dstOftOf, v2Message, compareUlnShape } from 
 export * from './verified'
 export * from './testLimit'
 
-export type RiskSubject =
-  | ({ protocol: 'lz-v1' } & V1RiskContext)
-  | ({ protocol: 'lz-oft' } & V2RiskContext)
+export type RiskSubject = (({ protocol: 'lz-v1' } & V1RiskContext) | ({ protocol: 'lz-oft' } & V2RiskContext)) & {
+  /**
+   * Whether an operator other than the one that answered first confirmed the contract probe.
+   * The screens read it off the probe's own `crossChecked`; see RiskInput.linkCrossChecked.
+   */
+  linkCrossChecked: boolean
+}
 
 export type RiskOutcome = {
   risk: RouteRisk
@@ -51,10 +55,10 @@ export async function assessRoute(s: RiskSubject, now = Date.now()): Promise<Ris
   const testVerified = isRouteVerified(routeIdOf(s), now)
   if (s.protocol === 'lz-v1') {
     const { input, dstGasEstimate } = await assessV1Route(s)
-    return { risk: assessRisk({ ...input, testVerified }), dstGasEstimate }
+    return { risk: assessRisk({ ...input, testVerified, linkCrossChecked: s.linkCrossChecked }), dstGasEstimate }
   }
   const input = await assessV2Route(s)
-  return { risk: assessRisk({ ...input, testVerified }), dstGasEstimate: undefined }
+  return { risk: assessRisk({ ...input, testVerified, linkCrossChecked: s.linkCrossChecked }), dstGasEstimate: undefined }
 }
 
 /**
