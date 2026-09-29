@@ -30,10 +30,8 @@ import type { OftV1Info } from '../lz-v1/detect'
 import type { V1SendPlan } from '../lz-v1/plan'
 import { dvnInfo } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
-import { allUnchecked, type CheckId, type CheckState, type RiskInput } from './risk'
+import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
 
-/** An in-flight gap older than this is treated as messages not arriving, not messages travelling. */
-export const STALE_INFLIGHT_MINUTES = 30
 /** Below this multiple of the destination estimate, the gas bought is called thin. */
 export const THIN_GAS_RATIO = 1.2
 
@@ -171,11 +169,11 @@ async function checkPath(c: V1RiskContext): Promise<Outcome> {
   const age = await daysSinceBlock(c.srcClient, newest.value.blockNumber)
   if (!age.ok) return { state: { status: 'unchecked', reason: `${gap} message(s) in flight; ${age.reason}` } }
   const minutes = age.value * 24 * 60
-  if (minutes > STALE_INFLIGHT_MINUTES) {
+  if (minutes > INFLIGHT_GRACE_MINUTES) {
     // Not a failure of the path: the endpoint is holding nothing, so the route itself works. What it
     // means is that v1 delivers in nonce order and these are ahead of us, so a transfer sent now
     // waits for them. A delay caps the amount; it does not refuse the send. Only a stored payload
-    // above does that.
+    // above does that. How long they have been waiting is what the fold reads — see risk.ts.
     return {
       state: { status: 'pass', note: `${gap} packet(s) undelivered, the oldest sent ${Math.floor(minutes)} minutes ago` },
       extra: { delayed: { packets: Number(gap), oldestMinutes: minutes } },

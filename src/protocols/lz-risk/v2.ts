@@ -25,8 +25,8 @@ import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
 import { dvnInfo, judgeDvns } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
-import { allUnchecked, type CheckId, type CheckState, type RiskInput } from './risk'
-import { STALE_INFLIGHT_MINUTES, THIN_GAS_RATIO } from './v1'
+import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
+import { THIN_GAS_RATIO } from './v1'
 
 /** EndpointV2's channel and library manager, plus the OApp receive entry point. */
 const v2Abi = parseAbi([
@@ -122,7 +122,7 @@ async function checkPath(c: V2RiskContext): Promise<Outcome> {
   const minutes = age.value * 24 * 60
   // A delay, not a blocked path — see the v1 note. EndpointV2 parks nothing, so there is nothing
   // here that could be a `fail`: either the nonces are level, or messages are queued ahead of ours.
-  return minutes > STALE_INFLIGHT_MINUTES
+  return minutes > INFLIGHT_GRACE_MINUTES
     ? {
         state: { status: 'pass', note: `${gap} packet(s) undelivered, the oldest sent ${Math.floor(minutes)} minutes ago` },
         extra: { delayed: { packets: Number(gap), oldestMinutes: minutes } },
