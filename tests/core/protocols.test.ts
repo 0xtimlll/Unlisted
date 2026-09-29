@@ -13,14 +13,21 @@ import {
 } from '@/core/protocols'
 
 describe('protocols', () => {
-  it('every tab maps to a protocol and back', () => {
-    for (const slug of TAB_SLUGS) expect(tabOfProtocol(protocolOfTab(slug))).toBe(slug)
+  it('every protocol has a tab, and a protocol tab maps back to it', () => {
     for (const id of PROTOCOL_IDS) expect(protocolOfTab(tabOfProtocol(id))).toBe(id)
+    for (const slug of TAB_SLUGS) {
+      const id = protocolOfTab(slug)
+      if (id) expect(tabOfProtocol(id)).toBe(slug)
+    }
   })
 
-  it('there is exactly one tab per protocol', () => {
-    expect(TAB_SLUGS).toHaveLength(PROTOCOL_IDS.length)
-    expect(new Set(TAB_SLUGS.map((s) => protocolOfTab(s))).size).toBe(PROTOCOL_IDS.length)
+  it('has one tab per protocol plus the tabs that are not a protocol’s form', () => {
+    // §5's Status / Rescue takes a transaction hash and works out the protocol itself, so it is a
+    // tab with no protocol. `protocolOfTab` is partial for exactly that reason.
+    const withProtocol = TAB_SLUGS.filter((s) => protocolOfTab(s) !== undefined)
+    expect(withProtocol).toHaveLength(PROTOCOL_IDS.length)
+    expect(new Set(withProtocol.map((s) => protocolOfTab(s))).size).toBe(PROTOCOL_IDS.length)
+    expect(protocolOfTab('rescue')).toBeUndefined()
   })
 
   it('validates untrusted values (localStorage, URLs)', () => {
@@ -44,7 +51,7 @@ describe('protocols', () => {
   })
 
   it('paths are the slugs the export writes', () => {
-    expect(TAB_SLUGS.map(tabPath)).toEqual(['/bridge', '/ntt', '/ccip'])
+    expect(TAB_SLUGS.map(tabPath)).toEqual(['/bridge', '/ntt', '/ccip', '/rescue'])
   })
 
   it('every protocol with a tab now has a bridge behind it', () => {
