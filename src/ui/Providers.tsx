@@ -12,6 +12,7 @@ import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
 import { CcipApp } from './CcipApp'
 import { NttApp } from './NttApp'
+import { RescueApp } from './RescueApp'
 import { entryProtocol, load, save, type HistoryEntry, type Stored, type Theme } from './storage'
 import { saveLastTab } from './tabs'
 import { SvmWalletHost } from './svm/SvmWalletHost'
@@ -138,8 +139,12 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                 />
               ) : tab === 'ntt' ? (
                 <NttApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} {...handoffProps} />
-              ) : (
+              ) : tab === 'ccip' ? (
                 <CcipApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} {...handoffProps} />
+              ) : (
+                // §5 The rescue tab takes no handoff: it is not a form for a protocol, it is a
+                // transaction hash and whatever the two chains say about it.
+                <RescueApp stored={stored} srcKey={srcKey} setSrcKey={setSrcKey} />
               )}
             </AppShell>
           </SvmWalletHost>

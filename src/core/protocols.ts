@@ -9,11 +9,17 @@
 export const PROTOCOL_IDS = ['lz-oft', 'wormhole-ntt', 'ccip'] as const
 export type ProtocolId = (typeof PROTOCOL_IDS)[number]
 
-/** URL slug of each protocol's tab. The static export emits one page per slug. */
-export const TAB_SLUGS = ['oft', 'ntt', 'ccip'] as const
+/**
+ * URL slug of each tab. The static export emits one page per slug.
+ *
+ * `rescue` is a tab without a protocol: §5's Status / Rescue screen takes a transaction hash and
+ * works out which protocol it belongs to, rather than being one tab's form. That is why
+ * `protocolOfTab` is partial — a tab is not always a protocol, even though every protocol has one.
+ */
+export const TAB_SLUGS = ['oft', 'ntt', 'ccip', 'rescue'] as const
 export type TabSlug = (typeof TAB_SLUGS)[number]
 
-const BY_SLUG: Record<TabSlug, ProtocolId> = {
+const BY_SLUG: Partial<Record<TabSlug, ProtocolId>> = {
   oft: 'lz-oft',
   ntt: 'wormhole-ntt',
   ccip: 'ccip',
@@ -33,7 +39,8 @@ export function isTabSlug(v: unknown): v is TabSlug {
   return typeof v === 'string' && (TAB_SLUGS as readonly string[]).includes(v)
 }
 
-export function protocolOfTab(slug: TabSlug): ProtocolId {
+/** The protocol a tab builds for, or undefined for a tab that is not one protocol's form. */
+export function protocolOfTab(slug: TabSlug): ProtocolId | undefined {
   return BY_SLUG[slug]
 }
 
@@ -45,8 +52,8 @@ export function tabOfProtocol(id: ProtocolId): TabSlug {
  * The path each tab lives at. The OFT tab is the bridge's own entry point, so it owns /bridge:
  * that is the address to bookmark, and the one the welcome screen at / opens.
  */
-const TAB_PATH: Record<TabSlug, string> = { oft: '/bridge', ntt: '/ntt', ccip: '/ccip' }
-const TAB_OF_SEGMENT: Record<string, TabSlug> = { bridge: 'oft', ntt: 'ntt', ccip: 'ccip' }
+const TAB_PATH: Record<TabSlug, string> = { oft: '/bridge', ntt: '/ntt', ccip: '/ccip', rescue: '/rescue' }
+const TAB_OF_SEGMENT: Record<string, TabSlug> = { bridge: 'oft', ntt: 'ntt', ccip: 'ccip', rescue: 'rescue' }
 
 /** "/bridge" — the path the tab lives at. */
 export function tabPath(slug: TabSlug): string {

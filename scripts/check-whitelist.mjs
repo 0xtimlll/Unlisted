@@ -22,6 +22,11 @@ const WHITELIST = new Set(['approve', 'send'])
  *             AND src/core/abi.ts is checked below for never declaring a `transfer` of its own —
  *             together, no code path here can move tokens with a plain ERC-20 transfer.
  *   ccipSend  Router (contracts/src/v0.8/ccip/interfaces/IRouterClient.sol).
+ *   retryPayload, retryMessage, commitVerification, lzReceive
+ *             §5's rescue actions: Endpoint V1 (contracts/Endpoint.sol), NonblockingLzApp,
+ *             ReceiveUln302 and EndpointV2 respectively. Confined to the rescue module alone, which
+ *             is separately asserted below never to carry value. None of them moves a token: each
+ *             asks a contract to finish delivering a message it already holds the hash of.
  *   sendFrom  LayerZero v1 OFT (LayerZero-Labs/solidity-examples, IOFTCore / IOFTV2 /
  *             IOFTWithFee). Confined to the v1 protocol module ALONE — not to a screen as well —
  *             because src/protocols/lz-v1/send.ts takes wagmi's writeContractAsync as an
@@ -31,6 +36,10 @@ const SCOPED_WRITES = {
   transfer: /^src\/(protocols\/wormhole-ntt\/|ui\/NttApp\.tsx$)/,
   ccipSend: /^src\/(protocols\/ccip\/|ui\/CcipApp\.tsx$)/,
   sendFrom: /^src\/protocols\/lz-v1\//,
+  retryPayload: /^src\/protocols\/lz-rescue\//,
+  retryMessage: /^src\/protocols\/lz-rescue\//,
+  commitVerification: /^src\/protocols\/lz-rescue\//,
+  lzReceive: /^src\/protocols\/lz-rescue\//,
 }
 
 /**
@@ -174,7 +183,9 @@ for (const file of walk(SRC)) {
       'localChainId', 'paused',
       'getAppConfig', 'defaultAppConfig',
       'inboundNonce', 'outboundNonce', 'getReceiveLibrary',
-      'lazyInboundNonce', 'verifiable',
+      // §5 rescue, read-only side. See src/protocols/lz-rescue/abi.ts for the source of each.
+      'storedPayload', 'failedMessages', 'lazyInboundNonce', 'inboundPayloadHash', 'verifiable',
+      'initializable', 'hashLookup',
     ])
     if (!writeAllowed(n, rel) && !KNOWN_READS.has(n) && !simulatedOnly(n, rel)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
@@ -224,6 +235,36 @@ for (const file of walk(SRC)) {
   }
 }
 
+/**
+ * §5: a rescue asks a contract to finish delivering a message it already holds the hash of. It never
+ * pays for anything, and the two non-payable functions must carry no `value` field at all.
+ *
+ * The type system is the real guard here — `RescueCall.value` is the literal type `0n`, so a plan
+ * cannot be built with anything else, and submitRescue throws if it somehow were. What this check
+ * adds is the case types cannot catch: somebody writing an amount into that module by hand. So it
+ * looks for a `value:` given a number, a bigint literal other than 0n, or one of the ether helpers —
+ * and deliberately not for every `value:`, because `value` is an ordinary field name and flagging
+ * `{ ok: true, value: address }` would make this check noise rather than a rule.
+ */
+{
+  const RESCUE_DIR = /^src\/protocols\/lz-rescue\//
+  const AMOUNT = /\bvalue\s*:\s*(?!0n\b)(\d[\d_]*n?|BigInt\(|parseEther\(|parseUnits\(|msg\b)/
+  const files = walk(SRC).map((f) => relative(ROOT, f)).filter((rel) => RESCUE_DIR.test(rel))
+  if (files.length === 0) errors.push('scripts/check-whitelist.mjs: RESCUE_DIR matches no files — the assertion below is vacuous')
+  for (const rel of files) {
+    const lines = stripCommentLines(readFileSync(join(ROOT, rel), 'utf8')).split('\n')
+    lines.forEach((line, i) => {
+      const m = AMOUNT.exec(line)
+      if (m) errors.push(`${rel}:${i + 1}: a rescue may only ever carry value 0n, found ${m[1]}`)
+    })
+  }
+  // And the one field that decides it is typed as the literal, not merely commented as one.
+  const actions = readFileSync(join(SRC, 'protocols/lz-rescue/actions.ts'), 'utf8')
+  if (!/value:\s*0n\s*$/m.test(actions) || !/\bvalue:\s*0n\b/.test(actions)) {
+    errors.push('src/protocols/lz-rescue/actions.ts: RescueCall must type `value` as the literal 0n')
+  }
+}
+
 // `transfer` is only safe as a scoped write because the shared ERC-20 ABI has no such entry:
 // if one were ever added, an approve-style call site could quietly move tokens instead.
 {
@@ -245,5 +286,6 @@ console.log(
   'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer, ' +
     'Router.ccipSend and the LayerZero v1 OFT.sendFrom inside their own protocol modules; ' +
     'lzReceive/nonblockingLzReceive are simulated-only in the risk module, which cannot submit; ' +
+    'the four rescue actions live only in the rescue module, which may never carry value; ' +
     `Solana: one oft.send + one submit in ${SVM_FILE})`,
 )
