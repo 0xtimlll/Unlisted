@@ -5,7 +5,7 @@ import { TAB_SLUGS, tabPath, type TabSlug } from '@/core/protocols'
 import { useDict } from '@/i18n'
 import type { Theme } from '../storage'
 import { SvmWalletButton } from '../svm/SvmWalletButton'
-import { GearIcon } from './icons'
+import { BookIcon, GearIcon } from './icons'
 import { ThemeToggle } from './ThemeToggle'
 import { IconButton, LinkTabs } from './ui'
 
@@ -26,6 +26,7 @@ export function Header({
   theme,
   onTheme,
   onSettings,
+  onAddressBook,
   srcVm,
 }: {
   tab: TabSlug
@@ -33,6 +34,7 @@ export function Header({
   theme: Theme
   onTheme: (t: Theme) => void
   onSettings: () => void
+  onAddressBook: () => void
   srcVm: 'evm' | 'svm'
 }) {
   const d = useDict()
@@ -53,6 +55,9 @@ export function Header({
       />
       <div className="ml-auto flex items-center gap-1.5">
         <ThemeToggle theme={theme} onTheme={onTheme} />
+        <IconButton label={d.header.addressBook} onClick={onAddressBook}>
+          <BookIcon className="h-6 w-6" />
+        </IconButton>
         <IconButton label={d.header.settings} onClick={onSettings} className="group">
           <GearIcon className="h-6 w-6 transition-transform duration-300 group-hover:rotate-[75deg]" />
         </IconButton>

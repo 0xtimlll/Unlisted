@@ -4,7 +4,9 @@ import { byEid, CHAINS, type ChainDef, type ChainKey } from '@/core/chains'
 import type { SendPlan } from '@/core/plan'
 import type { SourceInfo } from '@/core/types'
 import { useDict } from '@/i18n'
+import type { AddressFamily, BookVerdict } from '@/core/addressBook'
 import { Address } from './Address'
+import { BookPicker, BookVerdictNote, bookConfirms } from './RecipientBook'
 import { ChainIcon } from './ChainIcon'
 import { AmountInput, Box, BoxLabel, Input, PillSelect } from './ui'
 
@@ -94,6 +96,12 @@ export function ToBox(p: {
    * holds the parsed recipient, so the check has ONE source of truth — this box only styles it.
    */
   recipientConfirmed: boolean
+  /** Address-book family of the destination, or undefined until a destination is chosen. */
+  bookFamily: AddressFamily | undefined
+  /** What the book says about the typed recipient (components/RecipientBook.tsx). */
+  bookVerdict: BookVerdict | undefined
+  /** Fills the field from the book. */
+  onPickAddress: (address: string) => void
   /** Error from Solana-side discovery, or ''. */
   svmError: string
 }) {
@@ -154,7 +162,10 @@ export function ToBox(p: {
 
       {custom ? (
         <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-          <div className="text-xs text-muted">{crossVm ? d.step2.recipient : d.step2.otherAddress}</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted">{crossVm ? d.step2.recipient : d.step2.otherAddress}</div>
+            <BookPicker family={p.bookFamily} onPick={p.onPickAddress} />
+          </div>
           <Input
             value={s.recipientInput}
             onChange={(e) => set({ recipientInput: e.target.value, confirmLast6: '' })}
@@ -166,7 +177,8 @@ export function ToBox(p: {
           {p.recipientError && typed !== '' ? <div className="text-xs text-danger">{p.recipientError}</div> : null}
           {p.dstVm === 'svm' ? <div className="text-xs text-muted">{d.step3.svmRecipientHint}</div> : null}
           {crossVm && p.dstVm === 'evm' ? <div className="text-xs text-muted">{d.step3.evmRecipientHint}</div> : null}
-          {recipientValid && typed !== '' ? (
+          {recipientValid && typed !== '' ? <BookVerdictNote verdict={p.bookVerdict} /> : null}
+          {recipientValid && typed !== '' && !bookConfirms(p.bookVerdict) ? (
             <label className="block text-xs">
               <span className="text-muted">{d.step2.confirmLast6}</span>
               <Input

@@ -16,6 +16,8 @@ import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
+import { familyOfVm } from '@/core/addressBook'
+import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { ccipRouterAbi } from '@/protocols/ccip/abi'
 import { ccipConfig } from '@/protocols/ccip/chains'
@@ -181,7 +183,11 @@ export function CcipApp({
       : undefined
   const recipient: Recipient | undefined = recipientResult?.ok ? recipientResult.recipient : undefined
   const recipientError = recipientResult && !recipientResult.ok ? d.errors[`recipient_${recipientResult.code}`] : ''
-  const recipientConfirmed = recipientCustom && recipient !== undefined && confirmsTail(recipient, confirmLast6)
+  // §Address book. CCIP bridges EVM to EVM; derived rather than hard-coded, as in the NTT tab.
+  const bookFamily = familyOfVm('evm')
+  const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
+  const recipientConfirmed =
+    recipientCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6))
 
   const plan = useCcipPlan({
     chain: srcKey,
@@ -216,6 +222,7 @@ export function CcipApp({
     plan: planData,
     recipientIsCustom: recipientCustom,
     customRecipientConfirmed: recipientConfirmed,
+    recipientLookalike: bookRefuses(bookVerdict),
     tokenBalance: tokenBalance.data,
     nativeBalance: nativeBalance.data?.value,
     allowance: allowance.data,
@@ -338,6 +345,7 @@ export function CcipApp({
           CCIP Explorer ↗
         </a>
       </div>
+      <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
       <div className="mt-4">
         <Button
           onClick={() => {
@@ -469,10 +477,14 @@ export function CcipApp({
         {token && destinations.length === 0 ? <p className="mt-2 text-xs text-muted">{d.ccip.noDestinations}</p> : null}
         {recipientCustom ? (
           <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-            <div className="text-xs text-muted">{d.step2.otherAddress}</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-muted">{d.step2.otherAddress}</div>
+              <BookPicker family={bookFamily} onPick={(a) => { setRecipientInput(a); setConfirmLast6('') }} />
+            </div>
             <Input value={recipientInput} onChange={(e) => { setRecipientInput(e.target.value); setConfirmLast6('') }} placeholder="0x…" className="mono" aria-label={d.step2.recipient} />
             {recipientError && recipientInput.trim() !== '' ? <div className="text-xs text-danger">{recipientError}</div> : null}
-            {recipient ? (
+            {recipient ? <BookVerdictNote verdict={bookVerdict} /> : null}
+            {recipient && !bookConfirms(bookVerdict) ? (
               <label className="block text-xs">
                 <span className="text-muted">{d.step2.confirmLast6}</span>
                 <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} maxLength={6} className={`mono mt-1 max-w-36 ${recipientConfirmed ? 'border-ok' : ''}`} />

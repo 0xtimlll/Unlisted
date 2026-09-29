@@ -13,6 +13,8 @@ import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
+import { familyOfVm } from '@/core/addressBook'
+import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import type { SuspiciousFlag } from '@/core/types'
 import { standardLabel } from '@/protocols/lz-v1/abi'
 import type { OftV1Info } from '@/protocols/lz-v1/detect'
@@ -162,7 +164,10 @@ export function BridgeV1({
     [planData, info.approvalRequired, allowance.data],
   )
 
-  const last6Ok = !recipientCustom || (recipient !== undefined && confirmsTail(recipient, confirmLast6))
+  // §Address book. LayerZero v1 routes in this app are EVM to EVM.
+  const bookFamily = familyOfVm('evm')
+  const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
+  const last6Ok = !recipientCustom || (recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6)))
 
   const guardInput: V1GuardInput = {
     walletAddress: wallet,
@@ -172,6 +177,7 @@ export function BridgeV1({
     plan: planData,
     recipientIsCustom: recipientCustom,
     customRecipientConfirmed: last6Ok,
+    recipientLookalike: bookRefuses(bookVerdict),
     tokenBalance: tokenBalance.data,
     nativeBalance: nativeBalance.data?.value,
     allowance: info.approvalRequired ? allowance.data : 0n,
@@ -272,6 +278,7 @@ export function BridgeV1({
             onReset()
           }}
         />
+        <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
         <p className="mt-3 text-xs text-muted">{d.v1.sentHint}</p>
       </Panel>
     )
@@ -333,8 +340,14 @@ export function BridgeV1({
             <BoxLabel>{d.v1.recipient}</BoxLabel>
             {recipientCustom ? (
               <div className="space-y-2">
-                <Input value={recipientInput} onChange={(e) => setRecipientInput(e.target.value)} placeholder="0x…" spellCheck={false} />
-                <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} placeholder={d.v1.confirmLast6} spellCheck={false} />
+                <div className="flex items-center justify-end">
+                  <BookPicker family={bookFamily} onPick={(a) => { setRecipientInput(a); setConfirmLast6('') }} />
+                </div>
+                <Input value={recipientInput} onChange={(e) => { setRecipientInput(e.target.value); setConfirmLast6('') }} placeholder="0x…" spellCheck={false} />
+                {recipient ? <BookVerdictNote verdict={bookVerdict} /> : null}
+                {recipient && !bookConfirms(bookVerdict) ? (
+                  <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} placeholder={d.v1.confirmLast6} spellCheck={false} />
+                ) : null}
               </div>
             ) : (
               <div className="mono text-sm">{wallet ?? '—'}</div>

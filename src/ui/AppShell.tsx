@@ -11,6 +11,7 @@ import type { ChainKey } from '@/core/chains'
 import type { TabSlug } from '@/core/protocols'
 import { Header } from './components/Header'
 import { History } from './components/History'
+import { AddressBookDialog } from './components/AddressBookDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import type { HistoryEntry, Stored, Theme } from './storage'
 
@@ -35,13 +36,14 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [bookOpen, setBookOpen] = useState(false)
   return (
     // min-w: below ~1024px the page scrolls sideways instead of falling apart (desktop-only tool).
     <div className="flex min-h-screen w-full min-w-[1024px] flex-col">
       {/* The header floats the full width of the window, on a gutter just wide enough to read as
           a panel. Only the header is this wide; the content below keeps its column. */}
       <div className="w-full px-4 pt-4">
-        <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} srcVm={srcVm} />
+        <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} onAddressBook={() => setBookOpen(true)} srcVm={srcVm} />
       </div>
 
       <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 pb-8 pt-6">
@@ -50,6 +52,8 @@ export function AppShell({
           <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} onTrack={onTrack} />
         </div>
       </main>
+
+      {bookOpen ? <AddressBookDialog onClose={() => setBookOpen(false)} /> : null}
 
       {settingsOpen ? (
         <SettingsDialog
