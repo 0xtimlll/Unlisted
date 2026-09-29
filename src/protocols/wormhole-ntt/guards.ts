@@ -25,6 +25,7 @@ export type NttGuardCode =
   | 'manager_unverified'
   | 'recipient_invalid'
   | 'recipient_unconfirmed'
+  | 'recipient_lookalike'
   | 'recipient_zero'
   | 'recipient_is_contract'
   | 'amount_zero'
@@ -76,6 +77,14 @@ export type NttGuardInput = {
   plan: NttPlan | undefined
   recipientIsCustom: boolean
   customRecipientConfirmed: boolean
+  /**
+   * §Address book: the recipient shares its first four and last four characters with a SAVED
+   * address but is not that address. That is what an address swap looks like, so it is a refusal
+   * with no confirmation attached — a user who could tick a box here is the user already fooled.
+   * Set by the screen only for a recipient that came from outside (typed or pasted), never for
+   * the connected wallet's own address.
+   */
+  recipientLookalike?: boolean | undefined
   tokenBalance: bigint | undefined
   nativeBalance: bigint | undefined
   allowance: bigint | undefined
@@ -117,6 +126,9 @@ export function n3Recipient(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(3, 'plan_missing')
   if (!isBytes32(i.plan.recipient)) return fail(3, 'recipient_invalid')
   const differs = i.walletAddress === undefined || !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress))
+  // A look-alike of a saved address is refused before anything else about the recipient is
+  // considered: there is nothing to confirm when the address is already wrong.
+  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
   if (differs && (!i.recipientIsCustom || !i.customRecipientConfirmed)) return fail(3, 'recipient_unconfirmed')
   return ok(3)
 }

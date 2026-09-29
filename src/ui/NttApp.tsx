@@ -16,6 +16,8 @@ import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
+import { familyOfVm } from '@/core/addressBook'
+import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { nttManagerAbi } from '@/protocols/wormhole-ntt/abi'
 import { isNttPending, nttApprovePlan, runNttGuards, type NttGuardInput } from '@/protocols/wormhole-ntt/guards'
@@ -187,7 +189,12 @@ export function NttApp({
       : undefined
   const recipient: Recipient | undefined = recipientResult?.ok ? recipientResult.recipient : undefined
   const recipientError = recipientResult && !recipientResult.ok ? d.errors[`recipient_${recipientResult.code}`] : ''
-  const recipientConfirmed = recipientCustom && recipient !== undefined && confirmsTail(recipient, confirmLast6)
+  // §Address book. NTT bridges EVM to EVM, so the family is always 'evm' here; it is derived
+  // rather than written out so a future non-EVM destination cannot inherit the wrong one.
+  const bookFamily = familyOfVm('evm')
+  const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
+  const recipientConfirmed =
+    recipientCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6))
 
   const plan = useNttPlan({ verification: verification.data, sender: wallet, recipient, amountRaw, customRpc: stored.customRpc })
   const planData = plan.data
@@ -212,6 +219,7 @@ export function NttApp({
     plan: planData,
     recipientIsCustom: recipientCustom,
     customRecipientConfirmed: recipientConfirmed,
+    recipientLookalike: bookRefuses(bookVerdict),
     tokenBalance: tokenBalance.data,
     nativeBalance: nativeBalance.data?.value,
     allowance: allowance.data,
@@ -334,6 +342,7 @@ export function NttApp({
           Wormholescan ↗
         </a>
       </div>
+      <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
       <div className="mt-4">
         <Button
           onClick={() => {
@@ -470,10 +479,14 @@ export function NttApp({
         {destinations.length === 0 && listedToken ? <p className="mt-2 text-xs text-muted">{d.ntt.noDestinations}</p> : null}
         {recipientCustom ? (
           <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-            <div className="text-xs text-muted">{d.step2.otherAddress}</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-muted">{d.step2.otherAddress}</div>
+              <BookPicker family={bookFamily} onPick={(a) => { setRecipientInput(a); setConfirmLast6('') }} />
+            </div>
             <Input value={recipientInput} onChange={(e) => { setRecipientInput(e.target.value); setConfirmLast6('') }} placeholder="0x…" className="mono" aria-label={d.step2.recipient} />
             {recipientError && recipientInput.trim() !== '' ? <div className="text-xs text-danger">{recipientError}</div> : null}
-            {recipient ? (
+            {recipient ? <BookVerdictNote verdict={bookVerdict} /> : null}
+            {recipient && !bookConfirms(bookVerdict) ? (
               <label className="block text-xs">
                 <span className="text-muted">{d.step2.confirmLast6}</span>
                 <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} maxLength={6} className={`mono mt-1 max-w-36 ${recipientConfirmed ? 'border-ok' : ''}`} />

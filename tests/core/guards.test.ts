@@ -145,6 +145,15 @@ describe('3. recipient', () => {
     expect(code(g3Recipient(goodInput({ plan, customRecipientConfirmed: true })))).toBe('recipient_unconfirmed')
     expect(code(g3Recipient(goodInput({ plan, recipientIsCustom: true, customRecipientConfirmed: true })))).toBe('ok')
   })
+  it('a look-alike of a saved address is refused, and no confirmation lifts it', () => {
+    const plan = treadPlan({ recipient: OTHER })
+    const confirmed = { plan, recipientIsCustom: true, customRecipientConfirmed: true }
+    // Without the flag this exact input passes; the flag alone is what refuses it.
+    expect(code(g3Recipient(goodInput(confirmed)))).toBe('ok')
+    expect(code(g3Recipient(goodInput({ ...confirmed, recipientLookalike: true })))).toBe('recipient_lookalike')
+    // It outranks the confirmation: there is nothing to confirm when the address is already wrong.
+    expect(code(g3Recipient(goodInput({ plan, recipientLookalike: true })))).toBe('recipient_lookalike')
+  })
   it('invalid (non-bytes32) recipient fails', () => {
     const plan = { ...treadPlan(), recipient: '0x123' as never }
     expect(code(g3Recipient(goodInput({ plan })))).toBe('recipient_invalid')

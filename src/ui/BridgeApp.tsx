@@ -13,6 +13,8 @@ import type { ProtocolId } from '@/core/protocols'
 import { DecodeTxError } from '@/core/decodeTx'
 import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
+import { familyOfVm } from '@/core/addressBook'
+import { bookConfirms, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import { SvmDiscoverError } from '@/core/svm/errors'
 import type { SourceInfo, SuspiciousFlag } from '@/core/types'
 import { planSvmOptions } from '@/core/options'
@@ -329,7 +331,13 @@ export function BridgeApp({
   const recipient: Recipient | undefined = recipientResult?.ok ? recipientResult.recipient : undefined
   const recipientError = recipientResult && !recipientResult.ok ? d.errors[`recipient_${recipientResult.code}`] : ''
   const recipientIsCustom = crossVm || dest.recipientCustom
-  const recipientConfirmed = recipientIsCustom && recipient !== undefined && confirmsTail(recipient, dest.confirmLast6)
+  // §Address book. Only a recipient that came from OUTSIDE is judged: the connected wallet's own
+  // address did not arrive through a clipboard, so it cannot be the swap this check is looking for.
+  const bookFamily = dstVm ? familyOfVm(dstVm) : undefined
+  const bookVerdict = useBookVerdict(bookFamily, recipientIsCustom ? recipient?.display : undefined)
+  // A saved address was already checked by hand against its source; it does not need the tail again.
+  const recipientConfirmed =
+    recipientIsCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, dest.confirmLast6))
 
   let amountError = ''
   if (info && dest.amountInput.trim() !== '') {
@@ -447,6 +455,7 @@ export function BridgeApp({
       plan: planData,
       recipientIsCustom,
       customRecipientConfirmed: recipientConfirmed,
+      recipientLookalike: bookRefuses(bookVerdict),
       tokenBalance,
       nativeBalance,
       allowance: allowance.data,
@@ -463,7 +472,7 @@ export function BridgeApp({
       svmDestinationKnown: dstVm !== 'svm' || !!svmDest.data,
       svmDestinationRecognised: dstVm !== 'svm' || !svmDestUnknown,
     }),
-    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, highFeeAccepted, dstVm, svmDest.data, svmDestUnknown],
+    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, highFeeAccepted, dstVm, svmDest.data, svmDestUnknown, bookVerdict],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -641,6 +650,7 @@ export function BridgeApp({
 
   // ---- render -------------------------------------------------------------------
   const left = sent ? (
+    <>
     <Tracker
       src={byKey(sent.srcChain)}
       dstEid={sent.dstEid}
@@ -658,6 +668,8 @@ export function BridgeApp({
       }}
       onNew={reset}
     />
+    <RecipientBookAfterSend family={bookFamily} address={recipientIsCustom ? recipient?.display : undefined} />
+    </>
   ) : (
     <>
       <TokenStep
@@ -706,6 +718,9 @@ export function BridgeApp({
             dstVm={dstVm}
             recipientError={recipientError}
             recipientConfirmed={recipientConfirmed}
+            bookFamily={bookFamily}
+            bookVerdict={bookVerdict}
+            onPickAddress={(address) => setDest({ ...dest, recipientCustom: true, recipientInput: address, confirmLast6: '' })}
             svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
           />
         </>

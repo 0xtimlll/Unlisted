@@ -60,3 +60,15 @@ export function GithubIcon({ className = '' }: { className?: string }) {
     </svg>
   )
 }
+
+/** Address book: a small contact card. Same 24px grid and stroke weight as the gear. */
+export function BookIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6.5A1.5 1.5 0 0 1 5 19.5z" />
+      <path d="M5 17h14" />
+      <circle cx="12" cy="9" r="2" />
+      <path d="M9 14c.6-1.2 1.7-1.8 3-1.8s2.4.6 3 1.8" />
+    </svg>
+  )
+}

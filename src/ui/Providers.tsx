@@ -8,6 +8,7 @@ import { WagmiProvider } from 'wagmi'
 import type { ChainKey } from '@/core/chains'
 import type { AnalysisTarget } from '@/core/analysis/result'
 import { tabOfPath, tabOfProtocol, tabPath, type ProtocolId, type TabSlug } from '@/core/protocols'
+import { AddressBookProvider } from './addressBookContext'
 import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
 import { CcipApp } from './CcipApp'
@@ -115,6 +116,7 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
         {/* RainbowKit otherwise follows the browser language; the whole app is English. */}
         <RainbowKitProvider theme={rkTheme} modalSize="compact" locale="en-US">
           <SvmWalletHost enabled={svmSource}>
+           <AddressBookProvider>
             <AppShell
               tab={tab}
               onTab={goTab}
@@ -147,6 +149,7 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                 <RescueApp stored={stored} srcKey={srcKey} setSrcKey={setSrcKey} />
               )}
             </AppShell>
+           </AddressBookProvider>
           </SvmWalletHost>
         </RainbowKitProvider>
       </QueryClientProvider>
