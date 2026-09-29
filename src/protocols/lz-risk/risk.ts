@@ -139,6 +139,23 @@ export type RouteRisk = {
   overridable: boolean
 }
 
+/**
+ * Undelivered packets ahead of ours: how long is ordinary, and how long is a stoppage.
+ *
+ * Both thresholds are here rather than with the checks that measure them, because it is the fold
+ * that acts on them and this is where a reader comes to find out what a verdict means.
+ *
+ *   under 30 minutes   traffic in flight. Messages take minutes to verify; a queue that young says
+ *                      nothing and caps nothing.
+ *   30 to 60 minutes   slow. The amount is capped at a test, and the confirmation word lifts it —
+ *                      the route is working, ours is simply behind a few that are still moving.
+ *   over 60 minutes    packets that have sat for an hour are not moving. Verification may have
+ *                      stopped on this route, and in that case a transfer sent now joins the queue
+ *                      rather than passing it. No typed word lifts that; only a test that arrives.
+ */
+export const INFLIGHT_GRACE_MINUTES = 30
+export const STOPPED_VERIFICATION_MINUTES = 60
+
 /** Days after which a route with no delivery is treated as unproven rather than merely quiet. */
 export const STALE_DELIVERY_DAYS = 30
 /** Below this, a delivery is recent enough to say nothing about. */
@@ -212,11 +229,17 @@ export function assessRisk(i: RiskInput): RouteRisk {
   }
   if (i.delayed) {
     const { packets, oldestMinutes } = i.delayed
+    const stopped = oldestMinutes > STOPPED_VERIFICATION_MINUTES
     reasons.push({
-      text: `${packets} packet(s) sent on this route have not been delivered, the oldest ${Math.floor(oldestMinutes)} minutes ago — a transfer sent now queues behind them`,
+      text: stopped
+        ? `${packets} packet(s) on this route have been waiting more than an hour (the oldest ${Math.floor(oldestMinutes)} minutes) — verification may have stopped, and a transfer sent now would queue behind them`
+        : `${packets} packet(s) sent on this route have not been delivered, the oldest ${Math.floor(oldestMinutes)} minutes ago — a transfer sent now queues behind them`,
       check: 'path',
     })
     tier = worse(tier, 'UNVERIFIED')
+    // An hour of no movement is not "slow", it is evidence that nothing is moving. A word cannot
+    // stand in for the delivery that has not happened; only a test that arrives can.
+    if (stopped) overridable = false
   }
   const h = i.history
   if (h.kind === 'never') {

@@ -18,6 +18,8 @@ import {
   overrideAccepted,
   sendAllowed,
   STALE_DELIVERY_DAYS,
+  STOPPED_VERIFICATION_MINUTES,
+  INFLIGHT_GRACE_MINUTES,
   type CheckId,
   type CheckState,
   type RiskInput,
@@ -47,6 +49,12 @@ const AMOUNT = 1_000_000n
 const TEST_LIMIT = 1_000n
 
 describe('the shape of the rule', () => {
+  it('keeps the two in-flight thresholds in order and in risk.ts', () => {
+    expect(INFLIGHT_GRACE_MINUTES).toBe(30)
+    expect(STOPPED_VERIFICATION_MINUTES).toBe(60)
+    expect(STOPPED_VERIFICATION_MINUTES).toBeGreaterThan(INFLIGHT_GRACE_MINUTES)
+  })
+
   it('names five hard checks and eight in total', () => {
     expect(CHECK_IDS.length).toBe(8)
     expect([...HARD_CHECKS].sort()).toEqual(['adapter_liquidity', 'delivery_sim', 'limits', 'path', 'peers'])
@@ -70,6 +78,7 @@ describe('the shape of the rule', () => {
       clean({ unknownInfra: true }),
       clean({ unknownInfra: true, history: { kind: 'never' } }),
       clean({ deprecatedVerifier: true }),
+      clean({ delayed: { packets: 2, oldestMinutes: 45 } }),
       clean({ delayed: { packets: 2, oldestMinutes: 90 } }),
       clean({ configMismatch: true }),
       clean({ unknownDvnSet: true }),
@@ -210,14 +219,42 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     expect(r.reasons).toEqual([])
   })
 
-  it('undelivered packets ahead of ours cap the amount and name the queue', () => {
-    const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: 246 } }))
+  it('a queue younger than an hour caps the amount, and the word lifts it', () => {
+    const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: STOPPED_VERIFICATION_MINUTES - 1 } }))
     expect(r.tier).toBe('UNVERIFIED')
     expect(r.testLimitOnly).toBe(true)
     expect(r.overridable).toBe(true)
-    expect(r.reasons.some((x) => /3 packet\(s\).*not been delivered.*246 minutes.*queues behind/.test(x.text))).toBe(true)
+    expect(r.reasons.some((x) => /3 packet\(s\).*not been delivered.*queues behind/.test(x.text))).toBe(true)
+    expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toEqual({ allowed: true })
     // It is a delay, not a blocked path: the path check itself is untouched by it.
     expect(r.checks.path.status).toBe('pass')
+  })
+
+  it('a queue older than an hour is not something a word can lift', () => {
+    // An hour of no movement is not "slow" — it is evidence that nothing is moving, and the only
+    // thing that answers it is a test transfer that arrives.
+    const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: STOPPED_VERIFICATION_MINUTES + 1 } }))
+    expect(r.tier).toBe('UNVERIFIED')
+    expect(r.testLimitOnly).toBe(true)
+    expect(r.overridable).toBe(false)
+    expect(r.reasons.some((x) => /waiting more than an hour.*verification may have stopped/.test(x.text))).toBe(true)
+    expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toMatchObject({ allowed: false, why: 'over_test_limit' })
+    // A test-sized amount still goes: it is a stoppage on the route, not a refusal to send.
+    expect(sendAllowed(r, TEST_LIMIT, TEST_LIMIT)).toEqual({ allowed: true })
+  })
+
+  it('sits exactly on the threshold on the overridable side', () => {
+    // The boundary is spelled out so a later change to the constant cannot move it by accident.
+    const at = assessRisk(clean({ delayed: { packets: 1, oldestMinutes: STOPPED_VERIFICATION_MINUTES } }))
+    expect(at.overridable).toBe(true)
+    const just_over = assessRisk(clean({ delayed: { packets: 1, oldestMinutes: STOPPED_VERIFICATION_MINUTES + 0.01 } }))
+    expect(just_over.overridable).toBe(false)
+  })
+
+  it('a delivered test lifts even the hour-old queue’s cap', () => {
+    const r = assessRisk(clean({ delayed: { packets: 2, oldestMinutes: 240 }, testVerified: true }))
+    expect(r.tier).toBe('CAUTION')
+    expect(r.testLimitOnly).toBe(false)
   })
 
   it('a stuck payload still blocks, which is the difference from a queue', () => {

@@ -110,7 +110,8 @@ describe('a real v1 route', () => {
   }, 40_000)
 
   it('treats undelivered packets ahead of ours as a delay, not a blocked path', async () => {
-    // Whether a queue exists today is not this test's business; that it is never a BLOCKED is.
+    // Whether a queue exists today is not this test's business; that it is never a BLOCKED is, and
+    // that how long it has waited decides whether the cap can be typed away.
     for (const [src, dst] of [
       ['arbitrum', 'avalanche'],
       ['avalanche', 'arbitrum'],
@@ -119,9 +120,14 @@ describe('a real v1 route', () => {
       const path = risk.checks.path
       if (path.status === 'pass' && path.note && /undelivered/.test(path.note)) {
         expect(risk.tier).toBe('UNVERIFIED')
-        expect(risk.reasons.some((r) => /queues behind them/.test(r.text))).toBe(true)
-        // A queue still allows a test amount; only a stored payload refuses everything.
+        // Both wordings say the same thing about the queue; which one appears depends on its age.
+        const queued = risk.reasons.find((r) => r.check === 'path')
+        expect(queued?.text).toMatch(/queue[s]? behind them/)
+        const stopped = /verification may have stopped/.test(queued?.text ?? '')
+        expect(risk.overridable).toBe(!stopped)
+        // Either way a test amount still goes; only a stored payload refuses everything.
         expect(sendAllowed(risk, 1n, 10n ** 18n)).toEqual({ allowed: true })
+        expect(sendAllowed(risk, 10n ** 30n, 1n, OVERRIDE_WORD).allowed).toBe(!stopped)
       }
       // A stored payload is the only thing that makes this check fail outright.
       if (path.status === 'fail') expect(path.reason).toMatch(/stuck packet|no path/)
