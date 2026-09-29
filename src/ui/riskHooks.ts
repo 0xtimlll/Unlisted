@@ -29,12 +29,18 @@ function clientFor(key: ChainKey | undefined, customRpc: Partial<Record<ChainKey
 }
 
 /** The v1 tab's verdict. */
-export function useV1RouteRisk(info: OftV1Info | undefined, plan: V1SendPlan | undefined, customRpc: Partial<Record<ChainKey, string>>) {
+export function useV1RouteRisk(
+  info: OftV1Info | undefined,
+  plan: V1SendPlan | undefined,
+  customRpc: Partial<Record<ChainKey, string>>,
+  /** Did a second, independent operator confirm the probe? See RiskInput.linkCrossChecked. */
+  linkCrossChecked: boolean,
+) {
   const srcClient = useMemo(() => clientFor(info?.chain, customRpc), [info?.chain, customRpc])
   const dstClient = useMemo(() => clientFor(plan?.dst.key, customRpc), [plan?.dst.key, customRpc])
   return useQuery<RiskOutcome>({
-    queryKey: ['v1risk', info?.chain, info?.oft, plan?.dst.key, plan?.amounts.amountLD.toString(), plan?.recipient],
-    queryFn: () => assessRoute({ protocol: 'lz-v1', info: info!, plan: plan!, srcClient: srcClient!, dstClient: dstClient! }),
+    queryKey: ['v1risk', info?.chain, info?.oft, plan?.dst.key, plan?.amounts.amountLD.toString(), plan?.recipient, linkCrossChecked],
+    queryFn: () => assessRoute({ protocol: 'lz-v1', info: info!, plan: plan!, srcClient: srcClient!, dstClient: dstClient!, linkCrossChecked }),
     enabled: !!info && !!plan && !!srcClient && !!dstClient,
     // Long enough that typing does not hammer eight checks, short enough that a route which just
     // unblocked is re-read without a reload.
@@ -53,6 +59,8 @@ export function useV2RouteRisk(
   plan: EvmSendPlan | undefined,
   src: EvmChainDef | undefined,
   customRpc: Partial<Record<ChainKey, string>>,
+  /** Did a second, independent operator confirm the probe? See RiskInput.linkCrossChecked. */
+  linkCrossChecked: boolean,
 ) {
   // The destination as the registry knows it. A non-EVM destination has no runner, so everything
   // below stays disabled and the panel does not render — see guard 22's boundary.
@@ -62,7 +70,7 @@ export function useV2RouteRisk(
   const dstClient = useMemo(() => clientFor(dstKey, customRpc), [dstKey, customRpc])
   const dstOft = info && plan ? dstOftOf(info, plan.dstEid) : undefined
   return useQuery<RiskOutcome>({
-    queryKey: ['v2risk', src?.key, info?.oft, dstKey, plan?.amounts.amountLD.toString(), plan?.recipient],
+    queryKey: ['v2risk', src?.key, info?.oft, dstKey, plan?.amounts.amountLD.toString(), plan?.recipient, linkCrossChecked],
     queryFn: () =>
       assessRoute({
         protocol: 'lz-oft',
@@ -73,6 +81,7 @@ export function useV2RouteRisk(
         srcClient: srcClient!,
         dstClient: dstClient!,
         dstOft: dstOft!,
+        linkCrossChecked,
       }),
     enabled: !!info && !!plan && !!src && !!srcClient && !!dstClient && !!dstKey && !!dstOft,
     staleTime: 60_000,

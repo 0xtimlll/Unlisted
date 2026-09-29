@@ -151,7 +151,9 @@ export function BridgeV1({
   const gasPrice = useGasPrice({ chainId: src.chainId })
   const peerBack = useV1PeerBack(info, dstKey, stored.customRpc)
   const storedPayload = useV1StoredPayload(info, dstKey, stored.customRpc)
-  const risk = useV1RouteRisk(info, planData, stored.customRpc)
+  // §4 Same rule as the V2 tab: one operator's answers are not a cross-check.
+  const linkCrossChecked = !flags.includes('not_cross_checked')
+  const risk = useV1RouteRisk(info, planData, stored.customRpc, linkCrossChecked)
   useEffect(() => {
     const gas = risk.data?.dstGasEstimate
     if (gas !== undefined && gas !== dstGasEstimate) setDstGasEstimate(gas)

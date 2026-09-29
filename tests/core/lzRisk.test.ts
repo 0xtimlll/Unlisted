@@ -37,7 +37,8 @@ const pass: CheckState = { status: 'pass' }
 function clean(over: Partial<RiskInput> = {}): RiskInput {
   const checks = {} as Record<CheckId, CheckState>
   for (const id of CHECK_IDS) checks[id] = pass
-  return { ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, ...over }
+  // A clean route is also a corroborated one; the uncorroborated case has its own tests below.
+  return { ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true, ...over }
 }
 
 const withCheck = (base: RiskInput, id: CheckId, state: CheckState): RiskInput => ({
@@ -64,10 +65,35 @@ describe('the shape of the rule', () => {
   })
 
   it('starts from nothing known, which is not the same as nothing wrong', () => {
+    // Nothing known includes "nobody corroborated the contract", which blocks outright.
     const r = assessRisk(emptyRiskInput('not run yet'))
-    expect(r.tier).toBe('UNVERIFIED')
-    expect(r.hardUnchecked.length).toBe(HARD_CHECKS.length)
+    expect(r.tier).toBe('BLOCKED')
     expect(r.overridable).toBe(false)
+    // With the link corroborated, the five unrun hard checks are what is left, and they cap.
+    const corroborated = assessRisk({ ...emptyRiskInput('not run yet'), linkCrossChecked: true })
+    expect(corroborated.tier).toBe('UNVERIFIED')
+    expect(corroborated.hardUnchecked.length).toBe(HARD_CHECKS.length)
+    expect(corroborated.overridable).toBe(false)
+  })
+
+  it('an uncorroborated contract is BLOCKED, not merely capped', () => {
+    // Everything passed — but only one operator ever answered, so "everything" is one story.
+    const r = assessRisk(clean({ linkCrossChecked: false }))
+    expect(r.tier).toBe('BLOCKED')
+    expect(r.overridable).toBe(false)
+    // Not a cap: §4 gives a blocked route no allowance at all, test amount included.
+    expect(r.testLimitOnly).toBe(false)
+    expect(r.reasons.some((x) => /independent RPC operator/.test(x.text))).toBe(true)
+    // The same route with a second operator behind it is the OK it looked like.
+    expect(assessRisk(clean()).tier).toBe('OK')
+  })
+
+  it('no word and no past test transfer lifts an uncorroborated contract', () => {
+    for (const over of [{ testVerified: true }, { testVerified: true, delayed: undefined }]) {
+      const r = assessRisk(clean({ linkCrossChecked: false, ...over }))
+      expect(r.tier).toBe('BLOCKED')
+      expect(r.overridable).toBe(false)
+    }
   })
 
   it('never returns a verdict without reasons, or OK with them', () => {

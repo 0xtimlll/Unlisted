@@ -543,7 +543,7 @@ describe('22. the route verdict caps the amount, and the Solana path is not swep
     const checks = {} as Record<CheckId, CheckState>
     for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
     checks['peers'] = { status: 'fail', reason: 'the destination peer does not point back' }
-    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
     expect(risk.tier).toBe('BLOCKED')
     const rep = runGuards(goodInput({ risk, testLimitLD: 10n ** 30n }))
     expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
@@ -554,7 +554,7 @@ describe('22. the route verdict caps the amount, and the Solana path is not swep
     const checks = {} as Record<CheckId, CheckState>
     for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
     checks['adapter_liquidity'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
-    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
     expect(risk.tier).toBe('UNVERIFIED')
     const plan = treadPlan()
     const over = goodInput({ risk, testLimitLD: plan.amounts.amountLD - 1n })
@@ -570,7 +570,7 @@ describe('22. the route verdict caps the amount, and the Solana path is not swep
     const checks = {} as Record<CheckId, CheckState>
     for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
     checks['limits'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
-    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
     expect(risk.testLimitOnly).toBe(true)
     const rep = runGuards(goodInput({ risk, testLimitLD: undefined }))
     expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_test_limit_unset' })

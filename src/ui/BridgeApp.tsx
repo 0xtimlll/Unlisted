@@ -488,7 +488,10 @@ export function BridgeApp({
   const simulation = blockedOnApprove ? undefined : check.data?.simulation
   // §4 The route's own verdict. EVM destinations only: a Solana route has no runner, the hook stays
   // disabled, and guard 22 leaves such a route to guards 1–21 (see riskCovers in core/guards.ts).
-  const risk = useV2RouteRisk(info?.vm === 'evm' ? info : undefined, evmPlan.data, evmSrc, stored.customRpc)
+  // §4 The verdict rests on reads; if only one operator answered them, it rests on nothing.
+  // `not_cross_checked` is exactly that fact, already computed by the probe (ui/hooks.ts).
+  const linkCrossChecked = !flags.includes('not_cross_checked')
+  const risk = useV2RouteRisk(info?.vm === 'evm' ? info : undefined, evmPlan.data, evmSrc, stored.customRpc, linkCrossChecked)
   const limitLD = testLimitLD(testLimit, info?.decimals ?? 18)
   // The limit belongs to the token, so checking a different contract loads that token's own number
   // (or leaves the field empty, which is what an untouched token looks like).

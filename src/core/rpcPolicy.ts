@@ -7,7 +7,16 @@
  */
 import { CHAINS } from './chains.ts'
 
-/** Well-known RPC providers people bring their own keys for. Apex domains do not match `*.`. */
+/**
+ * Well-known RPC providers people bring their own keys for. Apex domains do not match `*.`.
+ *
+ * These are node operators serving the real chain. Fork and simulation services are deliberately
+ * NOT here — `*.tenderly.co` was, and nothing in this codebase ever asked for it. A Tenderly
+ * Virtual TestNet is an endpoint whose contract state its creator chooses, so allowing it meant a
+ * pasted URL could answer `token()`, `peers()` and `eth_call` for a contract that does not exist,
+ * which is the whole of the fake-route attack in one link. Anything added here should be a
+ * provider of the chain, not a provider of a chain.
+ */
 export const RPC_PROVIDER_PATTERNS: readonly string[] = [
   '*.alchemy.com',
   '*.infura.io',
@@ -20,7 +29,6 @@ export const RPC_PROVIDER_PATTERNS: readonly string[] = [
   '*.chainstack.com',
   '*.blastapi.io',
   '*.nodereal.io',
-  '*.tenderly.co',
   '*.1rpc.io',
   '*.onfinality.io',
   '*.getblock.io',
