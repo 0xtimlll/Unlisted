@@ -38,6 +38,24 @@ export type V1Kind = 'OFT' | 'Proxy'
 
 export type V1Standard = { wire: V1Wire; kind: V1Kind }
 
+/**
+ * Wire shapes this app has never exercised against a deployed contract.
+ *
+ * `bytes` is implemented and unit-tested, but no live `OFT` / `ProxyOFT` was found to test it on:
+ * every v1 sender still moving is a `bytes32` standard or Stargate (see docs/TODO.md for how it was
+ * searched for). That is not a reason to drop the standard — it is a reason not to pretend the code
+ * has been proven. A route on an unverified standard is held at UNVERIFIED by the risk indicator, so
+ * only a test amount goes out on it, whatever every other check says.
+ *
+ * Removing an entry here is a claim that a real contract of that shape is covered by
+ * tests/integration/lzv1.live.test.ts. Nothing else may remove it.
+ */
+export const UNVERIFIED_WIRES: ReadonlySet<V1Wire> = new Set<V1Wire>(['bytes'])
+
+export function isUnverifiedStandard(s: V1Standard): boolean {
+  return UNVERIFIED_WIRES.has(s.wire)
+}
+
 /** IOFTCore — the original OFT. `_toAddress` is `bytes`. */
 export const oftV1Abi = parseAbi([
   'function estimateSendFee(uint16 _dstChainId, bytes _toAddress, uint256 _amount, bool _useZro, bytes _adapterParams) view returns (uint256 nativeFee, uint256 zroFee)',

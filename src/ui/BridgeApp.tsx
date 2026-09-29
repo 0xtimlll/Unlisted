@@ -39,6 +39,9 @@ import { useAnalysis } from './useAnalysis'
 import { BridgeV1 } from './BridgeV1'
 import { useProbeV1 } from './v1Hooks'
 import { ProbeV1Error } from '@/protocols/lz-v1/detect'
+import { useV2RouteRisk } from './riskHooks'
+import { RiskPanel } from './components/RiskPanel'
+import { markRouteVerified, rememberedTestLimit, rememberTestLimit, testLimitLD } from '@/protocols/lz-risk'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -105,6 +108,10 @@ export function BridgeApp({
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [pdaAccepted, setPdaAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
+  // §4 The test-amount limit is remembered per token (there is no default — see testLimit.ts); the
+  // confirmation word is per transfer, because it is an answer about this one.
+  const [testLimit, setTestLimit] = useState('')
+  const [riskOverride, setRiskOverride] = useState('')
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored, 'lz-oft')
@@ -137,6 +144,8 @@ export function BridgeApp({
     setPeerBackAccepted(false)
     setPdaAccepted(false)
     setHighFeeAccepted(false)
+    setTestLimit('')
+    setRiskOverride('')
     setSent(null)
     setTxError('')
   }, [])
@@ -469,11 +478,36 @@ export function BridgeApp({
   const evmData = svmSource ? undefined : evmCheck.data
   const blockedOnApprove = !!pendingApprove && !!evmData && !evmData.batched && revertMeaning(evmData.revert) === 'needs_approve'
   const simulation = blockedOnApprove ? undefined : check.data?.simulation
+  // §4 The route's own verdict. EVM destinations only: a Solana route has no runner, the hook stays
+  // disabled, and guard 22 leaves such a route to guards 1–21 (see riskCovers in core/guards.ts).
+  const risk = useV2RouteRisk(info?.vm === 'evm' ? info : undefined, evmPlan.data, evmSrc, stored.customRpc)
+  const limitLD = testLimitLD(testLimit, info?.decimals ?? 18)
+  // The limit belongs to the token, so checking a different contract loads that token's own number
+  // (or leaves the field empty, which is what an untouched token looks like).
+  const limitToken = info?.vm === 'evm' ? info.token : undefined
+  useEffect(() => {
+    setTestLimit(limitToken ? rememberedTestLimit({ chain: src.key, token: limitToken }) : '')
+  }, [limitToken, src.key])
+  const onTestLimit = useCallback(
+    (v: string) => {
+      setTestLimit(v)
+      if (limitToken) rememberTestLimit({ chain: src.key, token: limitToken }, v)
+    },
+    [limitToken, src.key],
+  )
+  /**
+   * §4 The indicator has runners for LayerZero EVM-to-EVM routes only. Where it has none the panel
+   * says so in grey rather than showing nothing — an absent verdict must not read as a passed one.
+   */
+  const riskCovered = info?.vm === 'evm' && dstVm === 'evm'
   const fullInput: GuardInput = {
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
     simulation,
     selfCheck: check.data?.selfCheck,
+    risk: risk.data?.risk,
+    testLimitLD: limitLD,
+    riskOverride,
   }
   const report = runGuards(fullInput)
 
@@ -615,7 +649,14 @@ export function BridgeApp({
       startedAt={sent.startedAt}
       restored={sent.restored}
       customRpc={stored.customRpc['solana']}
-      onFinal={(phase) => setStored(setHistoryStatus(stored, sent.txHash, phase))}
+      onFinal={(phase) => {
+        setStored(setHistoryStatus(stored, sent.txHash, phase))
+        // §4: only a delivery confirmed on chain lifts an unverified route's amount cap.
+        const dst = byEid(sent.dstEid)
+        if (phase === 'delivered' && dst && info?.vm === 'evm') {
+          markRouteVerified({ protocol: 'lz-oft', srcChain: sent.srcChain, oft: info.oft, dstChain: dst.key })
+        }
+      }}
       onNew={reset}
     />
   ) : (
@@ -722,6 +763,20 @@ export function BridgeApp({
               <PanelSection title={d.ui.section_quote}>
                 <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat />
               </PanelSection>
+              <RiskPanel
+                risk={risk.data?.risk}
+                notCovered={!riskCovered}
+                loading={risk.isFetching}
+                error={risk.error ? shortError(risk.error) : ''}
+                decimals={info?.decimals ?? 18}
+                symbol={info?.symbol ?? ''}
+                testLimit={testLimit}
+                onTestLimit={onTestLimit}
+                testLimitLD={limitLD}
+                amountLD={planData?.amounts.amountLD}
+                override={riskOverride}
+                onOverride={setRiskOverride}
+              />
               <Checks
                 report={report}
                 noGasAccepted={noGasAccepted}

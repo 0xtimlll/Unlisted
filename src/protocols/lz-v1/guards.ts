@@ -17,6 +17,7 @@ import type { OftV1Info, V1PeerBack } from './detect'
 import type { V1SendPlan } from './plan'
 import type { V1Simulation } from './simulate'
 import type { V1SelfCheckResult } from './selfcheck'
+import { sendAllowed, type RouteRisk } from '../lz-risk/risk'
 
 export type V1GuardCode =
   | 'wallet_not_connected'
@@ -63,9 +64,14 @@ export type V1GuardCode =
   | 'stored_payload_unknown'
   | 'stored_payload_unavailable_unconfirmed'
   | 'fee_above_ceiling_unconfirmed'
+  | 'risk_unknown'
+  | 'risk_blocked'
+  | 'risk_over_test_limit'
+  | 'risk_test_limit_unset'
 
 /** Codes that mean "not known yet", not "wrong". The UI shows them muted, same as the V2 tab. */
 export const V1_PENDING: ReadonlySet<V1GuardCode> = new Set<V1GuardCode>([
+  'risk_unknown',
   'plan_missing',
   'balance_unknown',
   'native_balance_unknown',
@@ -109,6 +115,15 @@ export type V1GuardInput = {
   storedPayload: StoredPayloadState | undefined
   storedPayloadUnavailableAccepted: boolean
   highFeeAccepted?: boolean
+  /**
+   * §4 The route's risk verdict. Absent means the checks have not finished, which guard 22 treats
+   * as pending — a verdict nobody computed is not permission.
+   */
+  risk?: RouteRisk | undefined
+  /** §4 The test-amount limit, as a raw amount in this token's units. */
+  testLimitLD?: bigint | undefined
+  /** §4 What the user typed to lift an overridable UNVERIFIED. Never lifts a hard-unchecked cap. */
+  riskOverride?: string | undefined
 }
 
 export type V1GuardReport = {
@@ -356,6 +371,25 @@ export function v1g21FeeCeiling(i: V1GuardInput): V1GuardResult {
   return ok(21)
 }
 
+/**
+ * §4, guard 22: the route's verdict decides how much may go.
+ *
+ * The v1 side of the same rule the V2 tab applies. It matters more here: the `bytes` standard has
+ * never been exercised against a live contract, so the indicator holds every route on it at
+ * UNVERIFIED and this guard is what turns that into a limit on the amount rather than a note.
+ */
+export function v1g22Risk(i: V1GuardInput): V1GuardResult {
+  if (!i.plan) return fail(22, 'plan_missing')
+  if (!i.risk) return fail(22, 'risk_unknown')
+  // A capped route with no limit chosen sends nothing, and says which of the two it is.
+  if (i.risk.testLimitOnly && i.testLimitLD === undefined && !(i.risk.overridable && i.riskOverride)) {
+    return fail(22, 'risk_test_limit_unset')
+  }
+  const permission = sendAllowed(i.risk, i.plan.amounts.amountLD, i.testLimitLD ?? 0n, i.riskOverride ?? '')
+  if (permission.allowed) return ok(22)
+  return permission.why === 'blocked' ? fail(22, 'risk_blocked') : fail(22, 'risk_over_test_limit', `${permission.limit}`)
+}
+
 export function runV1Guards(i: V1GuardInput): V1GuardReport {
   const g16 = v1g16Suspicious(i)
   const results: V1GuardResult[] = [
@@ -380,6 +414,7 @@ export function runV1Guards(i: V1GuardInput): V1GuardReport {
     v1g19RecipientVm(i),
     v1g20StoredPayload(i),
     v1g21FeeCeiling(i),
+    v1g22Risk(i),
   ]
   return {
     results,

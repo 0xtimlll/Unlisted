@@ -33,7 +33,20 @@ const SCOPED_WRITES = {
   sendFrom: /^src\/protocols\/lz-v1\//,
 }
 
+/**
+ * §4 names two functions that DO change state — `nonblockingLzReceive` (v1) and `lzReceive` (v2) —
+ * and builds calldata for them so it can `eth_call` the credit on the destination before anything is
+ * signed. They are the most valuable check in the risk indicator and they must never be submitted.
+ *
+ * So they are allowed to appear as a `functionName` literal only inside the risk module, and that
+ * module is separately asserted to contain no write primitive at all (see RISK_DIR below). Folding
+ * them into SCOPED_WRITES would have allowed a `writeContract` next to them; this does not.
+ */
+const RISK_DIR = /^src\/protocols\/lz-risk\//
+const SIMULATED_ONLY = new Set(['nonblockingLzReceive', 'lzReceive'])
+
 const writeAllowed = (name, rel) => WHITELIST.has(name) || (SCOPED_WRITES[name]?.test(rel) ?? false)
+const simulatedOnly = (name, rel) => SIMULATED_ONLY.has(name) && RISK_DIR.test(rel)
 const writeName = (name) => (SCOPED_WRITES[name] ? `${name} (only in ${SCOPED_WRITES[name].source})` : name)
 
 // Any of these anywhere in src/ is a bug.
@@ -157,11 +170,13 @@ for (const file of walk(SRC)) {
       // Endpoint V1 (LayerZero-Labs/LayerZero, ILayerZeroEndpoint.sol).
       'getChainId', 'hasStoredPayload', 'estimateFees', 'getInboundNonce', 'getOutboundNonce',
       'getSendVersion', 'getReceiveVersion',
-      // §3 the committed v1 chain table verifies itself against the UltraLightNode, which is the
-      // contract that stamps a chain id into every packet.
-      'localChainId',
+      // §4 route risk. All view — see src/protocols/lz-risk/ for the source of each.
+      'localChainId', 'paused',
+      'getAppConfig', 'defaultAppConfig',
+      'inboundNonce', 'outboundNonce', 'getReceiveLibrary',
+      'lazyInboundNonce', 'verifiable',
     ])
-    if (!writeAllowed(n, rel) && !KNOWN_READS.has(n)) {
+    if (!writeAllowed(n, rel) && !KNOWN_READS.has(n) && !simulatedOnly(n, rel)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
     }
   }
@@ -190,6 +205,25 @@ for (const file of walk(SRC)) {
   }
 }
 
+// §4: the risk module simulates a destination credit, so it names two state-changing functions.
+// That is only safe while it cannot submit anything, which is asserted here rather than assumed.
+{
+  const riskFiles = walk(SRC).map((f) => relative(ROOT, f)).filter((rel) => RISK_DIR.test(rel))
+  if (riskFiles.length === 0) errors.push('scripts/check-whitelist.mjs: RISK_DIR matches no files — the assertion below is vacuous')
+  for (const rel of riskFiles) {
+    const text = stripCommentLines(readFileSync(join(ROOT, rel), 'utf8'))
+    WRITE_CALL.lastIndex = 0
+    const m = WRITE_CALL.exec(text)
+    if (m) {
+      const lineNo = text.slice(0, m.index).split('\n').length
+      errors.push(`${rel}:${lineNo}: the risk module may simulate but never submit — found ${m[1]}`)
+    }
+    if (/\buseWriteContract\b|\bwalletClient\b/.test(text)) {
+      errors.push(`${rel}: the risk module must not reach a wallet`)
+    }
+  }
+}
+
 // `transfer` is only safe as a scoped write because the shared ERC-20 ABI has no such entry:
 // if one were ever added, an approve-style call site could quietly move tokens instead.
 {
@@ -210,5 +244,6 @@ if (errors.length) {
 console.log(
   'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer, ' +
     'Router.ccipSend and the LayerZero v1 OFT.sendFrom inside their own protocol modules; ' +
+    'lzReceive/nonblockingLzReceive are simulated-only in the risk module, which cannot submit; ' +
     `Solana: one oft.send + one submit in ${SVM_FILE})`,
 )

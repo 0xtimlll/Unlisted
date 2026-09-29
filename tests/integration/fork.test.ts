@@ -8,6 +8,7 @@ import { decodeEventLog, encodeFunctionData, parseAbi, type Address, type Hex } 
 import { erc20Abi, oftAbi } from '@/core/abi'
 import { evmByKey } from '@/core/chains'
 import { approvePlan, runGuards, selfCheck, type GuardInput } from '@/core/guards'
+import { assessRisk, CHECK_IDS, emptyRiskInput, type CheckId, type CheckState, type RouteRisk } from '@/protocols/lz-risk/risk'
 import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
 import { encodeLzReceive, planSvmOptions } from '@/core/options'
 import { evmRecipient, svmRecipient } from '@/core/recipient'
@@ -34,6 +35,13 @@ const oftSentEvent = parseAbi([
 ])
 
 /** Runs the whole app-side pipeline against the fork: simulate + gas + self-check + guards. */
+/** Every §4 check ran and passed: OK and uncapped. */
+function cleanRisk(): RouteRisk {
+  const checks = {} as Record<CheckId, CheckState>
+  for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+}
+
 async function fullCheck(f: Fork, info: OftInfo, plan: EvmSendPlan, allowance: bigint | undefined, svm?: Partial<GuardInput>) {
   const args = assembleSendArgs(plan)
   const calldata = encodeFunctionData({ abi: oftAbi, functionName: 'send', args: [args[0], args[1], args[2]] })
@@ -57,6 +65,10 @@ async function fullCheck(f: Fork, info: OftInfo, plan: EvmSendPlan, allowance: b
     recipientIsCustom: false, customRecipientConfirmed: false,
     tokenBalance, nativeBalance, allowance, gasCostWei,
     simulation, selfCheck: sc, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
+    // §4 guard 22 is handed a clean verdict: these tests execute real approve/send transactions on a
+    // fork, and the route checks they would otherwise need are covered by their own tests. Without
+    // this the fork's `canSend` would be false for a reason that has nothing to do with the fork.
+    risk: cleanRisk(), testLimitLD: plan.amounts.amountLD,
     ...svm,
   }
   return { report: runGuards(input), simulation, calldata, args }

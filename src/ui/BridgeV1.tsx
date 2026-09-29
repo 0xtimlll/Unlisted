@@ -30,6 +30,9 @@ import { Alert, AmountInput, Box, BoxLabel, Button, Input, Row, Select, Spinner 
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { pushHistory, setHistoryStatus, type Stored } from './storage'
 import { useV1PeerBack, useV1Plan, useV1Simulation, useV1StoredPayload } from './v1Hooks'
+import { useV1RouteRisk } from './riskHooks'
+import { RiskPanel } from './components/RiskPanel'
+import { markRouteVerified, rememberedTestLimit, rememberTestLimit, testLimitLD } from '@/protocols/lz-risk'
 
 const GUARD_LABEL = (d: Dict, code: string): string => (d.v1Guard as Record<string, string>)[code] ?? code
 
@@ -96,6 +99,15 @@ export function BridgeV1({
   const [txError, setTxError] = useState('')
   // Empty on a token that has never had a limit set — there is no sensible default for "a small
   // amount of this token", so an unverified route sends nothing until the number is chosen.
+  const [testLimit, setTestLimit] = useState(() => rememberedTestLimit({ chain: src.key, token: info.token }))
+  const onTestLimit = useCallback(
+    (v: string) => {
+      setTestLimit(v)
+      rememberTestLimit({ chain: src.key, token: info.token }, v)
+    },
+    [src.key, info.token],
+  )
+  const [riskOverride, setRiskOverride] = useState('')
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
   // The contract decided at probe time; a route change never re-opens that question.
@@ -109,6 +121,12 @@ export function BridgeV1({
     return r.ok ? r.recipient : undefined
   }, [recipientCustom, recipientInput, wallet])
 
+  // The plan is built twice on purpose. The first pass buys the gas the contract's own
+  // `minDstGasLookup` demands; once §4's destination simulation has measured what the credit really
+  // costs, the second pass buys `max(minimum, estimate × 1.3)` instead. There is no loop in that:
+  // the simulation does not depend on the adapter params it informs, and the risk query's key is
+  // the route and the amount, neither of which this changes.
+  const [dstGasEstimate, setDstGasEstimate] = useState<bigint | undefined>(undefined)
   const plan = useV1Plan({
     info,
     dstKey,
@@ -117,7 +135,7 @@ export function BridgeV1({
     recipient,
     slippageBps,
     feeBufferBps,
-    dstGasEstimate: undefined,
+    dstGasEstimate,
   })
   const planData = plan.data
 
@@ -131,6 +149,13 @@ export function BridgeV1({
   const gasPrice = useGasPrice({ chainId: src.chainId })
   const peerBack = useV1PeerBack(info, dstKey, stored.customRpc)
   const storedPayload = useV1StoredPayload(info, dstKey, stored.customRpc)
+  const risk = useV1RouteRisk(info, planData, stored.customRpc)
+  useEffect(() => {
+    const gas = risk.data?.dstGasEstimate
+    if (gas !== undefined && gas !== dstGasEstimate) setDstGasEstimate(gas)
+  }, [risk.data?.dstGasEstimate, dstGasEstimate])
+  const limitLD = testLimitLD(testLimit, info.decimals)
+
   const selfCheck = useMemo(() => (planData ? v1SelfCheck(planData, encodeV1SendCalldata(planData)) : undefined), [planData])
   const approveIntent = useMemo(
     () => (planData ? v1ApprovePlan(planData, info.approvalRequired, allowance.data) : null),
@@ -163,6 +188,9 @@ export function BridgeV1({
     storedPayload: storedPayload.data,
     storedPayloadUnavailableAccepted: storedPayloadAccepted,
     highFeeAccepted,
+    risk: risk.data?.risk,
+    testLimitLD: limitLD,
+    riskOverride,
   }
   const report = runV1Guards(guardInput)
 
@@ -233,7 +261,12 @@ export function BridgeV1({
           startedAt={sent.at}
           restored={false}
           customRpc={stored.customRpc[src.key]}
-          onFinal={(phase) => setStored(setHistoryStatus(stored, sent.txHash, phase))}
+          onFinal={(phase) => {
+            setStored(setHistoryStatus(stored, sent.txHash, phase))
+            // §4: a delivery confirmed on chain is the one thing that lifts an unverified route's
+            // amount cap, and it lifts it for 24 hours. Nothing a user can type does this.
+            if (phase === 'delivered') markRouteVerified({ protocol: 'lz-v1', srcChain: src.key, oft: info.oft, dstChain: sent.dstKey })
+          }}
           onNew={() => {
             setSent(null)
             onReset()
@@ -412,6 +445,20 @@ export function BridgeV1({
             </label>
           </div>
         ) : null}
+
+        <RiskPanel
+          risk={risk.data?.risk}
+          loading={risk.isFetching}
+          error={risk.error ? shortError(risk.error) : ''}
+          decimals={info.decimals}
+          symbol={info.symbol}
+          testLimit={testLimit}
+          onTestLimit={onTestLimit}
+          testLimitLD={limitLD}
+          amountLD={planData?.amounts.amountLD}
+          override={riskOverride}
+          onOverride={setRiskOverride}
+        />
 
         <V1Checks results={report.results} />
 

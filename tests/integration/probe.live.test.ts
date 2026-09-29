@@ -9,6 +9,14 @@ import { runGuards } from '@/core/guards'
 import { buildSendPlan, PlanError } from '@/core/plan'
 import { addressToBytes32 } from '@/core/encoding'
 import { evmRecipient } from '@/core/recipient'
+import { assessRisk, CHECK_IDS, emptyRiskInput, type CheckId, type CheckState, type RouteRisk } from '@/protocols/lz-risk/risk'
+
+/** Every §4 check ran and passed: OK and uncapped, so guard 22 is not what this test measures. */
+function cleanRisk(): RouteRisk {
+  const checks = {} as Record<CheckId, CheckState>
+  for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+}
 import { probeOft, ProbeError } from '@/core/probe'
 
 const TREAD_OFT = '0xd5EE1c81fE161e985dce6b90713c965f9979cf80'
@@ -47,12 +55,15 @@ describe('HyperEVM / TREAD OFT', () => {
     expect(plan.value).toBeGreaterThanOrEqual(plan.quote.nativeFee)
     expect(plan.value % evmByKey('hyperevm').feeStepWei).toBe(0n)
     expect(plan.quote.amountReceivedLD).toBe(plan.amounts.amountLD) // no OFT fee on this route
-    // Guards that do not need a wallet/simulation should all pass.
+    // Guards that do not need a wallet/simulation should all pass. Guard 22 is handed a clean §4
+    // verdict rather than a real one: this test is about the quotes and the pure guards, and the
+    // route checks have their own live test (tests/integration/lzRisk.live.test.ts).
     const rep = runGuards({
       walletAddress: USER, walletChainId: 999, srcChainId: 999, info, plan,
       recipientIsCustom: false, customRecipientConfirmed: false,
       tokenBalance: 10n ** 18n, nativeBalance: plan.value + 10n ** 16n, allowance: 0n, gasCostWei: 10n ** 15n,
       simulation: { ok: true }, selfCheck: { ok: true }, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
+      risk: cleanRisk(), testLimitLD: plan.amounts.amountLD,
     })
     expect(rep.results.filter((r) => !r.ok)).toEqual([])
   })

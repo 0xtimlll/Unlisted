@@ -12,6 +12,7 @@ import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type S
 import type { SourceInfo, SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
 import type { PeerBackResult } from './verify'
+import { sendAllowed, type RouteRisk } from '../protocols/lz-risk/risk'
 
 /** Hard cap on slippage: below this floor a high-fee or hostile OFT could keep most of the amount. */
 export const MAX_SLIPPAGE_BPS = 500
@@ -59,9 +60,14 @@ export type GuardCode =
   | 'no_executor_options_svm'
   | 'svm_dest_unknown'
   | 'fee_above_ceiling_unconfirmed'
+  | 'risk_unknown'
+  | 'risk_blocked'
+  | 'risk_over_test_limit'
+  | 'risk_test_limit_unset'
 
 /** Codes that mean "not known yet" (a read is in flight), not "wrong". The UI shows them muted. */
 export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
+  'risk_unknown',
   'plan_missing',
   'balance_unknown',
   'native_balance_unknown',
@@ -118,6 +124,15 @@ export type GuardInput = {
   peerBackUnavailableAccepted: boolean
   /** User read and accepted a fee above the source chain's ceiling (§6.21, guard 21). */
   highFeeAccepted?: boolean
+  /**
+   * §4 The route's risk verdict, once the checks have run. Absent means they have not, and guard 22
+   * treats that as pending rather than permission — a verdict nobody computed is not a verdict.
+   */
+  risk?: RouteRisk | undefined
+  /** §4 The test-amount limit in this token's own units, as a raw amount. */
+  testLimitLD?: bigint | undefined
+  /** §4 What the user typed to lift an overridable UNVERIFIED. Never lifts a hard-unchecked cap. */
+  riskOverride?: string | undefined
   /** Solana destinations only: what kind of account the recipient is (svm/recipient.ts). */
   svmRecipientClass?: SvmRecipientClass | undefined
   /** User explicitly accepted sending to a program-owned (PDA) Solana account. */
@@ -431,6 +446,40 @@ export function g21FeeCeiling(i: GuardInput): GuardResult {
   return ok(21)
 }
 
+/** True when §4's risk indicator has a runner for this route: both ends EVM. */
+export function riskCovers(i: GuardInput): boolean {
+  if (!i.plan) return false
+  if (i.plan.vm !== 'evm') return false
+  return byEid(i.plan.dstEid)?.vm === 'evm'
+}
+
+/**
+ * §4, guard 22: the route's own verdict decides how much may go, and nothing in the UI can argue.
+ *
+ * This is where the risk indicator stops being a colour and starts being a rule. Three answers:
+ * a verdict that has not been computed is pending; BLOCKED refuses every amount, test included;
+ * and a capped route refuses anything above the test limit. `sendAllowed` consults the typed
+ * confirmation word only where the verdict says it may — a cap that came from a hard check nobody
+ * could run is not one a word can lift, only a test transfer that arrives.
+ */
+export function g22Risk(i: GuardInput): GuardResult {
+  if (!i.plan) return fail(22, 'plan_missing')
+  // The indicator covers EVM-to-EVM LayerZero routes. A Solana source or destination has no runner
+  // yet — §4 scoped itself to v1 and V2 on EVM — so there is no verdict to enforce and guards 1–21
+  // are the whole rule there, exactly as they were before this guard existed. Stated as a boundary
+  // rather than left as an accident: the day a Solana runner lands, this line is what changes.
+  if (!riskCovers(i)) return ok(22)
+  if (!i.risk) return fail(22, 'risk_unknown')
+  // A capped route with no limit chosen sends nothing, and says which of the two it is: "over the
+  // limit" and "no limit set" are different things to do about it.
+  if (i.risk.testLimitOnly && i.testLimitLD === undefined && !(i.risk.overridable && i.riskOverride)) {
+    return fail(22, 'risk_test_limit_unset')
+  }
+  const permission = sendAllowed(i.risk, i.plan.amounts.amountLD, i.testLimitLD ?? 0n, i.riskOverride ?? '')
+  if (permission.allowed) return ok(22)
+  return permission.why === 'blocked' ? fail(22, 'risk_blocked') : fail(22, 'risk_over_test_limit', `${permission.limit}`)
+}
+
 export function runGuards(i: GuardInput): GuardReport {
   const g16 = g16Suspicious(i)
   const results: GuardResult[] = [
@@ -455,6 +504,7 @@ export function runGuards(i: GuardInput): GuardReport {
     g19RecipientVm(i),
     g20SvmSend(i),
     g21FeeCeiling(i),
+    g22Risk(i),
   ]
   return {
     results,
