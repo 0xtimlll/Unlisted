@@ -12,7 +12,7 @@ import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
-import { tryRecipient, type Recipient } from '@/core/recipient'
+import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import type { SuspiciousFlag } from '@/core/types'
 import { standardLabel } from '@/protocols/lz-v1/abi'
 import type { OftV1Info } from '@/protocols/lz-v1/detect'
@@ -162,7 +162,7 @@ export function BridgeV1({
     [planData, info.approvalRequired, allowance.data],
   )
 
-  const last6Ok = !recipientCustom || (recipient !== undefined && confirmLast6.toLowerCase() === recipient.display.slice(-6).toLowerCase())
+  const last6Ok = !recipientCustom || (recipient !== undefined && confirmsTail(recipient, confirmLast6))
 
   const guardInput: V1GuardInput = {
     walletAddress: wallet,

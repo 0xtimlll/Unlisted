@@ -56,3 +56,25 @@ export function tryRecipient(vm: 'evm' | 'svm', input: string): { ok: true; reci
     return { ok: false, code: e instanceof RecipientError ? e.code : 'not_an_address' }
   }
 }
+
+/** How many trailing characters the confirmation step asks for. */
+export const CONFIRM_TAIL = 6
+
+/**
+ * Does `typed` match the last six characters of the recipient the user entered?
+ *
+ * The UI must never print the expected value next to the field that asks for it: doing so turns
+ * the check into "can the user copy six characters" and proves nothing about whether the address
+ * in the field is the one they meant. The user is told to read the tail from the source they
+ * copied the address from (an exchange deposit page), which is the only thing that can catch a
+ * clipboard swap. That is a UI rule, and this function is the other half of it.
+ *
+ * Case matters on Solana and does not on EVM: in a base58 pubkey the case IS the address, while
+ * in an EIP-55 address it is only a checksum over an address that is really hex.
+ */
+export function confirmsTail(recipient: Recipient, typed: string): boolean {
+  const t = typed.trim()
+  if (t.length !== CONFIRM_TAIL) return false
+  const tail = recipient.display.slice(-CONFIRM_TAIL)
+  return recipient.vm === 'evm' ? t.toLowerCase() === tail.toLowerCase() : t === tail
+}
