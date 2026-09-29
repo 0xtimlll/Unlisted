@@ -16,8 +16,22 @@ export function toViemChain(c: EvmChainDef): Chain {
     name: c.name,
     nativeCurrency: { name: c.nativeSymbol, symbol: c.nativeSymbol, decimals: 18 },
     rpcUrls: { default: { http: [...c.rpcUrls] } },
+    blockExplorers: { default: explorerOf(c) },
     contracts: { multicall3: { address: MULTICALL3 } },
   }
+}
+
+/**
+ * The explorer wagmi hands to `wallet_addEthereumChain`.
+ *
+ * Derived from `explorerTxUrl` rather than stored as a field of its own, so the two can never
+ * drift: a wallet that adds Robinhood Chain from this app gets the same Blockscout the app's own
+ * links point at. The name is the host, because that is the part a user can check against the
+ * link they are about to be shown — a prettier label would be a claim we cannot verify.
+ */
+function explorerOf(c: EvmChainDef): { name: string; url: string } {
+  const u = new URL(c.explorerTxUrl)
+  return { name: u.hostname, url: u.origin }
 }
 
 export function makeReadClient(c: EvmChainDef, customRpc?: string): ReadClient {
