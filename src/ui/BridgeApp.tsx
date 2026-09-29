@@ -36,6 +36,9 @@ import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
 import { useAnalysis } from './useAnalysis'
+import { BridgeV1 } from './BridgeV1'
+import { useProbeV1 } from './v1Hooks'
+import { ProbeV1Error } from '@/protocols/lz-v1/detect'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -208,7 +211,27 @@ export function BridgeApp({
   const decodeProgramMismatch = !!svmDecode.data && !!svmProbe.data && svmProbe.data.info.programId !== svmDecode.data.programId
   const info: SourceInfo | undefined = svmSource ? (decodeProgramMismatch ? undefined : svmProbe.data?.info) : probe.data?.info
   const flags = useMemo(() => (svmSource ? (svmProbe.data?.flags ?? []) : (probe.data?.flags ?? [])), [svmSource, svmProbe.data, probe.data])
-  const probeError = svmSource ? svmProbe.error : probe.error
+  /**
+   * §3: LayerZero v1, asked ONLY after the V2 probe has finished declining.
+   *
+   * `not_oft` is the one V2 verdict that leaves a question open: the contract exists and answers,
+   * it is simply not a V2 OFT. Every other outcome — a V2 OFT, no contract, providers disagreeing
+   * — is already a complete answer, and v1 is never asked about it. The V2 path's order, cache key
+   * and behaviour are untouched.
+   */
+  const v2SaysNotOft = probe.error instanceof ProbeError && probe.error.code === 'not_oft'
+  const probeV1 = useProbeV1(evmSrc, v2SaysNotOft ? probeTarget : null, stored.customRpc[src.key], v2SaysNotOft && !svmSource)
+  const v1Info = probeV1.data?.info
+  const v1Flags = probeV1.data?.flags ?? []
+
+  const probeError = svmSource
+    ? svmProbe.error
+    : // While v1 is being asked, or once it has answered, "not an OFT" is not the verdict to show.
+      v2SaysNotOft && (probeV1.isFetching || v1Info)
+      ? null
+      : v2SaysNotOft && probeV1.error
+        ? probeV1.error
+        : probe.error
   const decodeData = svmSource ? svmDecode.data : decode.data
   const decodeError = svmSource ? svmDecode.error : decode.error
 
@@ -724,6 +747,12 @@ export function BridgeApp({
     </Panel>
   )
 
+  // A v1 contract gets its own form. Rendered instead of the V2 one rather than woven into it, so
+  // the screen people already use does not change shape because v1 exists.
+  if (v1Info && evmSrc && !sent) {
+    return <BridgeV1 src={evmSrc} info={v1Info} flags={v1Flags} stored={stored} setStored={setStored} onReset={reset} />
+  }
+
   return (
     <>
       <TwoColumn left={left} right={right} />
@@ -785,6 +814,7 @@ function PanelSection({ title, children }: { title: string; children: React.Reac
 }
 
 function describeError(d: Dict, e: unknown): string {
+  if (e instanceof ProbeV1Error) return d.v1Reject[e.code]
   if (e instanceof ProbeError) return d.errors[`probe_${e.code}`]
   if (e instanceof SvmDiscoverError) return d.errors[`svm_${e.code}`]
   if (e instanceof DecodeTxError) return d.errors[`decode_${e.code}`]

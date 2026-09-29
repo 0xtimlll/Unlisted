@@ -22,10 +22,15 @@ const WHITELIST = new Set(['approve', 'send'])
  *             AND src/core/abi.ts is checked below for never declaring a `transfer` of its own —
  *             together, no code path here can move tokens with a plain ERC-20 transfer.
  *   ccipSend  Router (contracts/src/v0.8/ccip/interfaces/IRouterClient.sol).
+ *   sendFrom  LayerZero v1 OFT (LayerZero-Labs/solidity-examples, IOFTCore / IOFTV2 /
+ *             IOFTWithFee). Confined to the v1 protocol module ALONE — not to a screen as well —
+ *             because src/protocols/lz-v1/send.ts takes wagmi's writeContractAsync as an
+ *             argument, so the tab that submits never names the function it is submitting.
  */
 const SCOPED_WRITES = {
   transfer: /^src\/(protocols\/wormhole-ntt\/|ui\/NttApp\.tsx$)/,
   ccipSend: /^src\/(protocols\/ccip\/|ui\/CcipApp\.tsx$)/,
+  sendFrom: /^src\/protocols\/lz-v1\//,
 }
 
 const writeAllowed = (name, rel) => WHITELIST.has(name) || (SCOPED_WRITES[name]?.test(rel) ?? false)
@@ -145,6 +150,16 @@ for (const file of walk(SRC)) {
       'getToken', 'getTokenDecimals', 'getRouter', 'isSupportedChain', 'getSupportedChains',
       'getRemoteToken', 'getRemotePools',
       'getCurrentOutboundRateLimiterState', 'getCurrentInboundRateLimiterState',
+      // LayerZero v1 (§3). All view — see src/protocols/lz-v1/abi.ts for the source of each.
+      'lzEndpoint', 'trustedRemoteLookup', 'getTrustedRemoteAddress', 'minDstGasLookup',
+      'payloadSizeLimitLookup', 'useCustomAdapterParams', 'estimateSendFee', 'quoteOFTFee',
+      'circulatingSupply',
+      // Endpoint V1 (LayerZero-Labs/LayerZero, ILayerZeroEndpoint.sol).
+      'getChainId', 'hasStoredPayload', 'estimateFees', 'getInboundNonce', 'getOutboundNonce',
+      'getSendVersion', 'getReceiveVersion',
+      // §3 the committed v1 chain table verifies itself against the UltraLightNode, which is the
+      // contract that stamps a chain id into every packet.
+      'localChainId',
     ])
     if (!writeAllowed(n, rel) && !KNOWN_READS.has(n)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
@@ -193,6 +208,7 @@ if (errors.length) {
   process.exit(1)
 }
 console.log(
-  'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer and ' +
-    `Router.ccipSend inside their own protocol modules; Solana: one oft.send + one submit in ${SVM_FILE})`,
+  'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer, ' +
+    'Router.ccipSend and the LayerZero v1 OFT.sendFrom inside their own protocol modules; ' +
+    `Solana: one oft.send + one submit in ${SVM_FILE})`,
 )

@@ -3,12 +3,14 @@
  * contract look legitimate (and "simulate" it successfully); two unrelated providers agreeing
  * is a much higher bar. Disagreement blocks; a second provider being down only warns.
  */
-import type { EvmChainDef } from './chains'
+import type { ChainKey, EvmChainDef } from './chains'
 import { makeReadClient, type ReadClient } from './client'
 import { decodeTx, DecodeTxError, type TxPrefill } from './decodeTx'
 import { sameAddress } from './encoding'
 import { probeOft, ProbeError, type ProbeResult } from './probe'
 import type { OftInfo } from './types'
+import { probeOftV1, ProbeV1Error, type ProbeV1Result } from '../protocols/lz-v1/detect'
+import type { OftV1Info } from '../protocols/lz-v1/detect'
 
 export type Pair = { primary: ReadClient; secondaries: ReadClient[] }
 
@@ -83,6 +85,50 @@ export async function decodeTxQuorum(pair: Pair, hash: string): Promise<Quorum<T
       agreed = true
     } else if (s.e instanceof DecodeTxError && s.e.code === 'not_send') {
       throw new DecodeTxError('rpc_mismatch', 'another RPC returned a different transaction')
+    }
+  }
+  return { ...p, crossChecked: agreed }
+}
+
+/**
+ * The same cross-check for LayerZero v1 (§3).
+ *
+ * A v1 contract earns more scrutiny than a V2 one, not less: there is no `peers` mapping to read
+ * back in one call, the recipient's wire shape depends on which standard the probe decided on, and
+ * an adapter's allowance is granted to whatever `token()` returned. So the standard, the token,
+ * the endpoint, the adapter-params policy and every trusted remote have to be the same on two
+ * unrelated providers, or nothing is sent.
+ */
+export function sameOftV1Info(a: OftV1Info, b: OftV1Info): boolean {
+  if (a.standard.wire !== b.standard.wire || a.standard.kind !== b.standard.kind) return false
+  if (!sameAddress(a.oft, b.oft) || !sameAddress(a.token, b.token) || !sameAddress(a.endpoint, b.endpoint)) return false
+  if (a.decimals !== b.decimals || a.sharedDecimals !== b.sharedDecimals || a.conversionRate !== b.conversionRate) return false
+  if (a.approvalRequired !== b.approvalRequired || a.adapterParamsRequired !== b.adapterParamsRequired) return false
+  if (a.srcV1ChainId !== b.srcV1ChainId) return false
+  if (a.routes.length !== b.routes.length) return false
+  const bm = new Map(b.routes.map((r) => [r.v1ChainId, r]))
+  return a.routes.every((r) => {
+    const o = bm.get(r.v1ChainId)
+    return !!o && o.trustedRemote.toLowerCase() === r.trustedRemote.toLowerCase() && o.minDstGas === r.minDstGas
+  })
+}
+
+export async function probeOftV1Quorum(pair: Pair, chain: ChainKey, address: string): Promise<Quorum<ProbeV1Result>> {
+  const [p, ...others] = await Promise.all([
+    probeOftV1(pair.primary, chain, address),
+    ...pair.secondaries.map((c) => settle(probeOftV1(c, chain, address))),
+  ])
+  let agreed = false
+  for (const s of others) {
+    if (s.ok) {
+      if (!sameOftV1Info(p.info, s.r.info)) throw new ProbeV1Error('rpc_mismatch', 'RPC providers disagree about this contract')
+      agreed = true
+    } else if (
+      s.e instanceof ProbeV1Error &&
+      // A definite "this is not that" from another provider is a disagreement, not an outage.
+      (s.e.code === 'not_lz_v1' || s.e.code === 'not_contract' || s.e.code === 'unknown_standard' || s.e.code === 'foreign_endpoint' || s.e.code === 'native_oft_unsupported')
+    ) {
+      throw new ProbeV1Error('rpc_mismatch', `another RPC: ${s.e.code}`)
     }
   }
   return { ...p, crossChecked: agreed }
