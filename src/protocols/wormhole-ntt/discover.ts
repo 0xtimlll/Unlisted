@@ -6,6 +6,11 @@
  * gate later treats as the anchor, which is the point — the manager is only ever reached through
  * something the token says, never through something a manager claims about itself.
  *
+ * The list is only ever a HINT here — it narrows the search and supplies the destination
+ * suggestions. A token it does not mention is still followed on chain, because `minter()` is a
+ * fact about the token and the list is a fact about an API. Everything found either way goes
+ * through the same gate in verify.ts, which does not consult the list at all.
+ *
  * A locking hub's token has no minter — by design, since nothing is minted there. For those the
  * search goes the other way round: the token on the DESTINATION chain names its own (burning)
  * manager, and that manager's peer for this chain is the hub. Both ends of that walk are still
@@ -62,22 +67,32 @@ export async function discoverNtt(
     return { kind: 'manager', manager: addr, token: getAddress(asManagerToken), via: 'given' }
   }
 
+  // Listed or not, the token is followed the same way. Listing only decides whether the
+  // destination-side walk below has a catalogue to work from.
   const listed = findListedToken(tokenList, chain, addr)
-  if (!listed) return { kind: 'unknown', reason: 'not_listed' }
+  const token = listed ? listed.address : addr
 
-  const minter = await read(() => client.readContract({ address: listed.address, abi: nttTokenAnchorAbi, functionName: 'minter' }))
+  const minter = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'minter' }))
   if (minter) {
     const manager = getAddress(minter)
     // The manager must agree that it manages this token; the gate re-checks all of this anyway.
     const back = await read(() => client.readContract({ address: manager, abi: nttManagerAbi, functionName: 'token' }))
-    if (back && isAddressEqual(getAddress(back), listed.address)) return { kind: 'manager', manager, token: listed.address, via: 'minter' }
+    if (back && isAddressEqual(getAddress(back), token)) return { kind: 'manager', manager, token, via: 'minter' }
   }
 
-  // No minter here: this is most likely a locking hub. Walk in from the destination side.
-  const viaPeer = dst ? await hubFromPeer(dst, tokenList, listed.address) : undefined
-  if (viaPeer) return { kind: 'manager', manager: viaPeer, token: listed.address, via: 'peer' }
+  // No minter here: this is most likely a locking hub. Walk in from the destination side. That
+  // walk needs the catalogue to know which address the same token has over there, so it is the one
+  // step the list is genuinely required for.
+  const viaPeer = dst && listed ? await hubFromPeer(dst, tokenList, token) : undefined
+  if (viaPeer) return { kind: 'manager', manager: viaPeer, token, via: 'peer' }
 
-  return { kind: 'token_without_minter', token: listed.address }
+  // A contract that answers neither token() nor minter() and is not in the list is not something
+  // this tab can follow — say which of the two it is, so the screen can explain it.
+  if (!listed) {
+    const isContract = await read(() => client.getCode({ address: addr }))
+    return { kind: 'unknown', reason: !isContract || isContract === '0x' ? 'unreadable' : 'not_listed' }
+  }
+  return { kind: 'token_without_minter', token }
 }
 
 /**

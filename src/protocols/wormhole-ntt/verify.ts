@@ -3,24 +3,33 @@
  *
  * The manager is the spender. A contract that merely answers `token()` with the right address is
  * trivial to deploy, so naming the token proves nothing — the TOKEN has to name the manager back.
- * All four of these must hold, and a check that cannot be completed counts as a failure:
+ * All of these must hold ON CHAIN, and a check that cannot be completed counts as a failure:
  *
- *   1. The token is in Wormhole's official NTT token list for this chain, and
- *      manager.token() is exactly that listed address.
- *   2. A token-side anchor on at least ONE side of the pair: the listed token names the manager as
- *      its minter — minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens,
+ *   1. The manager agrees about its own identity: token(), chainId() for this chain, getMode(),
+ *      tokenDecimals() — all readable, and the chain id is the one we are actually on.
+ *   2. A token-side anchor on at least ONE side of the pair: the token names the manager as its
+ *      minter — minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens,
  *      with the role read from the token itself. A locking hub has no minter, so it is confirmed
  *      transitively through the burning spoke's anchor.
  *   3. Peers in both directions: source.getPeer(dst) == destination manager AND
  *      destination.getPeer(src) == source manager, read on the destination's own RPC.
- *   4. A Wormhole transceiver: it reports the Wormhole type and points at the core bridge this
- *      chain's official address, and it has automatic relaying enabled for the destination.
+ *   4. A Wormhole transceiver: it reports the Wormhole type and points at the core bridge whose
+ *      address is in OUR committed config, and it has automatic relaying enabled for the
+ *      destination. That committed address is the anchor the whole chain of evidence hangs from.
+ *
+ * Wormholescan's token list is NOT part of this. It is a search hint — it helps find a manager
+ * from a token address — and it can never make a verdict better: a token missing from it is
+ * verified or refused on exactly the same on-chain evidence as one that is in it. It used to be
+ * check 1, which put an external API in the path of an approve; CLAUDE.md rule 1 says the opposite,
+ * and the committed core-bridge address is the anchor that rule asks for.
  *
  * Wormholescan's decoded operations are deliberately NOT evidence here: `sourceNttManager` is
  * written by the manager itself, so one self-made transfer would launder a fake. They are shown as
  * context in the details and never feed a decision.
  */
 import { getAddress, isAddressEqual, type Address } from 'viem'
+import { erc20Abi } from '../../core/abi'
+import { sanitizeLabel } from '../../core/text'
 import type { ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
 import { isZeroBytes32, peerToAddress } from '../../core/encoding'
@@ -30,13 +39,11 @@ import { findListedToken, type NttToken } from './tokenList'
 
 export type NttRejectionCode =
   | 'chain_unsupported'
-  | 'token_not_listed'
   | 'manager_token_mismatch'
   | 'manager_wrong_chain_id'
   | 'peer_missing'
   | 'peer_not_evm'
   | 'peer_mismatch'
-  | 'dst_token_not_listed'
   | 'no_token_anchor'
   | 'no_wormhole_transceiver'
   | 'transceiver_wrong_core_bridge'
@@ -51,7 +58,13 @@ export type VerifiedNttManager = {
   chain: ChainKey
   manager: Address
   token: Address
+  /** ERC-20 symbol(), read from the token itself and stripped of layout controls. */
   tokenSymbol: string
+  /**
+   * Whether Wormhole's published list happens to mention this token. Context for the screen only —
+   * nothing in this verdict depends on it, in either direction.
+   */
+  listed: boolean
   mode: NttMode
   tokenDecimals: number
   dst: {
@@ -103,12 +116,18 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   }
   const base = { address: manager, abi: nttManagerAbi } as const
 
-  // ---- 1. the manager's own answers, and the official token list ------------
-  const token = await read(() => p.srcClient.readContract({ ...base, functionName: 'token' }))
-  if (!token) return fail('unverifiable', 'manager.token()')
-  const listed = findListedToken(p.tokenList, p.srcChain, token)
-  if (!listed) return fail('token_not_listed', token)
-  if (!isAddressEqual(getAddress(token), listed.address)) return fail('manager_token_mismatch', token)
+  // ---- 1. the manager's own answers ----------------------------------------
+  const tokenRaw = await read(() => p.srcClient.readContract({ ...base, functionName: 'token' }))
+  if (!tokenRaw) return fail('unverifiable', 'manager.token()')
+  let token: Address
+  try {
+    token = getAddress(tokenRaw)
+  } catch {
+    return fail('manager_token_mismatch', tokenRaw)
+  }
+  // Wormhole's list is consulted for CONTEXT only, after the fact. Absence is not a refusal and
+  // presence is not a pass: the on-chain evidence below is the whole gate.
+  const listed = !!findListedToken(p.tokenList, p.srcChain, token)
 
   const chainIdOnChain = await read(() => p.srcClient.readContract({ ...base, functionName: 'chainId' }))
   if (chainIdOnChain === undefined) return fail('unverifiable', 'manager.chainId()')
@@ -136,16 +155,22 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   const backAddress = peerToAddress(backPeer.peerAddress)
   if (!backAddress || !isAddressEqual(backAddress, manager)) return fail('peer_mismatch', backPeer.peerAddress)
 
-  const dstToken = await read(() => p.dstClient.readContract({ ...dstBase, functionName: 'token' }))
-  if (!dstToken) return fail('unverifiable', 'destination token()')
-  const dstListed = findListedToken(p.tokenList, p.dstChain, dstToken)
-  if (!dstListed) return fail('dst_token_not_listed', dstToken)
+  const dstTokenRaw = await read(() => p.dstClient.readContract({ ...dstBase, functionName: 'token' }))
+  if (!dstTokenRaw) return fail('unverifiable', 'destination token()')
+  let dstToken: Address
+  try {
+    dstToken = getAddress(dstTokenRaw)
+  } catch {
+    return fail('unverifiable', 'destination token() is not an address')
+  }
 
   // ---- 2. the token-side anchor, on either side -----------------------------
-  const srcAnchor = await tokenAnchors(p.srcClient, listed.address, manager)
-  const dstAnchor = srcAnchor ? undefined : await tokenAnchors(p.dstClient, dstListed.address, dstManager)
+  // The anchor is read from the token the MANAGER named, not from a listed address: the two used
+  // to be required equal, and the equality was the only thing the list contributed.
+  const srcAnchor = await tokenAnchors(p.srcClient, token, manager)
+  const dstAnchor = srcAnchor ? undefined : await tokenAnchors(p.dstClient, dstToken, dstManager)
   const anchor = srcAnchor ? ({ side: 'source' as const, kind: srcAnchor }) : dstAnchor ? ({ side: 'destination' as const, kind: dstAnchor }) : undefined
-  if (!anchor) return fail('no_token_anchor', `${listed.address} / ${dstListed.address}`)
+  if (!anchor) return fail('no_token_anchor', `${token} / ${dstToken}`)
 
   // ---- 4. a Wormhole transceiver with automatic delivery --------------------
   const transceivers = await read(() => p.srcClient.readContract({ ...base, functionName: 'getTransceivers' }))
@@ -182,16 +207,22 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   if (viaRelayer === undefined && viaSpecial === undefined) return fail('unverifiable', 'relaying getters unavailable')
   if (viaRelayer !== true && viaSpecial !== true) return fail('manual_delivery_only', p.dstChain)
 
+  // The symbol shown next to an amount comes from the token contract, like every other fact here.
+  // A token that does not answer symbol() is still bridgeable; it just has no name to print.
+  const symbolRaw = await read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'symbol' }))
+  const symbol = sanitizeLabel(symbolRaw ?? '')
+
   return {
     ok: true,
     verified: {
       chain: p.srcChain,
       manager,
-      token: listed.address,
-      tokenSymbol: listed.token.symbol,
+      token,
+      tokenSymbol: symbol,
+      listed,
       mode,
       tokenDecimals: Number(tokenDecimals),
-      dst: { chain: p.dstChain, wormholeChainId: dstWh, manager: dstManager, token: dstListed.address, tokenDecimals: peer.tokenDecimals },
+      dst: { chain: p.dstChain, wormholeChainId: dstWh, manager: dstManager, token: dstToken, tokenDecimals: peer.tokenDecimals },
       transceiver: wormholeTransceiver,
       anchor,
     },
@@ -252,6 +283,9 @@ export function sameNttVerdict(a: VerifiedNttManager, b: VerifiedNttManager): bo
     isAddressEqual(a.token, b.token) &&
     isAddressEqual(a.transceiver, b.transceiver) &&
     a.mode === b.mode &&
+    // `listed` is deliberately absent: it comes from one shared HTTP response, not from either
+    // provider, so comparing it would compare the API with itself.
+
     a.tokenDecimals === b.tokenDecimals &&
     a.dst.chain === b.dst.chain &&
     a.dst.wormholeChainId === b.dst.wormholeChainId &&
