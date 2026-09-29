@@ -12,7 +12,7 @@ import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
 import { DecodeTxError } from '@/core/decodeTx'
 import { approvePlan, isPending, runGuards, selfCheck, type GuardInput } from '@/core/guards'
-import { tryRecipient, type Recipient } from '@/core/recipient'
+import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { SvmDiscoverError } from '@/core/svm/errors'
 import type { SourceInfo, SuspiciousFlag } from '@/core/types'
 import { planSvmOptions } from '@/core/options'
@@ -329,8 +329,7 @@ export function BridgeApp({
   const recipient: Recipient | undefined = recipientResult?.ok ? recipientResult.recipient : undefined
   const recipientError = recipientResult && !recipientResult.ok ? d.errors[`recipient_${recipientResult.code}`] : ''
   const recipientIsCustom = crossVm || dest.recipientCustom
-  const recipientConfirmed =
-    recipientIsCustom && recipient !== undefined && dest.confirmLast6.trim().toLowerCase() === recipient.display.slice(-6).toLowerCase()
+  const recipientConfirmed = recipientIsCustom && recipient !== undefined && confirmsTail(recipient, dest.confirmLast6)
 
   let amountError = ''
   if (info && dest.amountInput.trim() !== '') {
@@ -706,6 +705,7 @@ export function BridgeApp({
             }}
             dstVm={dstVm}
             recipientError={recipientError}
+            recipientConfirmed={recipientConfirmed}
             svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
           />
         </>

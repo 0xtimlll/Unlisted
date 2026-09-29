@@ -111,7 +111,7 @@ export const en = {
     recipient: 'Recipient',
     yourWallet: '= your wallet',
     otherAddress: 'I am sending to a different address',
-    confirmLast6: 'Confirm the last 6 characters of the recipient:',
+    confirmLast6: 'Type the last 6 characters of the address, checking them against the source you copied it from (an exchange deposit page, for example)',
     advanced: 'Advanced',
     slippage: 'Slippage (bps)',
     feeBuffer: 'Fee buffer (%)',
@@ -699,7 +699,7 @@ export const en = {
     warnPeerBack: 'The destination could not be asked whether it trusts this contract back. That check is what tells a real bridge from a look-alike.',
     confirmPeerBack: 'I understand this could not be checked',
     confirmRecipient: 'I am sending to an address that is not my wallet',
-    confirmLast6: 'Type the last 6 characters of that address to confirm',
+    confirmLast6: 'Type the last 6 characters of the address, checking them against the source you copied it from (an exchange deposit page, for example)',
   },
   v1Reject: {
     not_contract: 'There is no contract at that address on this network.',

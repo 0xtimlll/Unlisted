@@ -15,7 +15,7 @@ import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains
 import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
-import { tryRecipient, type Recipient } from '@/core/recipient'
+import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { nttManagerAbi } from '@/protocols/wormhole-ntt/abi'
 import { isNttPending, nttApprovePlan, runNttGuards, type NttGuardInput } from '@/protocols/wormhole-ntt/guards'
@@ -187,7 +187,7 @@ export function NttApp({
       : undefined
   const recipient: Recipient | undefined = recipientResult?.ok ? recipientResult.recipient : undefined
   const recipientError = recipientResult && !recipientResult.ok ? d.errors[`recipient_${recipientResult.code}`] : ''
-  const recipientConfirmed = recipientCustom && recipient !== undefined && confirmLast6.trim().toLowerCase() === recipient.display.slice(-6).toLowerCase()
+  const recipientConfirmed = recipientCustom && recipient !== undefined && confirmsTail(recipient, confirmLast6)
 
   const plan = useNttPlan({ verification: verification.data, sender: wallet, recipient, amountRaw, customRpc: stored.customRpc })
   const planData = plan.data
@@ -475,7 +475,7 @@ export function NttApp({
             {recipientError && recipientInput.trim() !== '' ? <div className="text-xs text-danger">{recipientError}</div> : null}
             {recipient ? (
               <label className="block text-xs">
-                <span className="text-muted">{d.step2.confirmLast6}</span> <span className="mono text-ink">…{recipient.display.slice(-6).toLowerCase()}</span>
+                <span className="text-muted">{d.step2.confirmLast6}</span>
                 <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} maxLength={6} className={`mono mt-1 max-w-36 ${recipientConfirmed ? 'border-ok' : ''}`} />
               </label>
             ) : null}

@@ -8,7 +8,7 @@ import type { ReadClient } from '@/core/client'
 import { addressToBytes32 } from '@/core/encoding'
 import { runGuards } from '@/core/guards'
 import { buildSendPlan, PlanError } from '@/core/plan'
-import { evmRecipient, RecipientError, svmRecipient, tryRecipient, type Recipient } from '@/core/recipient'
+import { confirmsTail, evmRecipient, RecipientError, svmRecipient, tryRecipient, type Recipient } from '@/core/recipient'
 import { evmByKey } from '@/core/chains'
 import { encodeBase58 } from '@/core/svm/base58'
 import { goodInput, OTHER, TREAD_ADAPTER, TREAD_OFT, treadOftInfo, treadPlan, WALLET } from './fixtures'
@@ -160,5 +160,34 @@ describe('guard 19/20 on a Solana destination', () => {
     expect(treadPlan().recipientVm).toBe('evm')
     expect(treadPlan().recipient).toBe(addressToBytes32(WALLET))
     void TREAD_OFT
+  })
+})
+
+describe('confirmsTail: the tail the UI must never print', () => {
+  const evm = evmRecipient(WALLET)
+  const svm = svmRecipient(SOL_WALLET)
+
+  it('accepts the last six characters of an EVM address in any case (EIP-55 case is a checksum)', () => {
+    const tail = evm.display.slice(-6)
+    expect(confirmsTail(evm, tail)).toBe(true)
+    expect(confirmsTail(evm, tail.toLowerCase())).toBe(true)
+    expect(confirmsTail(evm, tail.toUpperCase())).toBe(true)
+    expect(confirmsTail(evm, ` ${tail} `)).toBe(true)
+  })
+
+  it('is case-SENSITIVE on Solana, where the case is part of the address', () => {
+    const tail = svm.display.slice(-6)
+    expect(confirmsTail(svm, tail)).toBe(true)
+    const flipped = tail === tail.toLowerCase() ? tail.toUpperCase() : tail.toLowerCase()
+    expect(flipped).not.toBe(tail)
+    expect(confirmsTail(svm, flipped)).toBe(false)
+  })
+
+  it('refuses a wrong tail, a short tail and an empty one — no length is a free pass', () => {
+    expect(confirmsTail(evm, '')).toBe(false)
+    expect(confirmsTail(evm, evm.display.slice(-5))).toBe(false)
+    expect(confirmsTail(evm, evm.display.slice(-7))).toBe(false)
+    expect(confirmsTail(evm, 'abcdef')).toBe(false)
+    expect(confirmsTail(svm, '')).toBe(false)
   })
 })

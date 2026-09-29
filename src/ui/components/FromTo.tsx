@@ -89,6 +89,11 @@ export function ToBox(p: {
   dstVm: 'evm' | 'svm' | undefined
   /** Validation message for the typed recipient (core/recipient.ts), or ''. */
   recipientError: string
+  /**
+   * Whether the typed tail matches (core/recipient.confirmsTail). Computed by the screen, which
+   * holds the parsed recipient, so the check has ONE source of truth — this box only styles it.
+   */
+  recipientConfirmed: boolean
   /** Error from Solana-side discovery, or ''. */
   svmError: string
 }) {
@@ -103,8 +108,7 @@ export function ToBox(p: {
   const custom = crossVm || s.recipientCustom
   const typed = s.recipientInput.trim()
   const recipientValid = !custom || (typed !== '' && p.recipientError === '')
-  const last6 = custom && recipientValid ? typed.slice(-6).toLowerCase() : ''
-  const confirmed = !custom || (last6 !== '' && s.confirmLast6.trim().toLowerCase() === last6)
+  const confirmed = !custom || p.recipientConfirmed
 
   return (
     <Box>
@@ -164,7 +168,7 @@ export function ToBox(p: {
           {crossVm && p.dstVm === 'evm' ? <div className="text-xs text-muted">{d.step3.evmRecipientHint}</div> : null}
           {recipientValid && typed !== '' ? (
             <label className="block text-xs">
-              <span className="text-muted">{d.step2.confirmLast6}</span> <span className="mono text-ink">…{last6}</span>
+              <span className="text-muted">{d.step2.confirmLast6}</span>
               <Input
                 value={s.confirmLast6}
                 onChange={(e) => set({ confirmLast6: e.target.value })}
