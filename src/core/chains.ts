@@ -17,13 +17,28 @@ export type ChainKey =
   | 'robinhood'
   | 'solana'
 
+/**
+ * One RPC endpoint and the operator behind it. `provider` is the operator's domain, so it matches
+ * what providerOfUrl() derives for a user-supplied RPC and the two vocabularies cannot drift.
+ */
+export type RpcEndpoint = { url: string; provider: string }
+
 type ChainCommon = {
   key: ChainKey
   name: string
   /** LayerZero V2 endpoint id. */
   eid: number
   nativeSymbol: string
-  /** Public RPCs, tried in order. A user-supplied RPC (settings) goes first. */
+  /**
+   * Public RPCs, tried in order. A user-supplied RPC (settings) goes first.
+   *
+   * Each one names the OPERATOR that answers it, because a cross-check counts operators, not
+   * URLs. Two hostnames belonging to one company are one opinion: if that company is wrong — or
+   * compromised, or simply serving a stale fork — both answers are wrong together, and reporting
+   * them as "cross-checked" would be a lie told by arithmetic. core/quorum.ts enforces this.
+   */
+  rpcs: readonly RpcEndpoint[]
+  /** Derived from `rpcs`, same order. Everything that only needs the URLs reads this. */
   rpcUrls: readonly string[]
   /** Prefix; append the tx hash. */
   explorerTxUrl: string
@@ -79,17 +94,41 @@ export type ChainDef = EvmChainDef | SvmChainDef
  * the browser silently blocks. A value that is not an https URL is dropped rather than shipped:
  * one broken entry here would take the whole chain's reads down.
  */
-function envRpc(value: string | undefined): readonly string[] {
+function envRpc(value: string | undefined): readonly RpcEndpoint[] {
   if (!value) return []
   try {
     const u = new URL(value.trim())
-    return u.protocol === 'https:' ? [u.toString()] : []
+    // Its operator is whatever host was configured — never one of the registry's, so it always
+    // counts as an independent opinion against them.
+    return u.protocol === 'https:' ? [{ url: u.toString(), provider: providerOfHost(u.hostname) }] : []
   } catch {
     return []
   }
 }
 
-export const CHAINS: readonly ChainDef[] = [
+/** The operator a hostname belongs to: its registrable domain, near enough for this purpose. */
+export function providerOfHost(hostname: string): string {
+  const parts = hostname.toLowerCase().split('.').filter(Boolean)
+  return parts.length <= 2 ? parts.join('.') : parts.slice(-2).join('.')
+}
+
+/**
+ * The operator behind a URL. A registry URL answers with its declared provider; anything else
+ * (a user's own RPC) falls back to the host's registrable domain.
+ */
+export function providerOfUrl(url: string): string {
+  for (const c of CHAINS) for (const r of c.rpcs) if (r.url === url) return r.provider
+  try {
+    return providerOfHost(new URL(url).hostname)
+  } catch {
+    return url
+  }
+}
+
+/** The registry as written: every field except `rpcUrls`, which is derived from `rpcs` below. */
+type ChainSpec = (Omit<EvmChainDef, 'rpcUrls'> | Omit<SvmChainDef, 'rpcUrls'>) & { rpcs: readonly RpcEndpoint[] }
+
+const CHAIN_SPECS: readonly ChainSpec[] = [
   {
     vm: 'evm',
     key: 'ethereum',
@@ -97,7 +136,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 1,
     eid: 30101,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
+    rpcs: [{ url: 'https://ethereum-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://eth.drpc.org', provider: 'drpc.org' }],
     explorerTxUrl: 'https://etherscan.io/tx/',
     explorerAddrUrl: 'https://etherscan.io/address/',
     feeStepWei: 10n ** 14n, // 0.0001 ETH
@@ -111,7 +150,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 42161,
     eid: 30110,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://arb1.arbitrum.io/rpc', provider: 'arbitrum.io' }, { url: 'https://arbitrum-one-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://arbiscan.io/tx/',
     explorerAddrUrl: 'https://arbiscan.io/address/',
     feeStepWei: 10n ** 13n,
@@ -125,7 +164,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 10,
     eid: 30111,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://mainnet.optimism.io', 'https://optimism-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://mainnet.optimism.io', provider: 'optimism.io' }, { url: 'https://optimism-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://optimistic.etherscan.io/tx/',
     explorerAddrUrl: 'https://optimistic.etherscan.io/address/',
     feeStepWei: 10n ** 13n,
@@ -139,7 +178,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 8453,
     eid: 30184,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://mainnet.base.org', provider: 'base.org' }, { url: 'https://base-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://basescan.org/tx/',
     explorerAddrUrl: 'https://basescan.org/address/',
     feeStepWei: 10n ** 13n,
@@ -153,7 +192,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 56,
     eid: 30102,
     nativeSymbol: 'BNB',
-    rpcUrls: ['https://bsc-dataseed.bnbchain.org', 'https://bsc-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://bsc-dataseed.bnbchain.org', provider: 'bnbchain.org' }, { url: 'https://bsc-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://bscscan.com/tx/',
     explorerAddrUrl: 'https://bscscan.com/address/',
     feeStepWei: 10n ** 15n, // 0.001 BNB
@@ -167,7 +206,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 137,
     eid: 30109,
     nativeSymbol: 'POL',
-    rpcUrls: ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'],
+    rpcs: [{ url: 'https://polygon-bor-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://polygon.drpc.org', provider: 'drpc.org' }],
     explorerTxUrl: 'https://polygonscan.com/tx/',
     explorerAddrUrl: 'https://polygonscan.com/address/',
     feeStepWei: 10n ** 16n, // 0.01 POL
@@ -181,7 +220,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 43114,
     eid: 30106,
     nativeSymbol: 'AVAX',
-    rpcUrls: ['https://api.avax.network/ext/bc/C/rpc', 'https://avalanche-c-chain-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://api.avax.network/ext/bc/C/rpc', provider: 'avax.network' }, { url: 'https://avalanche-c-chain-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://snowtrace.io/tx/',
     explorerAddrUrl: 'https://snowtrace.io/address/',
     feeStepWei: 10n ** 15n,
@@ -195,7 +234,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 999,
     eid: 30367,
     nativeSymbol: 'HYPE',
-    rpcUrls: ['https://rpc.hyperliquid.xyz/evm', 'https://rpc.hypurrscan.io', 'https://hyperliquid-json-rpc.stakely.io'],
+    rpcs: [{ url: 'https://rpc.hyperliquid.xyz/evm', provider: 'hyperliquid.xyz' }, { url: 'https://rpc.hypurrscan.io', provider: 'hypurrscan.io' }, { url: 'https://hyperliquid-json-rpc.stakely.io', provider: 'stakely.io' }],
     explorerTxUrl: 'https://hyperevmscan.io/tx/',
     explorerAddrUrl: 'https://hyperevmscan.io/address/',
     feeStepWei: 10n ** 16n, // 0.01 HYPE
@@ -209,7 +248,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 59144,
     eid: 30183,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://rpc.linea.build', 'https://linea-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://rpc.linea.build', provider: 'linea.build' }, { url: 'https://linea-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://lineascan.build/tx/',
     explorerAddrUrl: 'https://lineascan.build/address/',
     feeStepWei: 10n ** 13n,
@@ -223,7 +262,7 @@ export const CHAINS: readonly ChainDef[] = [
     chainId: 534352,
     eid: 30214,
     nativeSymbol: 'ETH',
-    rpcUrls: ['https://rpc.scroll.io', 'https://scroll-rpc.publicnode.com'],
+    rpcs: [{ url: 'https://rpc.scroll.io', provider: 'scroll.io' }, { url: 'https://scroll-rpc.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://scrollscan.com/tx/',
     explorerAddrUrl: 'https://scrollscan.com/address/',
     feeStepWei: 10n ** 13n,
@@ -240,7 +279,7 @@ export const CHAINS: readonly ChainDef[] = [
     nativeSymbol: 'ETH',
     // The operator publishes one RPC and rate-limits it; drpc serves the chain as a second opinion,
     // which the quorum checks need (one provider must never be the only one asked about a spender).
-    rpcUrls: [...envRpc(process.env['NEXT_PUBLIC_RPC_ROBINHOOD']), 'https://rpc.mainnet.chain.robinhood.com', 'https://robinhood.drpc.org'],
+    rpcs: [...envRpc(process.env['NEXT_PUBLIC_RPC_ROBINHOOD']), { url: 'https://rpc.mainnet.chain.robinhood.com', provider: 'robinhood.com' }, { url: 'https://robinhood.drpc.org', provider: 'drpc.org' }],
     explorerTxUrl: 'https://robinhoodchain.blockscout.com/tx/',
     explorerAddrUrl: 'https://robinhoodchain.blockscout.com/address/',
     feeStepWei: 10n ** 13n,
@@ -259,14 +298,20 @@ export const CHAINS: readonly ChainDef[] = [
     // Public Solana RPCs that accept browser origins without a key are rare: api.mainnet-beta
     // rejects requests carrying an Origin header, drpc/ankr/helius need keys. Both entries below
     // are publicnode, i.e. one provider — the UI recommends a personal RPC for Solana.
-    rpcUrls: ['https://solana-rpc.publicnode.com', 'https://solana.publicnode.com'],
+    rpcs: [{ url: 'https://solana-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://solana.publicnode.com', provider: 'publicnode.com' }],
     explorerTxUrl: 'https://solscan.io/tx/',
     explorerAddrUrl: 'https://solscan.io/account/',
     feeStepLamports: 10_000n,
     srcConfirmationsHint: 1,
     feeCeiling: 10n ** 9n, // 1 SOL
   },
-] as const
+]
+
+/**
+ * `rpcUrls` is filled in from `rpcs` here and nowhere else, so the two can never disagree: there is
+ * exactly one place a URL is written down, and it is the one that also names its operator.
+ */
+export const CHAINS: readonly ChainDef[] = CHAIN_SPECS.map((c) => ({ ...c, rpcUrls: c.rpcs.map((r) => r.url) }) as ChainDef)
 
 export const ALL_EIDS: readonly number[] = CHAINS.map((c) => c.eid)
 

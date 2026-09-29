@@ -79,7 +79,7 @@ export function usePeerBack(srcEid: number, ours: Address | Hex | undefined, dst
     queryKey: ['peerBack', srcEid, ours, dstEid, peer],
     queryFn: async () => {
       // Ask every provider; a mismatch anywhere wins, then any definite "ok", else unavailable.
-      const all = await Promise.all([pair!.primary, ...pair!.secondaries].map((c) => checkPeerBack(c, peer!, srcEid, ours!)))
+      const all = await Promise.all([pair!.primary, ...pair!.secondaries.map((s) => s.client)].map((c) => checkPeerBack(c, peer!, srcEid, ours!)))
       return all.find((r) => r.status === 'mismatch') ?? all.find((r) => r.status === 'ok') ?? all[0]!
     },
     enabled: !!pair && !!ours && !!peer && dstEid !== undefined,
