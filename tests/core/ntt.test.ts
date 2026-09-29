@@ -185,9 +185,37 @@ describe('the four-part gate', () => {
     }
   })
 
-  it('refuses a token that is not in the official list', async () => {
+  it('verifies a token Wormhole has never listed, on the on-chain evidence alone', async () => {
+    // An empty catalogue — the API is down, or simply does not know this token. Every on-chain
+    // fact is unchanged, so the verdict is unchanged; only `listed` differs.
+    const r = await verifyNttManager({
+      srcChain: 'ethereum',
+      dstChain: 'bsc',
+      manager: MANAGER,
+      srcClient: mockClient(srcAnswers()),
+      dstClient: mockClient(dstAnswers()),
+      tokenList: [],
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.verified.listed).toBe(false)
+      expect(r.verified.manager).toBe(MANAGER)
+      expect(r.verified.anchor).toEqual({ side: 'source', kind: 'minter' })
+    }
+    // And the listed run reaches the same verdict, differing only in that flag.
+    const listedRun = await verify(srcAnswers(), dstAnswers())
+    expect(listedRun.ok).toBe(true)
+    if (listedRun.ok && r.ok) {
+      expect(listedRun.verified.listed).toBe(true)
+      expect({ ...listedRun.verified, listed: false }).toEqual(r.verified)
+    }
+  })
+
+  it('refuses a manager whose token does not name it back — on chain, not by catalogue', async () => {
+    // The manager claims a token that never vouches for it. Wormhole's list has nothing to do
+    // with this refusal; the missing anchor is the whole of it.
     const r = await verify(srcAnswers({ [`${MANAGER.toLowerCase()}.token`]: DST_TOKEN }), dstAnswers())
-    expect(r).toMatchObject({ ok: false, code: 'token_not_listed' })
+    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
   })
 
   it('refuses when the peers do not point at each other', async () => {
@@ -266,6 +294,7 @@ const verifiedFixture = (): NttVerification => ({
     manager: MANAGER,
     token: TOKEN,
     tokenSymbol: 'W',
+  listed: true,
     mode: 'burning',
     tokenDecimals: 18,
     dst: { chain: 'bsc', wormholeChainId: BSC_WH, manager: DST_MANAGER, token: DST_TOKEN, tokenDecimals: 18 },
@@ -439,7 +468,7 @@ describe('the gate, asked twice (RPC quorum)', () => {
   it('blocks when the second provider returns a definite rejection of its own', async () => {
     const second = srcAnswers({ [`${MANAGER.toLowerCase()}.token`]: DST_TOKEN })
     const r = await quorum(srcAnswers(), dstAnswers(), { src: second, dst: dstAnswers() })
-    expect(r).toMatchObject({ ok: false, code: 'token_not_listed' })
+    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
   })
 
   it('never turns the primary’s rejection into a pass', async () => {

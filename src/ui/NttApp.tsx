@@ -151,14 +151,13 @@ export function NttApp({
   }
 
   const tokenList = useNttTokenList()
-  const discovery = useNttDiscovery(srcKey, dstChain, target, tokenList.data, stored.customRpc)
+  const discovery = useNttDiscovery(srcKey, dstChain, target, tokenList.data?.tokens, stored.customRpc)
   const manager = discovery.data?.kind === 'manager' ? discovery.data.manager : undefined
 
   const listedToken = useMemo(() => {
     const t = discovery.data?.kind === 'manager' ? discovery.data.token : discovery.data?.kind === 'token_without_minter' ? discovery.data.token : undefined
     if (!t || !tokenList.data) return undefined
-    const platform = tokenList.data.find((x) => Object.values(x.platforms).some((a) => a.toLowerCase() === t.toLowerCase()))
-    return platform
+    return tokenList.data.tokens.find((x) => Object.values(x.platforms).some((a) => a.toLowerCase() === t.toLowerCase()))
   }, [discovery.data, tokenList.data])
 
   const destinations = useMemo(
@@ -166,7 +165,7 @@ export function NttApp({
     [listedToken, srcKey],
   )
 
-  const verification = useNttVerification(srcKey, dstChain, manager, tokenList.data, stored.customRpc)
+  const verification = useNttVerification(srcKey, dstChain, manager, tokenList.data?.tokens, stored.customRpc)
   const verified = verification.data?.ok ? verification.data.verified : undefined
 
   // ---- amount & recipient ------------------------------------------------------
@@ -385,9 +384,9 @@ export function NttApp({
             <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
           </div>
         ) : null}
-        {tokenList.isError ? (
+        {tokenList.data?.unavailable ? (
           <div className="mt-2">
-            <Alert kind="error">{d.ntt.listUnavailable}</Alert>
+            <Alert kind="warn">{d.ntt.listUnavailable}</Alert>
           </div>
         ) : null}
         {discovery.data?.kind === 'unknown' ? (
@@ -612,6 +611,8 @@ function VerificationCard({ verification, loading, hasTarget }: { verification: 
       <div className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-sm font-bold text-ok">✓ {d.ntt.verified}</div>
       {/* The gate passed, but only one provider answered — say so rather than imply two agreed. */}
       {verification.crossChecked === false ? <p className="text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p> : null}
+      {/* Context, not a caveat: the catalogue never had a say in the verdict above it. */}
+      {v.listed ? null : <p className="text-xs text-muted">{d.ntt.unlistedToken}</p>}
       <div className="rounded-xl bg-surface-2 px-3 py-1">
         <Row label={d.ntt.manager} mono>
           <AddressView value={v.manager} href={byKey(v.chain).explorerAddrUrl + v.manager} short />

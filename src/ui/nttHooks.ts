@@ -25,10 +25,24 @@ const secondFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>
   independentSecondary(clientPair(evmByKey(chain), customRpc[chain]))
 
 /** The official NTT token list. Cached for the session: it is a catalogue, not live state. */
+/**
+ * The catalogue, or an empty one.
+ *
+ * A failure resolves rather than rejects, because nothing downstream may be gated on it: the
+ * search has an on-chain path and the verification gate never consults the list at all. If this
+ * query could stay `undefined`, everything waiting on it would stall on an API outage — which is
+ * exactly the dependency this tab is not allowed to have.
+ */
 export function useNttTokenList() {
   return useQuery({
     queryKey: ['nttTokenList'],
-    queryFn: () => fetchNttTokenList(),
+    queryFn: async (): Promise<{ tokens: readonly NttToken[]; unavailable: boolean }> => {
+      try {
+        return { tokens: await fetchNttTokenList(), unavailable: false }
+      } catch {
+        return { tokens: [], unavailable: true }
+      }
+    },
     staleTime: 30 * 60_000,
     retry: 1,
   })
@@ -145,10 +159,17 @@ export function useNttTrack(txHash: string | undefined) {
   })
 }
 
-/** Destinations worth offering: chains where the same token is listed, minus this one. */
+/**
+ * Destinations worth offering.
+ *
+ * With a catalogue entry this is the chains it lists the token on — a short, accurate menu. Without
+ * one (the token is unlisted, or Wormholescan is down) it is every EVM chain we serve, and the
+ * verification gate decides which of them actually has a peer. That is slower for the user but it
+ * is the same answer: the list narrows the search, it never decides what is bridgeable.
+ */
 export function nttDestinations(token: NttToken | undefined, chains: readonly ChainKey[], from: ChainKey): ChainKey[] {
-  if (!token) return []
-  return listedChains(token, chains).filter((c) => c !== from && byKey(c).vm === 'evm')
+  const candidates = token ? listedChains(token, chains) : chains
+  return candidates.filter((c) => c !== from && byKey(c).vm === 'evm')
 }
 
 export { requireEvm }
