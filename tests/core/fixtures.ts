@@ -4,6 +4,7 @@ import { addressToBytes32 } from '@/core/encoding'
 import type { GuardInput } from '@/core/guards'
 import { computeAmounts, computeValue, type EvmSendPlan, type SendQuote } from '@/core/plan'
 import type { OftInfo } from '@/core/types'
+import { assessRisk, CHECK_IDS, emptyRiskInput, type CheckId, type CheckState, type RouteRisk } from '@/protocols/lz-risk/risk'
 
 export const TREAD_OFT: Address = '0xd5EE1c81fE161e985dce6b90713c965f9979cf80'
 export const TREAD_ADAPTER: Address = '0xe68AD53cf0D5E49CF83FBC003672f6D0eBcAe311'
@@ -124,6 +125,17 @@ export function goodInput(over: Partial<GuardInput> = {}): GuardInput {
     flags: [],
     peerBack: { status: 'ok' },
     peerBackUnavailableAccepted: false,
+    // §4 guard 22: a clean verdict, so a test about guards 1-21 is not also a test about the risk
+    // panel. The risk rule has its own tests in lzRisk.test.ts.
+    risk: cleanRisk(),
+    testLimitLD: 10n ** 18n,
     ...over,
   }
+}
+
+/** Every check ran and passed, nothing flagged: OK, uncapped. */
+export function cleanRisk(): RouteRisk {
+  const checks = {} as Record<CheckId, CheckState>
+  for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
 }

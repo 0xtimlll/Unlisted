@@ -394,6 +394,8 @@ function okLabel(id: number, d: ReturnType<typeof useDict>): string | null {
       return d.guard.ok_recipient_class
     case 21:
       return d.guard.ok_fee_ceiling
+    case 22:
+      return d.guard.ok_risk
     default:
       return null
   }

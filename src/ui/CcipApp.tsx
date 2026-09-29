@@ -29,6 +29,7 @@ import { ProtocolBadge } from './components/History'
 import { Panel, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
 import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
+import { RiskNotAssessed } from './components/RiskPanel'
 import { useAnalysis } from './useAnalysis'
 import { useCcipCheck, useCcipPlan, useCcipRemote, useCcipToken, useTokenMeta } from './ccipHooks'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
@@ -564,6 +565,9 @@ export function CcipApp({
                 </label>
               </div>
             ) : null}
+
+            {/* §4 The route indicator has no CCIP runner yet — see the NTT tab's note. */}
+            <RiskNotAssessed why={d.risk.notCoveredCcip} />
 
             <ul className="grid gap-x-3 gap-y-0.5 text-xs">
               {report.results.map((r) => (

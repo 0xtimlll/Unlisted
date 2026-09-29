@@ -13,6 +13,8 @@
     "headers": "node scripts/gen-headers.mjs",
     "gen:lz-v1": "node scripts/gen-lz-v1.mjs",
     "check:lz-v1": "node scripts/gen-lz-v1.mjs --check",
+    "gen:lz-dvns": "node scripts/gen-lz-dvns.mjs",
+    "check:lz-dvns": "node scripts/gen-lz-dvns.mjs --check",
     "start": "node scripts/serve.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

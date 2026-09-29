@@ -28,6 +28,7 @@ import { ProtocolBadge } from './components/History'
 import { Panel, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
 import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
+import { RiskNotAssessed } from './components/RiskPanel'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { useAnalysis } from './useAnalysis'
 import { nttDestinations, useNttCheck, useNttDiscovery, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
@@ -539,6 +540,9 @@ export function NttApp({
                 </label>
               </div>
             ) : null}
+            {/* §4 The route indicator has no NTT runner yet, and an absent verdict must be visible
+                rather than implied: this tab's own guards are what hold the transfer. */}
+            <RiskNotAssessed why={d.risk.notCoveredNtt} />
             <div>
               <ul className="grid gap-x-3 gap-y-0.5 text-xs">
                 {report.results.map((r) => (

@@ -24,6 +24,7 @@ import {
   g16Suspicious,
   g21FeeCeiling,
   feeAboveCeiling,
+  isPending,
   MAX_SLIPPAGE_BPS,
   runGuards,
   selfCheck,
@@ -47,14 +48,15 @@ import {
   treadPlan,
   WALLET,
 } from './fixtures'
+import { assessRisk, CHECK_IDS, emptyRiskInput, OVERRIDE_WORD, type CheckId, type CheckState } from '@/protocols/lz-risk/risk'
 
 const code = (r: GuardResult) => (r.ok ? 'ok' : r.code)
 
 describe('runGuards on a good snapshot', () => {
   it('passes everything and enables Send', () => {
     const rep = runGuards(goodInput())
-    expect(rep.results).toHaveLength(21)
-    expect(rep.results.map(code)).toEqual(Array(21).fill('ok'))
+    expect(rep.results).toHaveLength(22)
+    expect(rep.results.map(code)).toEqual(Array(22).fill('ok'))
     expect(rep.canSend).toBe(true)
     expect(rep.warnings).toEqual([])
     expect(rep.needsNoGasConfirmation).toBe(false)
@@ -524,5 +526,59 @@ describe('g16 surfaces the contract enforced options', () => {
   it('warns when the enforced options cannot be decoded at all', () => {
     const info = { ...treadOftInfo(), enforced: { [ETH_EID]: '0x0003ff' as Hex } }
     expect(runGuards(goodInput({ info })).warnings).toContain('enforced_malformed')
+  })
+})
+
+describe('22. the route verdict caps the amount, and the Solana path is not swept up in it', () => {
+  it('refuses every amount on a blocked route', () => {
+    const checks = {} as Record<CheckId, CheckState>
+    for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
+    checks['peers'] = { status: 'fail', reason: 'the destination peer does not point back' }
+    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+    expect(risk.tier).toBe('BLOCKED')
+    const rep = runGuards(goodInput({ risk, testLimitLD: 10n ** 30n }))
+    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
+    expect(rep.canSend).toBe(false)
+  })
+
+  it('caps an unverified route at the test limit, and the word does not lift a hard-unchecked cap', () => {
+    const checks = {} as Record<CheckId, CheckState>
+    for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
+    checks['adapter_liquidity'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
+    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+    expect(risk.tier).toBe('UNVERIFIED')
+    const plan = treadPlan()
+    const over = goodInput({ risk, testLimitLD: plan.amounts.amountLD - 1n })
+    expect(runGuards(over).results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_over_test_limit' })
+    expect(runGuards({ ...over, riskOverride: OVERRIDE_WORD }).results.find((r) => r.id === 22)).toMatchObject({
+      ok: false,
+      code: 'risk_over_test_limit',
+    })
+    expect(runGuards(goodInput({ risk, testLimitLD: plan.amounts.amountLD })).results.find((r) => r.id === 22)).toMatchObject({ ok: true })
+  })
+
+  it('sends nothing on a capped route until a test limit is chosen', () => {
+    const checks = {} as Record<CheckId, CheckState>
+    for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
+    checks['limits'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
+    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+    expect(risk.testLimitOnly).toBe(true)
+    const rep = runGuards(goodInput({ risk, testLimitLD: undefined }))
+    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_test_limit_unset' })
+    expect(rep.canSend).toBe(false)
+  })
+
+  it('is pending before the checks have run', () => {
+    const rep = runGuards(goodInput({ risk: undefined }))
+    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_unknown' })
+    expect(isPending(rep.results.find((r) => r.id === 22)!)).toBe(true)
+  })
+
+  it('does not demand a verdict for a route the indicator has no runner for', () => {
+    // §4 covers EVM-to-EVM LayerZero routes. A Solana destination has no runner, so guard 22 must
+    // not quietly disable that path — guards 1-21 are the whole rule there.
+    const svmPlan = { ...treadPlan(), dstEid: 30168 }
+    const rep = runGuards(goodInput({ plan: svmPlan, risk: undefined }))
+    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: true })
   })
 })
