@@ -12,7 +12,7 @@
  * byte for byte (core/quorum.ts discipline); with one URL the caller flags `svm_single_provider`.
  */
 import type { Hex } from 'viem'
-import { ALL_EIDS, byKey } from '../chains'
+import { ALL_EIDS, byKey, providerOfUrl } from '../chains'
 import { decodeMint, decodeOftStore, decodePeerConfig, decodeTokenAccount, decodeTokenMetadata, LayoutError, type OftStore } from './layouts'
 import { SvmDiscoverError } from './errors'
 import type { TokenProgram } from './discover'
@@ -107,13 +107,16 @@ export async function probeSvmOft(rpc: SvmRpc, oftStoreInput: string, eids: read
     const e = (views[0] as PromiseRejectedResult | undefined)?.reason
     throw e instanceof Error ? e : new SvmDiscoverError('store_missing', String(e))
   }
+  // Agreement only counts from a DIFFERENT operator: Solana's public endpoints are largely one
+  // company's, and two of its hostnames agreeing is one opinion, not a cross-check.
+  const usedProvider = providerOfUrl(rpc.urls[views.indexOf(first)] ?? '')
   let crossChecked = false
-  for (const v of views) {
+  for (const [i, v] of views.entries()) {
     if (v === first) continue
     if (v.status === 'fulfilled') {
       const same = sameAccount(v.value.store, first.value.store) && v.value.rest.length === first.value.rest.length && v.value.rest.every((a, i) => sameAccount(a, first.value.rest[i]!))
       if (!same) throw new SvmDiscoverError('rpc_mismatch', 'RPC providers disagree about this OFT Store')
-      crossChecked = true
+      if (providerOfUrl(rpc.urls[i] ?? '') !== usedProvider) crossChecked = true
     } else if (v.reason instanceof SvmDiscoverError && (v.reason.code === 'store_missing' || v.reason.code === 'not_oft_store')) {
       throw new SvmDiscoverError('rpc_mismatch', `another RPC: ${v.reason.code}`)
     }

@@ -6,7 +6,7 @@
  * The transaction is read from every RPC URL independently and the decoded prefills must agree.
  */
 import type { Hex } from 'viem'
-import { byEid } from '../chains'
+import { byEid, providerOfUrl } from '../chains'
 import { DecodeTxError } from '../decodeTx'
 import { sanitizeOptions, type OptionItem } from '../options'
 import { decodeBase58 } from './base58'
@@ -134,12 +134,14 @@ export async function decodeSvmTx(rpc: SvmRpc, signature: string): Promise<SvmDe
     const e = (views[0] as PromiseRejectedResult | undefined)?.reason
     throw e instanceof Error ? e : new DecodeTxError('tx_not_found', String(e))
   }
+  // Same rule as svm/source.ts: only a different operator earns the cross-check.
+  const usedProvider = providerOfUrl(rpc.urls[views.indexOf(first)] ?? '')
   let crossChecked = false
-  for (const v of views) {
+  for (const [i, v] of views.entries()) {
     if (v === first) continue
     if (v.status === 'fulfilled') {
       if (!samePrefill(v.value, first.value)) throw new DecodeTxError('rpc_mismatch', 'RPC providers disagree about this transaction')
-      crossChecked = true
+      if (providerOfUrl(rpc.urls[i] ?? '') !== usedProvider) crossChecked = true
     } else if (v.reason instanceof DecodeTxError && v.reason.code === 'not_send') {
       throw new DecodeTxError('rpc_mismatch', 'another RPC returned a different transaction')
     }

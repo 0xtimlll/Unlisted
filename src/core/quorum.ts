@@ -3,7 +3,7 @@
  * contract look legitimate (and "simulate" it successfully); two unrelated providers agreeing
  * is a much higher bar. Disagreement blocks; a second provider being down only warns.
  */
-import type { ChainKey, EvmChainDef } from './chains'
+import { providerOfUrl, type ChainKey, type EvmChainDef } from './chains'
 import { makeReadClient, type ReadClient } from './client'
 import { decodeTx, DecodeTxError, type TxPrefill } from './decodeTx'
 import { sameAddress } from './encoding'
@@ -12,19 +12,42 @@ import type { OftInfo } from './types'
 import { probeOftV1, ProbeV1Error, type ProbeV1Result } from '../protocols/lz-v1/detect'
 import type { OftV1Info } from '../protocols/lz-v1/detect'
 
-export type Pair = { primary: ReadClient; secondaries: ReadClient[] }
+/** A second opinion, and whose it is. */
+export type Secondary = { client: ReadClient; provider: string }
+
+export type Pair = { primary: ReadClient; primaryProvider: string; secondaries: Secondary[] }
 
 /**
- * Primary = user's RPC if set, else registry[0]. Secondaries = every other registry RPC,
- * each bound to a single URL so their opinions are independent. All are asked; one definite
- * answer is enough to cross-check, and any disagreement blocks.
+ * Primary = user's RPC if set, else registry[0]. Secondaries = every other registry RPC, each
+ * bound to a single URL so their opinions stay separate. All are asked; any disagreement blocks.
+ *
+ * `crossChecked` is a different question from "did anyone else answer": it is only earned by an
+ * answer from a DIFFERENT operator. Two endpoints of one company share whatever is wrong with that
+ * company, so counting them twice would turn one opinion into a quorum by arithmetic alone.
  */
 export function clientPair(chain: EvmChainDef, customRpc?: string): Pair {
   const primaryUrl = customRpc ?? chain.rpcUrls[0]!
   return {
     primary: makeReadClient(chain, customRpc ? customRpc : undefined),
-    secondaries: chain.rpcUrls.filter((u) => u !== primaryUrl).map((u) => makeReadClientSingle(chain, u)),
+    primaryProvider: providerOfUrl(primaryUrl),
+    secondaries: chain.rpcUrls
+      .filter((u) => u !== primaryUrl)
+      .map((u) => ({ client: makeReadClientSingle(chain, u), provider: providerOfUrl(u) })),
   }
+}
+
+/** True when this pair can produce a real cross-check at all — someone other than the primary. */
+export function canCrossCheck(pair: Pair): boolean {
+  return pair.secondaries.some((s) => s.provider !== pair.primaryProvider)
+}
+
+/**
+ * The first secondary run by a DIFFERENT operator, for the checks that take exactly one second
+ * opinion (NTT's manager gate, CCIP's pool discovery). Undefined when the registry has no spare
+ * operator for this chain — which those callers already treat as "no cross-check", not as a pass.
+ */
+export function independentSecondary(pair: Pair): ReadClient | undefined {
+  return pair.secondaries.find((s) => s.provider !== pair.primaryProvider)?.client
 }
 
 /** A client bound to exactly one URL (no fallback), so the two opinions stay independent. */
@@ -58,12 +81,13 @@ type Opinion<T> = { ok: true; r: T } | { ok: false; e: unknown }
 const settle = <T,>(p: Promise<T>): Promise<Opinion<T>> => p.then((r) => ({ ok: true as const, r })).catch((e: unknown) => ({ ok: false as const, e }))
 
 export async function probeOftQuorum(pair: Pair, address: string): Promise<Quorum<ProbeResult>> {
-  const [p, ...others] = await Promise.all([probeOft(pair.primary, address), ...pair.secondaries.map((c) => settle(probeOft(c, address)))])
+  const [p, ...others] = await Promise.all([probeOft(pair.primary, address), ...pair.secondaries.map((c) => settle(probeOft(c.client, address)))])
   let agreed = false
-  for (const s of others) {
+  for (const [i, s] of others.entries()) {
+    const independent = pair.secondaries[i]!.provider !== pair.primaryProvider
     if (s.ok) {
       if (!sameOftInfo(p.info, s.r.info)) throw new ProbeError('rpc_mismatch', 'RPC providers disagree about this contract')
-      agreed = true
+      if (independent) agreed = true
     } else if (s.e instanceof ProbeError && (s.e.code === 'not_oft' || s.e.code === 'not_contract' || s.e.code === 'rate_mismatch')) {
       // A definite "not an OFT" from another provider is a disagreement, not an outage.
       throw new ProbeError('rpc_mismatch', `another RPC: ${s.e.code}`)
@@ -77,12 +101,13 @@ export function sameTx(a: TxPrefill, b: TxPrefill): boolean {
 }
 
 export async function decodeTxQuorum(pair: Pair, hash: string): Promise<Quorum<TxPrefill>> {
-  const [p, ...others] = await Promise.all([decodeTx(pair.primary, hash), ...pair.secondaries.map((c) => settle(decodeTx(c, hash)))])
+  const [p, ...others] = await Promise.all([decodeTx(pair.primary, hash), ...pair.secondaries.map((c) => settle(decodeTx(c.client, hash)))])
   let agreed = false
-  for (const s of others) {
+  for (const [i, s] of others.entries()) {
+    const independent = pair.secondaries[i]!.provider !== pair.primaryProvider
     if (s.ok) {
       if (!sameTx(p, s.r)) throw new DecodeTxError('rpc_mismatch', 'RPC providers disagree about this transaction')
-      agreed = true
+      if (independent) agreed = true
     } else if (s.e instanceof DecodeTxError && s.e.code === 'not_send') {
       throw new DecodeTxError('rpc_mismatch', 'another RPC returned a different transaction')
     }
@@ -116,13 +141,14 @@ export function sameOftV1Info(a: OftV1Info, b: OftV1Info): boolean {
 export async function probeOftV1Quorum(pair: Pair, chain: ChainKey, address: string): Promise<Quorum<ProbeV1Result>> {
   const [p, ...others] = await Promise.all([
     probeOftV1(pair.primary, chain, address),
-    ...pair.secondaries.map((c) => settle(probeOftV1(c, chain, address))),
+    ...pair.secondaries.map((c) => settle(probeOftV1(c.client, chain, address))),
   ])
   let agreed = false
-  for (const s of others) {
+  for (const [i, s] of others.entries()) {
+    const independent = pair.secondaries[i]!.provider !== pair.primaryProvider
     if (s.ok) {
       if (!sameOftV1Info(p.info, s.r.info)) throw new ProbeV1Error('rpc_mismatch', 'RPC providers disagree about this contract')
-      agreed = true
+      if (independent) agreed = true
     } else if (
       s.e instanceof ProbeV1Error &&
       // A definite "this is not that" from another provider is a disagreement, not an outage.

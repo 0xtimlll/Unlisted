@@ -123,7 +123,7 @@ export function useV1PeerBack(info: OftV1Info | undefined, dstKey: ChainKey | un
     queryKey: ['v1peerBack', info?.chain, info?.oft, dstKey, route?.remoteAddress],
     queryFn: async () => {
       const all = await Promise.all(
-        [pair!.primary, ...pair!.secondaries].map((c) => checkV1TrustedRemoteBack(c, route!.remoteAddress!, info!.srcV1ChainId, info!.oft)),
+        [pair!.primary, ...pair!.secondaries.map((s) => s.client)].map((c) => checkV1TrustedRemoteBack(c, route!.remoteAddress!, info!.srcV1ChainId, info!.oft)),
       )
       // A mismatch anywhere wins, then any definite "ok", else "unavailable".
       return all.find((r) => r.status === 'mismatch') ?? all.find((r) => r.status === 'ok') ?? all[0]!

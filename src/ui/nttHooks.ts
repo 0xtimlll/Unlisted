@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Address } from 'viem'
 import { byKey, evmByKey, requireEvm, type ChainKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
-import { clientPair } from '@/core/quorum'
+import { clientPair, independentSecondary } from '@/core/quorum'
 import type { Recipient } from '@/core/recipient'
 import { wormholeChainId } from '@/protocols/wormhole-ntt/chains'
 import { discoverNtt, type NttDiscovery } from '@/protocols/wormhole-ntt/discover'
@@ -22,7 +22,7 @@ const clientFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>
  * when the user has set a custom RPC, the spare is always one of ours.
  */
 const secondFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) =>
-  clientPair(evmByKey(chain), customRpc[chain]).secondaries[0]
+  independentSecondary(clientPair(evmByKey(chain), customRpc[chain]))
 
 /** The official NTT token list. Cached for the session: it is a catalogue, not live state. */
 export function useNttTokenList() {

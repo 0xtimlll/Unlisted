@@ -21,8 +21,9 @@ import { decodeTx } from '@/core/decodeTx'
 
 const A = { tag: 'A' } as unknown as ReadClient
 const B = { tag: 'B' } as unknown as ReadClient
-const pair: Pair = { primary: A, secondaries: [B] }
-const single: Pair = { primary: A, secondaries: [] }
+// Providers are distinct, so these secondaries are genuine second opinions.
+const pair: Pair = { primary: A, primaryProvider: 'a.example', secondaries: [{ client: B, provider: 'b.example' }] }
+const single: Pair = { primary: A, primaryProvider: 'a.example', secondaries: [] }
 // Returns a mock implementation that answers differently for client A and client B.
 const byClient = (a: unknown, b: unknown): never =>
   (async (client: ReadClient) => {
@@ -64,9 +65,34 @@ describe('probeOftQuorum', () => {
     vi.mocked(probeOft).mockImplementation(byClient(new ProbeError('not_contract'), good))
     await expect(probeOftQuorum(pair, TREAD_OFT)).rejects.toMatchObject({ code: 'not_contract' })
   })
+  it('a second endpoint from the SAME operator agrees but does not cross-check', async () => {
+    // The Solana case: two hostnames, one company. Agreement is real, independence is not.
+    const sibling: Pair = { primary: A, primaryProvider: 'publicnode.com', secondaries: [{ client: B, provider: 'publicnode.com' }] }
+    vi.mocked(probeOft).mockImplementation(byClient(good, good))
+    expect((await probeOftQuorum(sibling, TREAD_OFT)).crossChecked).toBe(false)
+    // ...but it still has to AGREE: one operator contradicting itself is worse, not better.
+    vi.mocked(probeOft).mockImplementation(byClient(good, { ...good, info: { ...good.info, approvalRequired: !good.info.approvalRequired } }))
+    await expect(probeOftQuorum(sibling, TREAD_OFT)).rejects.toMatchObject({ code: 'rpc_mismatch' })
+  })
+  it('a mixed set counts only the independent operator', async () => {
+    const C = { tag: 'C' } as unknown as ReadClient
+    const mixed: Pair = {
+      primary: A,
+      primaryProvider: 'publicnode.com',
+      secondaries: [{ client: B, provider: 'publicnode.com' }, { client: C, provider: 'drpc.org' }],
+    }
+    vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
+      if (client === C) throw new Error('timeout')
+      return good
+    }) as never)
+    // Only the sibling answered → still not cross-checked.
+    expect((await probeOftQuorum(mixed, TREAD_OFT)).crossChecked).toBe(false)
+    vi.mocked(probeOft).mockImplementation((async () => good) as never)
+    expect((await probeOftQuorum(mixed, TREAD_OFT)).crossChecked).toBe(true)
+  })
   it('one secondary down, another agrees → crossChecked; all down → not', async () => {
     const C = { tag: 'C' } as unknown as ReadClient
-    const three: Pair = { primary: A, secondaries: [B, C] }
+    const three: Pair = { primary: A, primaryProvider: 'a.example', secondaries: [{ client: B, provider: 'b.example' }, { client: C, provider: 'c.example' }] }
     vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
       if (client === B) throw new Error('timeout')
       return good

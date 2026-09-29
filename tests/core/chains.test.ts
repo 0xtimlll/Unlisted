@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allRpcHosts, byChainId, byEid, byKey, CHAINS, evmByKey, evmChains, isEvm, isSvm, requireEvm } from '@/core/chains'
+import { allRpcHosts, byChainId, byEid, byKey, CHAINS, evmByKey, evmChains, isEvm, isSvm, providerOfHost, providerOfUrl, requireEvm } from '@/core/chains'
 import { cspConnectSources, isAllowedRpcHost, validateRpcUrl } from '@/core/rpcPolicy'
 
 describe('chain registry', () => {
@@ -114,5 +114,41 @@ describe('validateRpcUrl', () => {
     expect(validateRpcUrl('javascript:alert(1)')).toEqual({ ok: false, reason: 'bad_scheme' })
     expect(validateRpcUrl('file:///etc/passwd')).toEqual({ ok: false, reason: 'bad_scheme' })
     expect(validateRpcUrl('https://user:pass@rpc.example.com')).toEqual({ ok: false, reason: 'not_url' })
+  })
+})
+
+describe('RPC operators: a cross-check counts companies, not hostnames', () => {
+  it('every registry RPC names an operator, and rpcUrls is derived from the same list', () => {
+    for (const c of CHAINS) {
+      expect(c.rpcs.length).toBeGreaterThan(0)
+      for (const r of c.rpcs) expect(r.provider).toMatch(/^[a-z0-9-]+\.[a-z]+$/)
+      expect(c.rpcUrls).toEqual(c.rpcs.map((r) => r.url))
+    }
+  })
+
+  it('providerOfHost reduces a hostname to its registrable domain', () => {
+    expect(providerOfHost('solana-rpc.publicnode.com')).toBe('publicnode.com')
+    expect(providerOfHost('solana.publicnode.com')).toBe('publicnode.com')
+    expect(providerOfHost('eth.drpc.org')).toBe('drpc.org')
+    expect(providerOfHost('example.com')).toBe('example.com')
+  })
+
+  it('providerOfUrl prefers the declared operator and falls back to the host', () => {
+    expect(providerOfUrl('https://eth.drpc.org')).toBe('drpc.org')
+    expect(providerOfUrl('https://my-node.example.org/rpc')).toBe('example.org')
+    expect(providerOfUrl('not a url')).toBe('not a url')
+  })
+
+  it("Solana's two public endpoints are ONE operator — this is the case the rule exists for", () => {
+    const sol = byKey('solana')
+    expect(sol.rpcs).toHaveLength(2)
+    expect(new Set(sol.rpcs.map((r) => r.provider))).toEqual(new Set(['publicnode.com']))
+  })
+
+  it('every EVM chain does have two or more distinct operators', () => {
+    for (const c of evmChains()) {
+      const providers = new Set(c.rpcs.map((r) => r.provider))
+      expect(providers.size, `${c.key} has only one RPC operator`).toBeGreaterThanOrEqual(2)
+    }
   })
 })
