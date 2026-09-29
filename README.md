@@ -51,6 +51,208 @@ Any OFT (LayerZero V2) deployed on these chains works, in both directions betwee
 
 Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
+## LayerZero v1
+
+Hundreds of OFTs never migrated off Endpoint V1, and they live in the **same OFT tab**: paste the
+address, and if it is not a V2 OFT the contract is asked the v1 questions instead. The V2 probe runs
+first and unchanged — v1 is only ever asked about a contract V2 has finished declining with
+"not an OFT", so nothing about the V2 path moves because v1 exists.
+
+Which v1 standard a contract is gets read off the contract, never matched against a list:
+
+| answers | standard | `_toAddress` on the wire |
+|---|---|---|
+| `sharedDecimals()` reverts | `OFT` / `ProxyOFT` | `bytes`, and the destination reads the **first** 20 |
+| `sharedDecimals()` answers | `OFTV2` / `ProxyOFTV2` | `bytes32`, left-padded; the destination reads the **last** 20 |
+| …and `quoteOFTFee()` too | `OFTWithFee` / `ProxyOFTWithFee` | the same `bytes32`, plus a `_minAmount` |
+
+`token()` then says whether the contract is the token itself or an adapter holding someone else's —
+and an adapter is approved for exactly the amount being sent, never more. The label on screen says
+which one it landed on (`LayerZero v1 · OFTV2 · Proxy`).
+
+**That table is the whole reason this needed care.** The three `sendFrom`s differ by one argument in
+the middle, and the destination reads the recipient without checking that it got what the sender
+meant: a 32-byte left-padded address handed to a `bytes` OFT is delivered to twelve zero bytes and
+the tokens are gone, and a right-padded `bytes32` is delivered to an address nobody chose. So the
+recipient is verified twice by code that shares nothing with the code that wrote it —
+[`selfcheck.ts`](src/protocols/lz-v1/selfcheck.ts) walks the raw calldata words itself, reads the
+address exactly as `OFTCore._sendAck` and `OFTCoreV2._decodeSendPayload` do, and refuses a length
+that is not 20, a `bytes32` whose high 12 bytes are not zero, or a selector that is not the detected
+standard's. A self-check built out of the encoder's own helpers could only ever confirm that the
+encoder agrees with itself.
+
+Everything else v1 needs is read from the contracts too:
+
+- **Routes** are the destinations with a non-empty `trustedRemoteLookup(dstChainId)`, and the
+  destination has to name our contract back — the v1 spelling of the peer check.
+- **Adapter params** follow the code that enforces them, not the flag alone: `OFTCore` consults
+  `useCustomAdapterParams` (false means the bytes must be *empty*), while `OFTCoreV2` calls
+  `_checkGasLimit` unconditionally, so the `bytes32` families always carry params — even the live
+  ones that define the flag as well. Type 1 only, with at least the contract's own
+  `minDstGasLookup`; a type 2 native drop is refused, the same way the V2 tab refuses `nativeDrop`.
+- **The fee** is `estimateSendFee` with `_useZro` false and a zero `_zroPaymentAddress`, quoted with
+  the exact arguments the send will carry. The excess is refunded to the sender by the endpoint.
+- **Amounts** are put through the contract's own order of operations: its fee first (`quoteOFTFee`),
+  then dust removed to a multiple of 10^(decimals − sharedDecimals), then the `_minAmount` it will
+  enforce. Slippage is refused outright on the two standards whose `sendFrom` has no minimum to
+  enforce it with, rather than shown as a setting that does nothing.
+- **A stuck path blocks the send.** `hasStoredPayload` is asked on the destination endpoint, keyed by
+  the path bytes read from the destination contract itself — a later message queues behind a stuck
+  one, so this is a refusal rather than a warning.
+
+The chain ids and endpoints come from LayerZero's own metadata through
+[`scripts/gen-lz-v1.mjs`](scripts/gen-lz-v1.mjs) into a committed JSON, never fetched at runtime.
+All eleven EVM networks have a v1 deployment, and each id is verified against
+`UltraLightNodeV2.localChainId` — the contract that actually stamps the source chain into every
+packet. The Endpoint's own `getChainId()` is *not* the authority: on the six first-wave chains it
+still returns the number it was deployed with before LayerZero renumbered mainnet (Ethereum answers
+1, not 101), so a check written against that getter would report correct data as broken.
+
+**A deployed endpoint is not a working network.** The generator also asks each endpoint for its
+`defaultSendLibrary` and `defaultReceiveLibraryAddress`; a chain where either is the zero address
+has nothing to route a message through, and is written as `v1Active: false` with the reason. Ten of
+the eleven are active — Robinhood Chain has the endpoint deployed and answering `getChainId()` with
+416, and neither library set, so it is offered as neither a source nor a destination for v1. Its V2
+routes are unaffected. `npm run check:lz-v1` re-asks, so "LayerZero wired it up since" becomes a
+failing check rather than a silent gap.
+
+One standard carries a caveat the code states out loud: `OFT` / `ProxyOFT`, the original `bytes`
+shape, is implemented and unit-tested but no deployed contract of that shape was found to test
+against ([`docs/TODO.md`](docs/TODO.md) records how it was searched for). It is listed in
+`UNVERIFIED_WIRES`, and the risk indicator below holds every route on it to a test amount until a
+test transfer actually arrives.
+
+**NativeOFT is named and refused.** It takes the transfer amount out of `msg.value` alongside the
+fee, and every amount check here rests on `msg.value` being the fee and nothing else. Loosening that
+for one contract shape would cost more than the shape is worth.
+
+`sendFrom` may only be submitted from [`src/protocols/lz-v1/send.ts`](src/protocols/lz-v1/send.ts) —
+the build fails if it appears anywhere else. There is no LayerZero v1 on Solana, so the whole path is
+EVM-only by construction.
+
+## Route risk
+
+Before a LayerZero transfer can be signed — v1 or V2 — eight read-only checks run against both
+chains in parallel, and their answers are folded into one verdict for *this token, this route, this
+amount*. Three of them are the ones worth knowing about:
+
+- **The destination is asked whether it would credit the transfer.** Not a similar transfer: the
+  payload the destination will really receive, built from the contract's own codec
+  (`abi.encode(PT_SEND, to, amount)` for v1's `bytes` shape, `PT_SEND ++ bytes32 ++ amountSD` for
+  the bytes32 ones, `sendTo ++ amountSD` for V2), `eth_call`ed on the destination as the contract
+  itself (v1) or as its endpoint (V2), because that is who those functions accept. The gas it
+  measures is then what v1's adapter params buy: `max(the contract's own minimum, estimate × 1.3)`.
+- **The path is checked for a transfer that never arrived**, and the two things that can be wrong
+  there are kept apart. A payload parked in the destination endpoint (v1) blocks the route: nothing
+  can get past it. Messages merely *undelivered* — the outbound nonce on the source ahead of the
+  inbound nonce on the destination — are a queue, not a wall: v1 and V2 both deliver in nonce order,
+  so a transfer sent now waits for them. How long they have waited decides how hard that bites:
+  under half an hour is ordinary traffic and says nothing; between half an hour and an hour caps the
+  amount at a test and the confirmation word lifts it; **past an hour the word stops working** —
+  packets that have sat that long are not moving, verification may have stopped on the route, and
+  the only thing that answers that is a test transfer that arrives. A gap whose age cannot be
+  established is *not checked*, never "fine".
+- **Who verifies the route is judged against LayerZero's own material, not against the defaults.**
+  For V2 that is the DVN set; for v1 the oracle and relayer. Two answers matter and nothing else
+  does: a party LayerZero has **deprecated** (`LZDeadDVN` above all) blocks the route, because the
+  attestation the message needs can never be produced; a party LayerZero has **not published at all**
+  is worth a word, and the route's own delivery history is allowed to answer for it — something that
+  has arrived through that oracle is better evidence than a name in a list. Anything published and
+  undeprecated is not a finding. Running your own oracle is not a finding: JOE's is Chainlink, which
+  the committed table lists, and the ULN's own on-chain default counts too — every live relayer read
+  during development was that default, and none of them is in the DVN feed, so judging against the
+  table alone reported LayerZero's own relayer as unknown on every route. The two sides of a V2 route
+  are compared **by operator, not by address** — the same DVN is a different contract on every chain,
+  so comparing addresses reports every working route as broken.
+
+The verdict is one of four, and what each one permits is the point:
+
+| | what it means | what may be sent |
+|---|---|---|
+| **OK** | every check ran and passed | anything |
+| **CAUTION** | warnings, all of them named | anything |
+| **UNVERIFIED** | the route is not proven | a test amount, until one arrives |
+| **BLOCKED** | a check failed on the facts | nothing, test amount included |
+
+Three rules keep the colour honest, and they are enforced in
+[`src/protocols/lz-risk/risk.ts`](src/protocols/lz-risk/risk.ts) rather than merely intended:
+
+1. **A check that did not run is not a check that passed.** It is grey, it carries the reason it
+   could not run, and it counts as neither. A dead RPC produces a screen of grey, not a row of ticks
+   — asserted against clients that reject everything.
+2. **A verdict is never better than its weakest hard check.** If any of the five that decide whether
+   funds move (peers, a clear path, the destination credit, adapter liquidity, pause/limits) could
+   not be made, the route is held at UNVERIFIED. **No checkbox lifts that.** The only thing that
+   does is a test transfer confirmed delivered on chain, which lifts it for 24 hours (recorded in
+   `localStorage`, every access in try/catch, and the cap simply stays without it). The same holds
+   for a contract standard no live deployment has ever verified here — v1's `bytes` shape.
+3. **No colour without reasons.** Anything other than OK carries at least one concrete reason, and
+   OK carries none — the function throws rather than return a verdict that says nothing.
+
+An UNVERIFIED that came from something softer — an unpublished verifier on a route with no
+deliveries, a queue of undelivered packets — can be lifted by typing the word, because those are
+facts about the route rather than gaps in what was checked. A BLOCKED route cannot be lifted at all.
+
+**The test-amount limit has no default.** One unit of a token is a rounding error for some and a
+month's rent for others, so a pre-filled number would be a recommendation this app is in no position
+to make. The field starts empty, an unverified route sends nothing until it is filled in, and the
+number is then remembered for that token (per chain, in `localStorage`, guarded) so the next route
+for the same token does not ask again.
+
+Guard 22 in both tabs is what turns the verdict into a limit on the amount. The indicator covers
+LayerZero EVM-to-EVM routes; a Solana source or destination has no runner yet, so there is no verdict
+to enforce and guards 1–21 are the whole rule there. Where there is no runner the panel says so, in
+grey — **"the route indicator does not assess this route"**, never nothing and never a tick. The NTT
+and CCIP tabs show the same line above their own checks, so an OK on one tab cannot be mistaken for
+an OK the other tab never gave.
+
+## Status and rescue
+
+The fourth tab takes a transaction hash and the chain it is on, and says what became of the
+LayerZero message in it: delivered, still on its way, waiting for the DVNs, verified and waiting to
+be executed, parked by the destination endpoint (v1), or stored as failed by the receiving contract
+(v1). Everything comes from that transaction's own logs and the destination's own state.
+
+For four of those states there is one call that would finish the job, and the tab will submit it:
+
+| state | call | on |
+|---|---|---|
+| v1, endpoint parked the payload | `Endpoint.retryPayload(srcChainId, path, payload)` | the destination's Endpoint V1 |
+| v1, contract stored it as failed | `OFT.retryMessage(srcChainId, path, nonce, payload)` | the receiving contract |
+| V2, DVNs signed, nobody committed | `ReceiveUln302.commitVerification(header, payloadHash)` | the receive library the endpoint names |
+| V2, verified but not executed | `EndpointV2.lzReceive(origin, receiver, guid, message, extraData)` | the endpoint the receiver names |
+
+**A payload is only ever submitted after the destination's own record of its hash has been matched.**
+The bytes come from an event on the source chain — `UltraLightNodeV2.Packet` for v1,
+`EndpointV2.PacketSent` for V2 — and the hash they are compared against is read from the destination:
+`storedPayload.payloadHash`, `failedMessages[…]`, `inboundPayloadHash(…)`, or the library's own
+`verifiable`. If the two disagree, or if either could not be read, there is no button and the
+mismatch is printed. LayerZero Scan is linked to but never consulted here: a rescue submits a
+payload, and a payload an API chose is not one to sign.
+
+Four more rules, all in the code rather than in the interface:
+
+- **`value` is always 0.** Two of the four functions are `nonpayable` and are called with no value
+  field at all; the other two are called with `0n`. The build refuses any amount written into that
+  module, and the submit path throws before the wallet is asked if a call somehow carries one.
+- **A message paid for with a native drop is refused, not executed.** This app submits nothing of its
+  own, so the drop would not happen and the recipient would be short exactly what the sender paid
+  for. The tab explains that instead of offering a half-delivery.
+- **Addresses come from the committed config or from the message.** Endpoint V1 from the committed
+  table; the receiving contract, its endpoint and its receive library read from the packet and from
+  each other. Nothing is typed in, and no address comes from an explorer or an API.
+- **Every action is `eth_call`ed before it is offered**, and again at the moment of the click —
+  between the panel rendering and the button someone else may have retried the same message, and a
+  rescue that has become unnecessary should cost nothing.
+
+Two things the tab will only ever explain. `forceResumeReceive` unblocks a path by **destroying** the
+parked payload rather than delivering it, and only the receiving contract's owner can call it at all.
+A route configured with a deprecated DVN cannot be rescued from outside the project that owns the
+contract. Both get a sentence saying who can act and what it would cost; neither gets a button.
+
+NTT and CCIP messages are not rescued here. Both have their own redeem paths and their own contracts,
+and borrowing LayerZero's four actions for them would be neither correct nor safe.
+
 ## Wormhole NTT
 
 The **NTT** tab bridges Wormhole Native Token Transfers between EVM chains. The manager contract is
@@ -107,7 +309,7 @@ Every event signature, error signature, chain id and selector used for this come
 
 ## Security model
 
-**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign five things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the NttManager `transfer`, the CCIP Router's `ccipSend`, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code: it confines the Solana SDK and the single submit call to one file, allows `transfer` and `ccipSend` only inside their own protocol modules and the one screen each that submits them, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
+**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign five things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the LayerZero v1 OFT's `sendFrom`, the NttManager `transfer`, the CCIP Router's `ccipSend`, the four rescue calls above, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code: it confines the Solana SDK and the single submit call to one file, allows `transfer` and `ccipSend` only inside their own protocol modules and the one screen each that submits them, allows `sendFrom` only inside the v1 module (the screen hands it the wallet writer and never names the function), permits `lzReceive` and `nonblockingLzReceive` to be named only inside the risk module — which is separately asserted to contain no write primitive at all, because it simulates a destination credit and must never submit one — confines the four rescue calls to the rescue module and refuses any amount written into it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
 
 **What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee).
 
@@ -143,6 +345,10 @@ npm test                # write-whitelist check + unit tests
 npm run audit           # npm audit against the reviewed exception list
 npm run build           # static export to out/ + security headers
 npm start               # serve out/ with the same headers as production
+npm run gen:lz-v1       # regenerate the committed LayerZero v1 chain table from LayerZero's metadata
+npm run check:lz-v1     # fail if that committed table no longer matches the metadata or the chains
+npm run gen:lz-dvns     # regenerate the committed DVN table (names, ids, LayerZero's deprecated flag)
+npm run check:lz-dvns   # fail if that committed table no longer matches the metadata
 ```
 
 `npm run test:integration` runs read-only tests against public RPCs and, if [Foundry](https://getfoundry.sh) is installed, fork tests that execute real `approve`/`send` transactions on a local anvil fork.
@@ -159,12 +365,15 @@ Build-time configuration lives in [`.env.production`](.env.production) (all valu
 ### Layout
 
 ```
-src/app      / is the welcome screen; /bridge, /ntt and /ccip are the three protocol tabs (/oft still redirects to /bridge)
+src/app      / is the welcome screen; /bridge, /ntt, /ccip are the protocol tabs and /rescue is Status / Rescue (/oft still redirects to /bridge)
 src/core     pure logic, no React: abi, chains, protocols, amounts, plan, guards, probe, options, quorum, track
 src/core/svm Solana: base58, PDAs, account layouts, discovery, the send plan codec/self-check, the SDK boundary (send.ts)
+src/protocols  one module per bridge: lz-v1 (Endpoint V1 OFTs), wormhole-ntt, ccip
+               plus lz-risk: the eight route checks and the verdict they fold into (§4)
+               plus lz-rescue: diagnosing a stuck message and the four calls that finish it (§5)
 src/ui       wagmi/RainbowKit providers, the shell (header/tabs/history), the Solana wallet slot, hooks, components, local storage
 shims        build-time stand-ins for LayerZero helper packages the Solana SDK declares but never uses
-scripts      build, security headers, write-whitelist check, local server
+scripts      build, security headers, write-whitelist check, the v1 chain-table generator, local server
 tests/core   unit tests · tests/integration  live-RPC and anvil fork tests
 ```
 
