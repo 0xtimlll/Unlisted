@@ -377,7 +377,18 @@ function AddForm({
         </label>
         <label className="block text-xs">
           <span className="text-muted">{d.addressBook.address}</span>
-          <Input value={address} onChange={(e) => setAddress(e.target.value)} className="mono mt-1" spellCheck={false} readOnly={!!initial} />
+          <Input
+            value={address}
+            onChange={(e) => {
+              setAddress(e.target.value)
+              // The "different address" answer was about the address that was in the field; a
+              // new value is a new question, even if it resembles the same entry.
+              setTwinAccepted(false)
+            }}
+            className="mono mt-1"
+            spellCheck={false}
+            readOnly={!!initial}
+          />
         </label>
         <label className="block text-xs">
           <span className="text-muted">{d.addressBook.label}</span>
