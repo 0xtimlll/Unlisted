@@ -496,9 +496,8 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
     delayed: undefined,
     thinGas: false,
     nearLimit: false,
-    testVerified: false,
-    // Placeholders; assessRoute() overrides both. `false` is the safe default for each:
-    // an unverified route and an uncorroborated one, so forgetting to pass them fails closed.
+      // Placeholder; assessRoute() overrides it. `false` is the safe default: an uncorroborated
+      // route, so forgetting to pass it fails closed.
     linkCrossChecked: false,
     ...extra,
   }

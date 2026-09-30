@@ -18,7 +18,7 @@ import type { OftV1Info, V1PeerBack } from './detect'
 import type { V1SendPlan } from './plan'
 import type { V1Simulation } from './simulate'
 import type { V1SelfCheckResult } from './selfcheck'
-import { sendAllowed, type RouteRisk } from '../lz-risk/risk'
+import { riskWarningCode, type RouteRisk } from '../lz-risk/risk'
 
 export type V1GuardCode =
   | 'wallet_not_connected'
@@ -68,8 +68,7 @@ export type V1GuardCode =
   | 'fee_above_ceiling_unconfirmed'
   | 'risk_unknown'
   | 'risk_blocked'
-  | 'risk_over_test_limit'
-  | 'risk_test_limit_unset'
+  | 'risk_unverified'
 
 /** Codes that mean "not known yet", not "wrong". The UI shows them muted, same as the V2 tab. */
 export const V1_PENDING: ReadonlySet<V1GuardCode> = new Set<V1GuardCode>([
@@ -130,16 +129,6 @@ export type V1GuardInput = {
    * as pending — a verdict nobody computed is not permission.
    */
   risk?: RouteRisk | undefined
-  /** §4 The test-amount limit, as a raw amount in this token's units. */
-  testLimitLD?: bigint | undefined
-  /** §4 What the user typed to lift an overridable UNVERIFIED. Never lifts a hard-unchecked cap. */
-  riskOverride?: string | undefined
-  /**
-   * §Adapter The tick on "I understand the risk, sending without a test". Only ever consulted for
-   * an unproven adapter (`RouteRisk.adapterUnproven`), and the screen clears it whenever the token,
-   * the route or the amount changes — an acceptance must not outlive what it was given for.
-   */
-  adapterRiskAccepted?: boolean | undefined
   /**
    * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
    * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
@@ -412,13 +401,10 @@ export function v1g21FeeCeiling(i: V1GuardInput): V1GuardResult {
 export function v1g22Risk(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(22, 'plan_missing')
   if (!i.risk) return fail(22, 'risk_unknown')
-  // A capped route with no limit chosen sends nothing, and says which of the two it is.
-  if (i.risk.testLimitOnly && i.testLimitLD === undefined && !(i.risk.overridable && i.riskOverride)) {
-    return fail(22, 'risk_test_limit_unset')
-  }
-  const permission = sendAllowed(i.risk, i.plan.amounts.amountLD, i.testLimitLD ?? 0n, i.riskOverride ?? '', i.adapterRiskAccepted === true)
-  if (permission.allowed) return ok(22)
-  return permission.why === 'blocked' ? fail(22, 'risk_blocked') : fail(22, 'risk_over_test_limit', `${permission.limit}`)
+  // The verdict is a warning now, not a permission: core/severity.ts weighs both codes as a
+  // possible loss, and the single tick is what lets the transfer through.
+  const code = riskWarningCode(i.risk)
+  return code ? fail(22, code) : ok(22)
 }
 
 export function runV1Guards(i: V1GuardInput): V1GuardReport {

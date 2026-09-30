@@ -14,9 +14,6 @@ import {
   FRESH_DELIVERY_DAYS,
   HARD_CHECKS,
   isHard,
-  OVERRIDE_WORD,
-  overrideAccepted,
-  sendAllowed,
   STALE_DELIVERY_DAYS,
   STOPPED_VERIFICATION_MINUTES,
   INFLIGHT_GRACE_MINUTES,
@@ -54,8 +51,6 @@ const withCheck = (base: RiskInput, id: CheckId, state: CheckState): RiskInput =
   checks: { ...base.checks, [id]: state },
 })
 
-const AMOUNT = 1_000_000n
-const TEST_LIMIT = 1_000n
 
 describe('the shape of the rule', () => {
   it('keeps the two in-flight thresholds in order and in risk.ts', () => {
@@ -76,21 +71,17 @@ describe('the shape of the rule', () => {
     // Nothing known includes "nobody corroborated the contract", which blocks outright.
     const r = assessRisk(emptyRiskInput('not run yet'))
     expect(r.tier).toBe('BLOCKED')
-    expect(r.overridable).toBe(false)
     // With the link corroborated, the five unrun hard checks are what is left, and they cap.
     const corroborated = assessRisk({ ...emptyRiskInput('not run yet'), linkCrossChecked: true })
     expect(corroborated.tier).toBe('UNVERIFIED')
     expect(corroborated.hardUnchecked.length).toBe(HARD_CHECKS.length)
-    expect(corroborated.overridable).toBe(false)
   })
 
   it('an uncorroborated contract is BLOCKED, not merely capped', () => {
     // Everything passed — but only one operator ever answered, so "everything" is one story.
     const r = assessRisk(clean({ linkCrossChecked: false }))
     expect(r.tier).toBe('BLOCKED')
-    expect(r.overridable).toBe(false)
     // Not a cap: §4 gives a blocked route no allowance at all, test amount included.
-    expect(r.testLimitOnly).toBe(false)
     expect(r.reasons.some((x) => /independent RPC operator/.test(x.text))).toBe(true)
     // The same route with a second operator behind it is the OK it looked like.
     expect(assessRisk(clean()).tier).toBe('OK')
@@ -100,7 +91,6 @@ describe('the shape of the rule', () => {
     for (const over of [{ testVerified: true }, { testVerified: true, delayed: undefined }]) {
       const r = assessRisk(clean({ linkCrossChecked: false, ...over }))
       expect(r.tier).toBe('BLOCKED')
-      expect(r.overridable).toBe(false)
     }
   })
 
@@ -140,8 +130,6 @@ describe('OK is only for a route where everything ran and passed', () => {
     const r = assessRisk(clean())
     expect(r.tier).toBe('OK')
     expect(r.reasons).toEqual([])
-    expect(r.testLimitOnly).toBe(false)
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toEqual({ allowed: true })
   })
 
   it('a check that does not apply does not stand in the way of OK', () => {
@@ -168,10 +156,7 @@ describe('BLOCKED is facts only, and takes nothing at all', () => {
     const r = assessRisk(withCheck(clean(), id, { status: 'fail', reason: 'the peer does not point back' }))
     expect(r.tier).toBe('BLOCKED')
     expect(r.reasons.some((x) => x.check === id)).toBe(true)
-    expect(r.overridable).toBe(false)
     // Not even a test amount.
-    expect(sendAllowed(r, TEST_LIMIT, TEST_LIMIT)).toEqual({ allowed: false, why: 'blocked' })
-    expect(sendAllowed(r, 1n, TEST_LIMIT, OVERRIDE_WORD)).toEqual({ allowed: false, why: 'blocked' })
   })
 
   it('a deprecated verifier blocks, whether it is a DVN or a v1 oracle', () => {
@@ -184,15 +169,10 @@ describe('BLOCKED is facts only, and takes nothing at all', () => {
     expect(assessRisk(clean({ configMismatch: true })).tier).toBe('BLOCKED')
   })
 
-  it('a delivered test does not unblock a blocked route', () => {
-    const r = assessRisk(clean({ deprecatedVerifier: true, testVerified: true }))
-    expect(r.tier).toBe('BLOCKED')
-  })
 
   it('a soft check failing is a warning, not a block', () => {
     const r = assessRisk(withCheck(clean(), 'history', { status: 'fail', reason: 'no deliveries found' }))
     expect(r.tier).toBe('CAUTION')
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toEqual({ allowed: true })
   })
 })
 
@@ -200,21 +180,14 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
   it.each(HARD_CHECKS)('a hard check that could not run (%s) caps the amount and no word lifts it', (id) => {
     const r = assessRisk(withCheck(clean(), id, { status: 'unchecked', reason: 'destination RPC did not answer' }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.testLimitOnly).toBe(true)
-    expect(r.overridable).toBe(false)
     // The reason is shown, with why it could not be checked.
     expect(r.reasons.some((x) => x.check === id && /not checked: destination RPC did not answer/.test(x.text))).toBe(true)
     // Below the limit: fine. Above it: refused, and the confirmation word changes nothing.
-    expect(sendAllowed(r, TEST_LIMIT, TEST_LIMIT)).toEqual({ allowed: true })
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toEqual({ allowed: false, why: 'over_test_limit', limit: TEST_LIMIT })
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toEqual({ allowed: false, why: 'over_test_limit', limit: TEST_LIMIT })
   })
 
   it('an unverified standard caps the amount, whatever else passed', () => {
     const r = assessRisk(clean({ unverifiedStandard: true }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.overridable).toBe(false)
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toMatchObject({ allowed: false })
     expect(r.reasons.some((x) => /never been verified against a live deployment/.test(x.text))).toBe(true)
   })
 
@@ -223,8 +196,6 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     // through that oracle is better evidence than a name in a list would have been.
     const r = assessRisk(clean({ unknownInfra: true, history: { kind: 'delivered', days: 1 } }))
     expect(r.tier).toBe('CAUTION')
-    expect(r.testLimitOnly).toBe(false)
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toEqual({ allowed: true })
     expect(r.reasons.some((x) => /deliveries have gone through it/.test(x.text))).toBe(true)
   })
 
@@ -232,10 +203,6 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     for (const history of [{ kind: 'never' } as const, { kind: 'none_in_window', days: 12 } as const]) {
       const r = assessRisk(clean({ unknownInfra: true, history }))
       expect(r.tier, JSON.stringify(history)).toBe('UNVERIFIED')
-      expect(r.overridable).toBe(true)
-      expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toMatchObject({ allowed: false })
-      expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toEqual({ allowed: true })
-      expect(sendAllowed(r, AMOUNT, TEST_LIMIT, 'yes please')).toMatchObject({ allowed: false })
     }
   })
 
@@ -244,7 +211,6 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     // cannot be half of a two-condition cap.
     const r = assessRisk(clean({ unknownInfra: true, history: { kind: 'unknown', reason: 'provider refused the range' } }))
     expect(r.tier).toBe('CAUTION')
-    expect(r.testLimitOnly).toBe(false)
   })
 
   it('a verifier LayerZero publishes and has not deprecated is not mentioned at all', () => {
@@ -256,10 +222,7 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
   it('a queue younger than an hour caps the amount, and the word lifts it', () => {
     const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: STOPPED_VERIFICATION_MINUTES - 1 } }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.testLimitOnly).toBe(true)
-    expect(r.overridable).toBe(true)
     expect(r.reasons.some((x) => /3 packet\(s\).*not been delivered.*queues behind/.test(x.text))).toBe(true)
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toEqual({ allowed: true })
     // It is a delay, not a blocked path: the path check itself is untouched by it.
     expect(r.checks.path.status).toBe('pass')
   })
@@ -269,27 +232,21 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     // thing that answers it is a test transfer that arrives.
     const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: STOPPED_VERIFICATION_MINUTES + 1 } }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.testLimitOnly).toBe(true)
-    expect(r.overridable).toBe(false)
     expect(r.reasons.some((x) => /waiting more than an hour.*verification may have stopped/.test(x.text))).toBe(true)
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT, OVERRIDE_WORD)).toMatchObject({ allowed: false, why: 'over_test_limit' })
     // A test-sized amount still goes: it is a stoppage on the route, not a refusal to send.
-    expect(sendAllowed(r, TEST_LIMIT, TEST_LIMIT)).toEqual({ allowed: true })
   })
 
-  it('sits exactly on the threshold on the overridable side', () => {
-    // The boundary is spelled out so a later change to the constant cannot move it by accident.
+  it('a queue caps the route on both sides of the stopped-verification threshold', () => {
+    // The threshold used to separate an overridable cap from a non-overridable one. `overridable`
+    // is gone with the test-limit mechanism, so both sides now say the same thing — the route is
+    // unverified and the single tick is what sends it. Kept as a boundary test so a later change
+    // to the constant still has to be deliberate.
     const at = assessRisk(clean({ delayed: { packets: 1, oldestMinutes: STOPPED_VERIFICATION_MINUTES } }))
-    expect(at.overridable).toBe(true)
-    const just_over = assessRisk(clean({ delayed: { packets: 1, oldestMinutes: STOPPED_VERIFICATION_MINUTES + 0.01 } }))
-    expect(just_over.overridable).toBe(false)
+    const over = assessRisk(clean({ delayed: { packets: 1, oldestMinutes: STOPPED_VERIFICATION_MINUTES + 0.01 } }))
+    expect(at.tier).toBe('UNVERIFIED')
+    expect(over.tier).toBe('UNVERIFIED')
   })
 
-  it('a delivered test lifts even the hour-old queue’s cap', () => {
-    const r = assessRisk(clean({ delayed: { packets: 2, oldestMinutes: 240 }, testVerified: true }))
-    expect(r.tier).toBe('CAUTION')
-    expect(r.testLimitOnly).toBe(false)
-  })
 
   it('a stuck payload still blocks, which is the difference from a queue', () => {
     const r = assessRisk(withCheck(clean(), 'path', { status: 'fail', reason: 'the endpoint is holding a stored payload' }))
@@ -299,7 +256,6 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
   it('a route nothing has ever been delivered on is unverified', () => {
     const r = assessRisk(clean({ history: { kind: 'never' } }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.overridable).toBe(true)
   })
 
   it('history decides between unverified, caution and silence', () => {
@@ -323,27 +279,14 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     const i = withCheck(clean({ unknownInfra: true, history: { kind: 'never' } }), 'peers', { status: 'unchecked', reason: 'rpc' })
     const r = assessRisk(i)
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.overridable).toBe(false)
   })
 
-  it('a confirmed test delivery lifts the cap and says so', () => {
-    const capped = assessRisk(withCheck(clean(), 'delivery_sim', { status: 'unchecked', reason: 'rpc' }))
-    expect(capped.testLimitOnly).toBe(true)
-    const after = assessRisk(withCheck(clean({ testVerified: true }), 'delivery_sim', { status: 'unchecked', reason: 'rpc' }))
-    expect(after.tier).toBe('CAUTION')
-    expect(after.testLimitOnly).toBe(false)
-    expect(sendAllowed(after, AMOUNT, TEST_LIMIT)).toEqual({ allowed: true })
-    // The reason it could not be checked is still on screen — the cap lifted, the fact did not.
-    expect(after.reasons.some((x) => x.check === 'delivery_sim')).toBe(true)
-    expect(after.reasons.some((x) => /confirmed delivered/.test(x.text))).toBe(true)
-  })
 })
 
 describe('CAUTION never becomes worse than it is', () => {
   it('an unusual DVN set is a warning at most', () => {
     const r = assessRisk(clean({ unknownDvnSet: true }))
     expect(r.tier).toBe('CAUTION')
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toEqual({ allowed: true })
   })
 
   it('an unusual DVN set on a route with no history is still only a warning about the DVNs', () => {
@@ -361,19 +304,9 @@ describe('CAUTION never becomes worse than it is', () => {
   it.each([['recentChange'], ['thinGas'], ['nearLimit']] as const)('%s warns and allows the send', (flag) => {
     const r = assessRisk(clean({ [flag]: true }))
     expect(r.tier).toBe('CAUTION')
-    expect(sendAllowed(r, AMOUNT, TEST_LIMIT)).toEqual({ allowed: true })
   })
 })
 
-describe('the confirmation word', () => {
-  it('accepts only the word, in any case, trimmed', () => {
-    expect(overrideAccepted(OVERRIDE_WORD)).toBe(true)
-    expect(overrideAccepted(' unverified ')).toBe(true)
-    expect(overrideAccepted('unverifie')).toBe(false)
-    expect(overrideAccepted('')).toBe(false)
-    expect(overrideAccepted('yes')).toBe(false)
-  })
-})
 
 describe('what LayerZero says about a DVN', () => {
   it('has a committed list for every chain the app serves', () => {
@@ -427,35 +360,18 @@ describe('an adapter is trusted by the committed list, or not at all', () => {
     const r = assessRisk(clean({ adapter: standing({ lockedBps: 0, outboundNonce: 0n }) }))
     expect(r.tier).not.toBe('BLOCKED')
     expect(r.adapterUnproven).toBe(true)
-    expect(r.testLimitOnly).toBe(true)
     // The full amount is reachable, but only through an explicit acknowledgement.
-    expect(r.overridable).toBe(true)
   })
 
-  it('red: a test amount needs nothing, the full amount needs the tick', () => {
-    const r = assessRisk(clean({ adapter: standing({ lockedBps: 0, outboundNonce: 0n }) }))
-    const limit = 100n
-    // Within the test limit: no extra step at all.
-    expect(sendAllowed(r, limit, limit)).toEqual({ allowed: true })
-    expect(sendAllowed(r, 1n, limit)).toEqual({ allowed: true })
-    // Over it, unticked: refused, and told which limit it was.
-    expect(sendAllowed(r, limit + 1n, limit)).toMatchObject({ allowed: false, why: 'over_test_limit' })
-    // Ticked: allowed.
-    expect(sendAllowed(r, limit + 1n, limit, '', true)).toEqual({ allowed: true })
-  })
 
   it('amber is NOT liftable by the tick — there the app wants the evidence, not a click', () => {
     const r = assessRisk(clean({ adapter: standing() }))
     expect(r.adapterUnproven).toBe(false)
-    expect(r.overridable).toBe(false)
-    expect(sendAllowed(r, 101n, 100n, '', true)).toMatchObject({ allowed: false, why: 'over_test_limit' })
   })
 
   it('healthy signals but no listing is amber, capped, and not overridable by a word', () => {
     const r = assessRisk(clean({ adapter: standing() }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.testLimitOnly).toBe(true)
-    expect(r.overridable).toBe(false)
     // The wording must not read as "checked".
     expect(r.reasons.some((x) => /not on the reviewed list/.test(x.text) && /not proof/.test(x.text))).toBe(true)
   })

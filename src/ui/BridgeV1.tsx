@@ -37,7 +37,6 @@ import { pushHistory, setHistoryStatus, type Stored } from './storage'
 import { useV1PeerBack, useV1Plan, useV1Simulation, useV1StoredPayload } from './v1Hooks'
 import { useV1RouteRisk } from './riskHooks'
 import { RiskPanel } from './components/RiskPanel'
-import { markRouteVerified, rememberedTestLimit, rememberTestLimit, testLimitLD } from '@/protocols/lz-risk'
 
 const GUARD_LABEL = (d: Dict, code: string): string => (d.v1Guard as Record<string, string>)[code] ?? code
 
@@ -102,18 +101,6 @@ export function BridgeV1({
   const [storedPayloadAccepted, setStoredPayloadAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   const [txError, setTxError] = useState('')
-  // Empty on a token that has never had a limit set — there is no sensible default for "a small
-  // amount of this token", so an unverified route sends nothing until the number is chosen.
-  const [testLimit, setTestLimit] = useState(() => rememberedTestLimit({ chain: src.key, token: info.token }))
-  const onTestLimit = useCallback(
-    (v: string) => {
-      setTestLimit(v)
-      rememberTestLimit({ chain: src.key, token: info.token }, v)
-    },
-    [src.key, info.token],
-  )
-  const [riskOverride, setRiskOverride] = useState('')
-  const [adapterRiskAccepted, setAdapterRiskAccepted] = useState(false)
   const [risksAccepted, setRisksAccepted] = useState(false)
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
@@ -163,7 +150,6 @@ export function BridgeV1({
     const gas = risk.data?.dstGasEstimate
     if (gas !== undefined && gas !== dstGasEstimate) setDstGasEstimate(gas)
   }, [risk.data?.dstGasEstimate, dstGasEstimate])
-  const limitLD = testLimitLD(testLimit, info.decimals)
 
   const selfCheck = useMemo(() => (planData ? v1SelfCheck(planData, encodeV1SendCalldata(planData)) : undefined), [planData])
   const approveIntent = useMemo(
@@ -174,10 +160,6 @@ export function BridgeV1({
   // §Address book. LayerZero v1 routes in this app are EVM to EVM.
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
-  // §Adapter An acceptance must not outlive the token, route or amount it was given for.
-  useEffect(() => {
-    setAdapterRiskAccepted(false)
-  }, [info.oft, dstKey, planData?.amounts.amountLD])
   // The one tick covers what was on screen when it was ticked, recipient included.
   useEffect(() => {
     setRisksAccepted(false)
@@ -211,9 +193,6 @@ export function BridgeV1({
     storedPayloadUnavailableAccepted: storedPayloadAccepted,
     highFeeAccepted,
     risk: risk.data?.risk,
-    testLimitLD: limitLD,
-    riskOverride,
-    adapterRiskAccepted,
     risksAccepted,
   }
   const report = runV1Guards(guardInput)
@@ -297,9 +276,6 @@ export function BridgeV1({
           customRpc={stored.customRpc[src.key]}
           onFinal={(phase) => {
             setStored(setHistoryStatus(stored, sent.txHash, phase))
-            // §4: a delivery confirmed on chain is the one thing that lifts an unverified route's
-            // amount cap, and it lifts it for 24 hours. Nothing a user can type does this.
-            if (phase === 'delivered') markRouteVerified({ protocol: 'lz-v1', srcChain: src.key, oft: info.oft, dstChain: sent.dstKey })
           }}
           onNew={() => {
             setSent(null)
@@ -493,14 +469,7 @@ export function BridgeV1({
           error={risk.error ? shortError(risk.error) : ''}
           decimals={info.decimals}
           symbol={info.symbol}
-          testLimit={testLimit}
-          onTestLimit={onTestLimit}
-          testLimitLD={limitLD}
           amountLD={planData?.amounts.amountLD}
-          override={riskOverride}
-          onOverride={setRiskOverride}
-          adapterAccepted={adapterRiskAccepted}
-          onAdapterAccepted={setAdapterRiskAccepted}
         />
 
         <V1Checks results={report.results} />

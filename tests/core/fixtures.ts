@@ -128,7 +128,6 @@ export function goodInput(over: Partial<GuardInput> = {}): GuardInput {
     // §4 guard 22: a clean verdict, so a test about guards 1-21 is not also a test about the risk
     // panel. The risk rule has its own tests in lzRisk.test.ts.
     risk: cleanRisk(),
-    testLimitLD: 10n ** 18n,
     ...over,
   }
 }

@@ -45,7 +45,6 @@ import { useV2RouteRisk } from './riskHooks'
 import { RiskPanel } from './components/RiskPanel'
 import { RiskWarnings } from './components/RiskWarnings'
 import { shownFailures } from '@/core/severity'
-import { markRouteVerified, rememberedTestLimit, rememberTestLimit, testLimitLD } from '@/protocols/lz-risk'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -112,12 +111,9 @@ export function BridgeApp({
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [pdaAccepted, setPdaAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
-  const [adapterRiskAccepted, setAdapterRiskAccepted] = useState(false)
   const [risksAccepted, setRisksAccepted] = useState(false)
   // §4 The test-amount limit is remembered per token (there is no default — see testLimit.ts); the
   // confirmation word is per transfer, because it is an answer about this one.
-  const [testLimit, setTestLimit] = useState('')
-  const [riskOverride, setRiskOverride] = useState('')
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored, 'lz-oft')
@@ -150,10 +146,7 @@ export function BridgeApp({
     setPeerBackAccepted(false)
     setPdaAccepted(false)
     setHighFeeAccepted(false)
-    setAdapterRiskAccepted(false)
     setRisksAccepted(false)
-    setTestLimit('')
-    setRiskOverride('')
     setSent(null)
     setTxError('')
   }, [])
@@ -450,14 +443,9 @@ export function BridgeApp({
   useEffect(() => {
     setHighFeeAccepted(false)
   }, [planData?.value])
-  // §Adapter Same rule for the adapter tick: the token, the route and the amount are all part of
-  // what was accepted, so any of them changing takes the acceptance with it.
-  const acceptedFor = info?.vm === 'evm' ? info.oft : undefined
-  useEffect(() => {
-    setAdapterRiskAccepted(false)
-  }, [acceptedFor, dest.dstEid, planData?.amounts.amountLD])
   // The one tick covers what was on screen when it was ticked. The token, the route, the amount and
   // the recipient are all part of that, so any of them changing takes the acceptance with it.
+  const acceptedFor = info?.vm === 'evm' ? info.oft : undefined
   useEffect(() => {
     setRisksAccepted(false)
   }, [acceptedFor, dest.dstEid, planData?.amounts.amountLD, planData?.recipient])
@@ -509,20 +497,6 @@ export function BridgeApp({
   // `not_cross_checked` is exactly that fact, already computed by the probe (ui/hooks.ts).
   const linkCrossChecked = !flags.includes('not_cross_checked')
   const risk = useV2RouteRisk(info?.vm === 'evm' ? info : undefined, evmPlan.data, evmSrc, stored.customRpc, linkCrossChecked)
-  const limitLD = testLimitLD(testLimit, info?.decimals ?? 18)
-  // The limit belongs to the token, so checking a different contract loads that token's own number
-  // (or leaves the field empty, which is what an untouched token looks like).
-  const limitToken = info?.vm === 'evm' ? info.token : undefined
-  useEffect(() => {
-    setTestLimit(limitToken ? rememberedTestLimit({ chain: src.key, token: limitToken }) : '')
-  }, [limitToken, src.key])
-  const onTestLimit = useCallback(
-    (v: string) => {
-      setTestLimit(v)
-      if (limitToken) rememberTestLimit({ chain: src.key, token: limitToken }, v)
-    },
-    [limitToken, src.key],
-  )
   /**
    * §4 The indicator has runners for LayerZero EVM-to-EVM routes only. Where it has none the panel
    * says so in grey rather than showing nothing — an absent verdict must not read as a passed one.
@@ -534,9 +508,6 @@ export function BridgeApp({
     simulation,
     selfCheck: check.data?.selfCheck,
     risk: risk.data?.risk,
-    testLimitLD: limitLD,
-    riskOverride,
-    adapterRiskAccepted,
     risksAccepted,
   }
   const report = runGuards(fullInput)
@@ -686,11 +657,6 @@ export function BridgeApp({
       customRpc={stored.customRpc['solana']}
       onFinal={(phase) => {
         setStored(setHistoryStatus(stored, sent.txHash, phase))
-        // §4: only a delivery confirmed on chain lifts an unverified route's amount cap.
-        const dst = byEid(sent.dstEid)
-        if (phase === 'delivered' && dst && info?.vm === 'evm') {
-          markRouteVerified({ protocol: 'lz-oft', srcChain: sent.srcChain, oft: info.oft, dstChain: dst.key })
-        }
       }}
       onNew={reset}
     />
@@ -818,14 +784,7 @@ export function BridgeApp({
                 error={risk.error ? shortError(risk.error) : ''}
                 decimals={info?.decimals ?? 18}
                 symbol={info?.symbol ?? ''}
-                testLimit={testLimit}
-                onTestLimit={onTestLimit}
-                testLimitLD={limitLD}
                 amountLD={planData?.amounts.amountLD}
-                override={riskOverride}
-                onOverride={setRiskOverride}
-                adapterAccepted={adapterRiskAccepted}
-                onAdapterAccepted={setAdapterRiskAccepted}
               />
               <Checks
                 report={report}
