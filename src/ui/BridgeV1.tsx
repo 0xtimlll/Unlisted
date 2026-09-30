@@ -14,7 +14,8 @@ import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
-import { riskTickScope, tickCovers } from '@/core/riskTick'
+import { riskTickScope } from '@/core/riskTick'
+import { useRiskTick } from './useRiskTick'
 import { sameAddress } from '@/core/encoding'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
@@ -102,8 +103,6 @@ export function BridgeV1({
   const [storedPayloadAccepted, setStoredPayloadAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   const [txError, setTxError] = useState('')
-  // The scope the one tick was given for (core/riskTick.ts); it counts only while that is still what is on screen.
-  const [tickedFor, setTickedFor] = useState<string | null>(null)
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
   // The contract decided at probe time; a route change never re-opens that question.
@@ -163,7 +162,8 @@ export function BridgeV1({
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
   // The one tick covers what was on screen when it was ticked: chain, token, route, amount,
-  // recipient and wallet. Any of them changing is a different scope.
+  // recipient and wallet — and the warnings shown then (ui/useRiskTick.ts). Any of them changing
+  // is a different scope.
   const tickScope = riskTickScope({
     chain: src.key,
     contract: info.oft,
@@ -172,17 +172,13 @@ export function BridgeV1({
     recipient: planData?.recipient,
     sender: wallet,
   })
-  const risksAccepted = tickCovers(tickedFor, tickScope)
-  const setRisksAccepted = (v: boolean) => setTickedFor(v ? tickScope : null)
-  // Derived state already ignores a stale tick; this also forgets it, so coming back to an earlier
-  // amount does not revive a tick given before the warnings on screen were last looked at.
-  useEffect(() => {
-    if (tickedFor !== null && tickedFor !== tickScope) setTickedFor(null)
-  }, [tickedFor, tickScope])
 
   const last6Ok = !recipientCustom || (recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6)))
 
-  const guardInput: V1GuardInput = {
+  // Two passes on purpose: the warnings do not depend on the tick, so the first pass finds what is
+  // on screen, the tick is judged against that list (and its scope), and the second pass is the
+  // verdict with the tick applied. `guardInput` is what the click re-runs, so it carries it.
+  const draftInput: V1GuardInput = {
     walletAddress: wallet,
     walletChainId,
     srcChainId: src.chainId,
@@ -208,8 +204,10 @@ export function BridgeV1({
     storedPayloadUnavailableAccepted: storedPayloadAccepted,
     highFeeAccepted,
     risk: risk.data?.risk,
-    risksAccepted,
   }
+  const draft = runV1Guards(draftInput)
+  const tick = useRiskTick(tickScope, planData ? shownFailures(draft.riskWarnings) : [])
+  const guardInput: V1GuardInput = { ...draftInput, risksAccepted: tick.accepted }
   const report = runV1Guards(guardInput)
   // Reads in flight are "checking", not problems to accept.
   const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
@@ -496,8 +494,9 @@ export function BridgeV1({
           blocks={shownBlocks}
           warnings={shownWarnings}
           label={(c) => GUARD_LABEL(d, c)}
-          accepted={risksAccepted}
-          onAccepted={setRisksAccepted}
+          accepted={tick.accepted}
+          onAccepted={tick.setAccepted}
+          added={tick.added}
         />
         {chainMismatch ? (
           <Button variant="cta" disabled={switching} onClick={() => switchChain({ chainId: src.chainId })}>

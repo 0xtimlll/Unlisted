@@ -44,10 +44,16 @@ export function RiskWarnings(p: {
   label: (code: string) => string
   accepted: boolean
   onAccepted: (v: boolean) => void
+  /**
+   * Warnings that appeared, or got heavier, after the tick was given (ui/useRiskTick.ts). The tick
+   * is already off by then; this is so the user sees WHAT changed rather than only that it did.
+   */
+  added?: readonly { code: string }[]
   /** Reads still in flight are not shown as problems; the screens filter them out first. */
 }) {
   const d = useDict()
   if (p.blocks.length === 0 && p.warnings.length === 0) return null
+  const isNew = (code: string) => (p.added ?? []).some((a) => a.code === code)
 
   return (
     <div className="space-y-2">
@@ -68,8 +74,9 @@ export function RiskWarnings(p: {
           {p.warnings.map((w) => {
             const weight = warningWeight(w.code)
             return (
-              <div key={`${w.id}-${w.code}`} className={`rounded-xl border px-3 py-2 text-xs ${WEIGHT_CLASS[weight]}`}>
+              <div key={`${w.id}-${w.code}`} className={`rounded-xl border px-3 py-2 text-xs ${WEIGHT_CLASS[weight]} ${isNew(w.code) ? 'ring-2 ring-ink/40' : ''}`}>
                 <span className="mr-1">{WEIGHT_GLYPH[weight]}</span>
+                {isNew(w.code) ? <span className="mr-1 rounded bg-ink px-1 text-[10px] font-semibold uppercase text-surface">{d.risks.newBadge}</span> : null}
                 {p.label(w.code)}
                 {DETAILED.has(w.code) && w.detail ? <div className="mono mt-1 break-all opacity-80">{w.detail}</div> : null}
                 {/* The strongest ones say what to do about them, not just what is wrong. */}
@@ -77,6 +84,8 @@ export function RiskWarnings(p: {
               </div>
             )
           })}
+
+          {(p.added ?? []).length > 0 ? <div className="text-xs font-semibold text-ink">{d.risks.newSinceTick}</div> : null}
 
           {/* No tick while something blocks: there would be nothing it could open. */}
           {p.blocks.length === 0 ? (

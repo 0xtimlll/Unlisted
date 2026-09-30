@@ -12,7 +12,8 @@ import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi } from '@/core/abi'
-import { riskTickScope, tickCovers } from '@/core/riskTick'
+import { riskTickScope } from '@/core/riskTick'
+import { useRiskTick } from './useRiskTick'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
 import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
@@ -74,8 +75,6 @@ export function CcipApp({
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
-  // The scope the one tick was given for (core/riskTick.ts); it counts only while that is still what is on screen.
-  const [tickedFor, setTickedFor] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
@@ -209,7 +208,8 @@ export function CcipApp({
   })
   const planData = plan.data
   // The tick covers what was on screen when it was ticked: chain, token, route, amount, recipient
-  // and wallet. Any of them changing is a different scope.
+  // and wallet — and the warnings shown then (ui/useRiskTick.ts). Any of them changing is a
+  // different scope.
   const tickScope = riskTickScope({
     chain: src.key,
     contract: planData?.token,
@@ -218,13 +218,6 @@ export function CcipApp({
     recipient: planData?.recipient,
     sender: wallet,
   })
-  const risksAccepted = tickCovers(tickedFor, tickScope)
-  const setRisksAccepted = (v: boolean) => setTickedFor(v ? tickScope : null)
-  // Derived state already ignores a stale tick; this also forgets it, so coming back to an earlier
-  // amount does not revive a tick given before the warnings on screen were last looked at.
-  useEffect(() => {
-    if (tickedFor !== null && tickedFor !== tickScope) setTickedFor(null)
-  }, [tickedFor, tickScope])
 
   // A fee the user accepted was a specific number; the moment it changes they have not read it.
   const planValue = plan.data?.value
@@ -246,7 +239,6 @@ export function CcipApp({
     recipientIsCustom: recipientCustom,
     customRecipientConfirmed: recipientConfirmed,
     recipientLookalike: bookRefuses(bookVerdict),
-    risksAccepted,
     tokenBalance: tokenBalance.data,
     nativeBalance: nativeBalance.data?.value,
     allowance: allowance.data,
@@ -261,12 +253,19 @@ export function CcipApp({
   // user would be asked to accept a number before anything could tell them whether it works.
   const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok)
   const check = useCcipCheck(planData, preOk, stored.customRpc)
-  const report = runCcipGuards({
+  // Two passes on purpose: the warnings do not depend on the tick, so the first pass finds what is
+  // on screen, the tick is judged against that list (and its scope), and the second pass is the
+  // verdict with the tick applied. `guardInput` is what the click re-runs, so it carries it.
+  const draftInput: CcipGuardInput = {
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
     simulation: check.data?.simulation,
     selfCheck: check.data?.selfCheck,
-  })
+  }
+  const draft = runCcipGuards(draftInput)
+  const tick = useRiskTick(tickScope, planData ? shownFailures(draft.riskWarnings) : [])
+  const guardInput: CcipGuardInput = { ...draftInput, risksAccepted: tick.accepted }
+  const report = runCcipGuards(guardInput)
 
   // ---- writes -------------------------------------------------------------------
   const approveWrite = useWriteContract()
@@ -296,7 +295,7 @@ export function CcipApp({
     setTxError('')
     const p = planData
     if (!p || !evmSrc || !cfg) return
-    if (!runCcipGuards({ ...baseInput, gasCostWei: check.data?.gasCostWei, simulation: check.data?.simulation, selfCheck: check.data?.selfCheck }).canSend) return
+    if (!runCcipGuards(guardInput).canSend) return
     if (p.router.toLowerCase() !== cfg.router.toLowerCase()) return
     const [selector, message] = assembleCcipSendArgs(p)
     sendWrite.writeContract(
@@ -532,8 +531,9 @@ export function CcipApp({
           blocks={shownBlocks}
           warnings={shownWarnings}
           label={(c) => d.ccipGuard[c as keyof typeof d.ccipGuard] ?? c}
-          accepted={risksAccepted}
-          onAccepted={setRisksAccepted}
+          accepted={tick.accepted}
+          onAccepted={tick.setAccepted}
+          added={tick.added}
         />
         {!report.canSend && firstFailing && !firstFailing.ok ? <div className="text-center text-xs text-muted">{d.ccipGuard[firstFailing.code]}</div> : null}
       </div>

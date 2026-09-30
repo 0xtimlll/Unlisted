@@ -515,6 +515,8 @@ export const en = {
     blockedHint: 'Fix the item above and the send button comes back. These are not risks to accept — the money would be lost, or the transaction would not go through.',
     testFirst: 'Send a test amount first.',
     acceptAll: 'I understand the risks, send',
+    newSinceTick: 'The list changed after you ticked: what is marked "new" was not there, or was milder. Read it and tick again.',
+    newBadge: 'new',
   },
   addressBook: {
     title: 'Address book',
