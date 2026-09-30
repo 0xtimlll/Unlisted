@@ -77,6 +77,9 @@ const BLOCKING: ReadonlySet<string> = new Set([
   // ── the amount does not survive the trip ─────────────────────────────────────
   'amount_zero',
   'amount_rounds_to_zero',
+  // v1: the contract's own fee takes the whole amount, or what is left rounds to nothing.
+  'delivered_zero',
+  'oft_fee_exceeds_amount',
   // The NTT manager reverts on dust rather than rounding it away.
   'amount_has_dust',
 
@@ -90,7 +93,14 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'fee_mismatch',
   'lz_token_fee_nonzero',
   'min_gt_amount',
+  'min_gt_delivered',
   'slippage_too_high',
+  // v1 standards with no minimum in `sendFrom`: a slippage setting would be one nothing enforces.
+  'slippage_unsupported',
+  // NTT: the plan is always built with shouldQueue=false, so a plan that says otherwise is not ours.
+  'queueing_enabled',
+  // OFTCore._checkAdapterParams requires them empty; anything else reverts.
+  'adapter_params_forbidden',
   'not_multiple_of_rate',
   'needs_approve',
   'approve_amount_mismatch',

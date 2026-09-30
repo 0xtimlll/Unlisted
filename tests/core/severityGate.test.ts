@@ -79,8 +79,7 @@ const DELIBERATE_WARNINGS = new Set([
 ])
 
 describe('every code a guard emits has been classified on purpose', () => {
-  // KNOWN BUG, fixed in the next commit: six v1/NTT codes are warnings by omission.
-  it.fails('is either blocking, pending, or a listed warning — never a warning by omission', () => {
+  it('is either blocking, pending, or a listed warning — never a warning by omission', () => {
     const unclassified = [...emittedCodes()]
       .filter((c) => !isBlockingCode(c) && !isPendingCode(c) && !DELIBERATE_WARNINGS.has(c))
       .sort()
@@ -100,8 +99,7 @@ describe('every code a guard emits has been classified on purpose', () => {
    * names "the amount arrives as zero" and "the app would have to build something malformed" as the
    * reasons to refuse, and these are those cases on the v1 and NTT paths.
    */
-  // KNOWN BUG, fixed in the next commit.
-  it.fails('refuses what the header of severity.ts says must be refused', () => {
+  it('refuses what the header of severity.ts says must be refused', () => {
     const certainLoss = ['delivered_zero', 'oft_fee_exceeds_amount', 'amount_zero', 'amount_rounds_to_zero', 'recipient_zero']
     const malformed = ['min_gt_delivered', 'min_gt_amount', 'slippage_unsupported', 'queueing_enabled', 'adapter_params_forbidden']
     for (const c of [...certainLoss, ...malformed]) expect(isBlockingCode(c), c).toBe(true)
