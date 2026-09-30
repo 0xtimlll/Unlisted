@@ -87,7 +87,7 @@ export function flagLevel(flag: string): ReasonLevel {
 }
 
 /** The codes guard 22 emits; the indicator reads the verdict itself instead. */
-const RISK_CODES: ReadonlySet<string> = new Set(['risk_unknown', 'risk_blocked', 'risk_unverified'])
+const RISK_CODES: ReadonlySet<string> = new Set(['risk_unknown', 'risk_unavailable', 'risk_blocked', 'risk_unverified'])
 
 export type IndicatorInput = {
   /** Nothing to assess until a destination is chosen. */

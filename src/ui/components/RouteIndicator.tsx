@@ -72,8 +72,8 @@ export function RouteIndicator(p: {
             className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden w-80 rounded-xl border border-line bg-surface p-3 text-xs text-ink shadow-xl group-hover:block group-focus-within:block"
           >
             <ul className="space-y-1">
-              {tooltip.map((r) => (
-                <li key={r.code} className={r.level === 'red' ? 'text-danger' : 'text-warn'}>
+              {tooltip.map((r, i) => (
+                <li key={`${i}-${r.code}`} className={r.level === 'red' ? 'text-danger' : 'text-warn'}>
                   {r.level === 'red' ? '●' : '●'} {r.text}
                 </li>
               ))}
@@ -87,8 +87,8 @@ export function RouteIndicator(p: {
           <div className="space-y-3">
             {reasons.length > 0 ? (
               <ul className="space-y-1 text-xs">
-                {reasons.map((r) => (
-                  <li key={r.code} className={r.level === 'red' ? 'text-danger' : r.level === 'yellow' ? 'text-warn' : 'text-muted'}>
+                {reasons.map((r, i) => (
+                  <li key={`${i}-${r.code}`} className={r.level === 'red' ? 'text-danger' : r.level === 'yellow' ? 'text-warn' : 'text-muted'}>
                     ● {r.text}
                     {r.detail ? <span className="mono block break-all pl-4 opacity-80">{r.detail}</span> : null}
                   </li>
