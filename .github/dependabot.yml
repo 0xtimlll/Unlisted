@@ -1,0 +1,47 @@
+# Dependabot (§7). The weekly `npm run audit` in ci.yml reports advisories; this opens the PR that
+# fixes one, and also catches the upgrades that have no advisory behind them yet.
+#
+# Every version in package.json is exact on purpose (`save-exact=true`), so an update is always a
+# visible change to the lockfile and to package.json — which is the point. Grouped so that one
+# ecosystem bump is one PR to read rather than thirty.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+    open-pull-requests-limit: 5
+    # The wallet and chain libraries decide what gets signed; they are reviewed one at a time.
+    groups:
+      wallet-and-chain:
+        patterns:
+          - viem
+          - wagmi
+          - '@rainbow-me/*'
+          - '@solana/*'
+          - '@layerzerolabs/*'
+          - '@metaplex-foundation/*'
+          - '@noble/*'
+        update-types:
+          - patch
+      everything-else:
+        patterns:
+          - '*'
+        exclude-patterns:
+          - viem
+          - wagmi
+          - '@rainbow-me/*'
+          - '@solana/*'
+          - '@layerzerolabs/*'
+          - '@metaplex-foundation/*'
+          - '@noble/*'
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
