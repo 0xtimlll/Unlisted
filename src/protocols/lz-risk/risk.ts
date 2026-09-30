@@ -140,8 +140,12 @@ export type RiskInput = {
    *
    * See adapters.ts: an adapter has no on-chain fact that can establish it, so only the committed
    * list reaches OK. The indirect signals decide amber vs red and nothing more.
+   *
+   * REQUIRED, with an explicit `null` for a plain OFT. Optional would mean a future runner could
+   * turn the rule off by forgetting a field, which is the failure mode `linkCrossChecked` already
+   * had to be defended against — an omitted check is a check that passes.
    */
-  adapter?: AdapterStanding | undefined
+  adapter: AdapterStanding | null
 }
 
 export type RouteRisk = {
@@ -430,6 +434,8 @@ export function emptyRiskInput(reason = 'not run yet'): RiskInput {
     recentChange: false,
     // Nothing known means nothing corroborated, which is the blocking answer, not the neutral one.
     linkCrossChecked: false,
+    // No source contract to speak of, so no adapter question. Stated, not omitted.
+    adapter: null,
     delayed: undefined,
     thinGas: false,
     nearLimit: false,
