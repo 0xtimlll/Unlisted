@@ -90,6 +90,9 @@ export function RiskPanel(p: {
   amountLD: bigint | undefined
   override: string
   onOverride: (v: string) => void
+  /** §Adapter The tick under the red adapter warning. */
+  adapterAccepted: boolean
+  onAdapterAccepted: (v: boolean) => void
 }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
@@ -125,6 +128,18 @@ export function RiskPanel(p: {
 
       {r.tier === 'BLOCKED' ? <Alert kind="error">{d.risk.blockedNote}</Alert> : null}
 
+      {/* §Adapter An unproven adapter is red but not refused: a new token's lockbox looks exactly
+          like a fake on its first day. The test amount needs nothing; the full amount needs this. */}
+      {r.adapterUnproven ? (
+        <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
+          <p>{d.risk.adapterUnproven}</p>
+          <label className="mt-2 flex items-start gap-2 text-xs">
+            <input type="checkbox" className="mt-0.5" checked={p.adapterAccepted} onChange={(e) => p.onAdapterAccepted(e.target.checked)} />
+            <span>{d.risk.adapterAccept}</span>
+          </label>
+        </div>
+      ) : null}
+
       {r.testLimitOnly ? (
         <Box>
           <BoxLabel>{d.risk.testLimit}</BoxLabel>
@@ -136,12 +151,13 @@ export function RiskPanel(p: {
             })}
           </p>
           {overLimit ? <p className="mt-1 text-xs text-danger">{d.risk.overLimit}</p> : null}
-          {r.overridable ? (
+          {/* The adapter case is accepted by the tick above, not by typing a word here. */}
+          {r.overridable && !r.adapterUnproven ? (
             <div className="mt-2">
               <BoxLabel>{fmt(d.risk.overrideLabel, { word: OVERRIDE_WORD })}</BoxLabel>
               <Input value={p.override} onChange={(e) => p.onOverride(e.target.value)} placeholder={OVERRIDE_WORD} spellCheck={false} />
             </div>
-          ) : (
+          ) : r.overridable ? null : (
             <p className="mt-2 text-xs text-warn">{d.risk.notOverridable}</p>
           )}
         </Box>

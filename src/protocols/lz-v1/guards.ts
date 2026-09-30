@@ -133,6 +133,12 @@ export type V1GuardInput = {
   testLimitLD?: bigint | undefined
   /** §4 What the user typed to lift an overridable UNVERIFIED. Never lifts a hard-unchecked cap. */
   riskOverride?: string | undefined
+  /**
+   * §Adapter The tick on "I understand the risk, sending without a test". Only ever consulted for
+   * an unproven adapter (`RouteRisk.adapterUnproven`), and the screen clears it whenever the token,
+   * the route or the amount changes — an acceptance must not outlive what it was given for.
+   */
+  adapterRiskAccepted?: boolean | undefined
 }
 
 export type V1GuardReport = {
@@ -397,7 +403,7 @@ export function v1g22Risk(i: V1GuardInput): V1GuardResult {
   if (i.risk.testLimitOnly && i.testLimitLD === undefined && !(i.risk.overridable && i.riskOverride)) {
     return fail(22, 'risk_test_limit_unset')
   }
-  const permission = sendAllowed(i.risk, i.plan.amounts.amountLD, i.testLimitLD ?? 0n, i.riskOverride ?? '')
+  const permission = sendAllowed(i.risk, i.plan.amounts.amountLD, i.testLimitLD ?? 0n, i.riskOverride ?? '', i.adapterRiskAccepted === true)
   if (permission.allowed) return ok(22)
   return permission.why === 'blocked' ? fail(22, 'risk_blocked') : fail(22, 'risk_over_test_limit', `${permission.limit}`)
 }

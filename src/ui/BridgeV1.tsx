@@ -111,6 +111,7 @@ export function BridgeV1({
     [src.key, info.token],
   )
   const [riskOverride, setRiskOverride] = useState('')
+  const [adapterRiskAccepted, setAdapterRiskAccepted] = useState(false)
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
   // The contract decided at probe time; a route change never re-opens that question.
@@ -170,6 +171,11 @@ export function BridgeV1({
   // §Address book. LayerZero v1 routes in this app are EVM to EVM.
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
+  // §Adapter An acceptance must not outlive the token, route or amount it was given for.
+  useEffect(() => {
+    setAdapterRiskAccepted(false)
+  }, [info.oft, dstKey, planData?.amounts.amountLD])
+
   const last6Ok = !recipientCustom || (recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6)))
 
   const guardInput: V1GuardInput = {
@@ -200,6 +206,7 @@ export function BridgeV1({
     risk: risk.data?.risk,
     testLimitLD: limitLD,
     riskOverride,
+    adapterRiskAccepted,
   }
   const report = runV1Guards(guardInput)
 
@@ -481,6 +488,8 @@ export function BridgeV1({
           amountLD={planData?.amounts.amountLD}
           override={riskOverride}
           onOverride={setRiskOverride}
+          adapterAccepted={adapterRiskAccepted}
+          onAdapterAccepted={setAdapterRiskAccepted}
         />
 
         <V1Checks results={report.results} />

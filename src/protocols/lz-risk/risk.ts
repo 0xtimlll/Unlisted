@@ -163,6 +163,17 @@ export type RouteRisk = {
    * BLOCKED is never overridable.
    */
   overridable: boolean
+  /**
+   * §Adapter The source is an OFTAdapter that is not on the reviewed list AND whose indirect
+   * signals did not clear their floors — a brand-new token, or a fake. Distinct from the amber
+   * case, where the signals are fine and only the listing is missing.
+   *
+   * It is NOT a block: a new token's adapter looks exactly like this on its first day, and refusing
+   * it outright would make the app unusable for anything young. The route is capped to a test
+   * amount, which needs nothing extra, and the full amount needs one explicit acknowledgement —
+   * which is what `overridable` is for. The panel prints the warning in red.
+   */
+  adapterUnproven: boolean
 }
 
 /**
@@ -224,12 +235,6 @@ export function assessRisk(i: RiskInput): RouteRisk {
     blocking.push({ text: 'a party that verifies this route is one LayerZero has deprecated', check: 'config' })
   }
   if (i.configMismatch) blocking.push({ text: 'the send config on the source does not match the receive config on the destination', check: 'config' })
-  // An adapter nobody has reviewed AND whose indirect signals are weak or unreadable. Nothing here
-  // can establish it, so there is no small allowance either — a test amount into a lockbox that may
-  // not be a lockbox is still a loss.
-  if (i.adapter && !i.adapter.listed && !adapterSignsOk(i.adapter)) {
-    blocking.push({ text: adapterRedReason(i.adapter), check: 'adapter_liquidity' })
-  }
   // No independent operator stood behind the contract↔token link, so none of the checks below
   // mean more than the single endpoint that answered them.
   if (!i.linkCrossChecked) {
@@ -247,6 +252,8 @@ export function assessRisk(i: RiskInput): RouteRisk {
       hardUnchecked: hardUncheckedOf(i),
       testLimitOnly: false,
       overridable: false,
+      // A blocked route has no adapter question left to answer.
+      adapterUnproven: false,
     }
   }
 
@@ -272,16 +279,29 @@ export function assessRisk(i: RiskInput): RouteRisk {
     // Rule 2: nothing the user can type substitutes for a check that did not happen.
     overridable = false
   }
-  // A reviewed adapter is simply an adapter; an unreviewed one with healthy signals is capped.
-  // The wording is deliberate: "the signs are fine" is not "this was checked".
+  // §Adapter Two cases, and they differ in what lifts the cap rather than in how much may go.
+  //
+  //   signals fine, not listed   the app has partial evidence and wants the rest of it: only a
+  //                              test transfer that actually arrives lifts the cap. A word does not.
+  //   signals weak or unreadable the app has nothing. It says so in red and hands the decision over
+  //                              — a new token's adapter is indistinguishable from a fake on day
+  //                              one, so this cannot be a refusal. A test amount needs nothing; the
+  //                              full amount needs one acknowledgement.
+  let adapterUnproven = false
   if (i.adapter && !i.adapter.listed) {
-    reasons.push({
-      text: 'this adapter is not on the reviewed list; its indirect signs are fine, but that is not proof — a lockbox is not vouched for by the token it holds',
-      check: 'adapter_liquidity',
-    })
-    tier = worse(tier, 'UNVERIFIED')
-    // Only a test transfer that actually arrives lifts this. No typed word stands in for evidence.
-    overridable = false
+    if (adapterSignsOk(i.adapter)) {
+      reasons.push({
+        text: 'this adapter is not on the reviewed list; its indirect signs are fine, but that is not proof — a lockbox is not vouched for by the token it holds',
+        check: 'adapter_liquidity',
+      })
+      tier = worse(tier, 'UNVERIFIED')
+      overridable = false
+    } else {
+      adapterUnproven = true
+      reasons.push({ text: adapterRedReason(i.adapter), check: 'adapter_liquidity' })
+      tier = worse(tier, 'UNVERIFIED')
+      // Deliberately left overridable: see RouteRisk.adapterUnproven.
+    }
   }
   if (i.unverifiedStandard) {
     reasons.push({ text: 'this contract’s standard has never been verified against a live deployment, so only a test amount goes out on it' })
@@ -383,7 +403,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
   if (tier === 'OK' && reasons.length > 0) {
     throw new Error('lz-risk: OK with reasons')
   }
-  return { tier, reasons, checks: i.checks, hardUnchecked, testLimitOnly, overridable: testLimitOnly ? overridable : false }
+  return { tier, reasons, checks: i.checks, hardUnchecked, testLimitOnly, overridable: testLimitOnly ? overridable : false, adapterUnproven }
 }
 
 function hardUncheckedOf(i: RiskInput): CheckId[] {
@@ -436,9 +456,15 @@ export type SendPermission =
  * `override` is the word the user typed, and it is consulted only when the verdict says it may be.
  * A blocked route refuses every amount; a capped route refuses everything above the test limit.
  */
-export function sendAllowed(risk: RouteRisk, amountLD: bigint, testLimitLD: bigint, override = ''): SendPermission {
+/**
+ * `accepted` is the tick on the adapter warning (§Adapter). It reaches the same `overridable` gate
+ * the typed word does — one mechanism, two ways of saying yes — because the two caps it lifts are
+ * asked for in different places: the word sits under the risk panel, the tick under a red alert
+ * that names the specific thing being accepted.
+ */
+export function sendAllowed(risk: RouteRisk, amountLD: bigint, testLimitLD: bigint, override = '', accepted = false): SendPermission {
   if (risk.tier === 'BLOCKED') return { allowed: false, why: 'blocked' }
   if (!risk.testLimitOnly) return { allowed: true }
-  if (risk.overridable && overrideAccepted(override)) return { allowed: true }
+  if (risk.overridable && (accepted || overrideAccepted(override))) return { allowed: true }
   return amountLD <= testLimitLD ? { allowed: true } : { allowed: false, why: 'over_test_limit', limit: testLimitLD }
 }
