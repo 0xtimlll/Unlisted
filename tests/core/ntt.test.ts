@@ -15,6 +15,7 @@ import { parseNttOperations, wormholescanTxUrl } from '@/protocols/wormhole-ntt/
 import { findListedToken, listedChains, parseTokenList } from '@/protocols/wormhole-ntt/tokenList'
 import { verifyNttManager, type NttVerification, verifyNttManagerQuorum } from '@/protocols/wormhole-ntt/verify'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
+import { LOCKING_HUBS } from '@/protocols/wormhole-ntt/lockingHubs'
 import type { ReadClient } from '@/core/client'
 
 // Synthetic on purpose. These used to be the real L3 addresses, which silently coupled the tests
@@ -571,5 +572,179 @@ describe('NTT tracking', () => {
     })
     expect(state).toMatchObject({ phase: 'delivered', sourceTxHash: '0xaaa', destinationTxHash: '0xbbb', sourceNttManager: '0xsrc' })
     expect(parseNttOperations({ operations: [{ sourceChain: { transaction: { txHash: '0xaaa' } } }] }).phase).toBe('pending')
+  })
+})
+
+// ------------------------------------------------- the anchor rule (regression) ----
+
+/**
+ * The hole this block exists for.
+ *
+ * The gate used to accept a token-side anchor from EITHER side of the pair. The only route to the
+ * destination is `manager.getPeer()` — the manager's own claim — so an attacker supplied both
+ * halves: a fake manager naming real USDC, peered to a fake manager on the far side naming a token
+ * the attacker also wrote, which duly named it back. Everything else passed, because a contract
+ * returns the real core bridge address as easily as any other.
+ *
+ * CLAUDE.md rule 2 in four tests: only the source token, or the committed list, may say yes.
+ */
+describe('the anchor rule: only a fact the attacker cannot write about himself', () => {
+  /** The real token the victim holds. It never vouches for the fake manager, because it cannot. */
+  const REAL_TOKEN = getAddress('0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48')
+
+  /** Exactly the attack from the security report. */
+  const attackerSrc = (): Answers => ({
+    // The fake manager names a real, valuable token...
+    [`${MANAGER.toLowerCase()}.token`]: REAL_TOKEN,
+    [`${MANAGER.toLowerCase()}.chainId`]: ETH_WH,
+    [`${MANAGER.toLowerCase()}.getMode`]: 1,
+    [`${MANAGER.toLowerCase()}.tokenDecimals`]: 6,
+    [`${MANAGER.toLowerCase()}.getPeer`]: { peerAddress: pad(DST_MANAGER.toLowerCase() as Address, { size: 32 }), tokenDecimals: 6 },
+    [`${MANAGER.toLowerCase()}.getTransceivers`]: [TRANSCEIVER],
+    // ...and a contract can return the official core bridge address as easily as any other.
+    [`${TRANSCEIVER.toLowerCase()}.getTransceiverType`]: 'wormhole',
+    [`${TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
+    [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
+    [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
+    // The real token grants the fake manager nothing. This is the one answer he cannot forge.
+    [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('not a minter'),
+    [`${REAL_TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
+    [`${REAL_TOKEN.toLowerCase()}.hasRole`]: false,
+  })
+
+  /** The far side, entirely the attacker's: his token names his manager back. */
+  const attackerDst = (): Answers => ({
+    [`${DST_MANAGER.toLowerCase()}.getPeer`]: { peerAddress: pad(MANAGER.toLowerCase() as Address, { size: 32 }), tokenDecimals: 6 },
+    [`${DST_MANAGER.toLowerCase()}.token`]: DST_TOKEN,
+    [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER,
+  })
+
+  it('1. the reported attack is refused: peers match, the far token vouches, the real token does not', async () => {
+    const r = await verifyNttManager({
+      srcChain: 'ethereum',
+      dstChain: 'bsc',
+      manager: MANAGER,
+      srcClient: mockClient(attackerSrc()),
+      dstClient: mockClient(attackerDst()),
+      tokenList: [],
+    })
+    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
+    // And it must not become a pass just because the far side is consistent with itself.
+    if (!r.ok) expect(r.code).not.toBe('unverifiable')
+  })
+
+  it('1b. claiming to be a locking hub does not rescue it — the mode is his claim too', async () => {
+    const r = await verifyNttManager({
+      srcChain: 'ethereum',
+      dstChain: 'bsc',
+      manager: MANAGER,
+      srcClient: mockClient({ ...attackerSrc(), [`${MANAGER.toLowerCase()}.getMode`]: 0 }),
+      dstClient: mockClient(attackerDst()),
+      tokenList: [],
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.code).toBe('unlisted_locking_hub')
+  })
+
+  it('2. a burning manager the source token names is accepted', async () => {
+    const r = await verify(srcAnswers(), dstAnswers())
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.verified.anchor).toEqual({ side: 'source', kind: 'minter' })
+      expect(r.verified.mode).toBe('burning')
+    }
+  })
+
+  it('2b. MINTER_ROLE on the source token counts as the same anchor', async () => {
+    const r = await verify(
+      srcAnswers({
+        [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter()'),
+        [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
+        [`${TOKEN.toLowerCase()}.hasRole`]: true,
+      }),
+      dstAnswers(),
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toEqual({ side: 'source', kind: 'role' })
+  })
+
+  /** A destination whose peer points back at `m`, so tests can verify a manager other than MANAGER. */
+  const dstPeeringBackAt = (m: Address): Answers => ({
+    [`${DST_MANAGER.toLowerCase()}.getPeer`]: { peerAddress: pad(m.toLowerCase() as Address, { size: 32 }), tokenDecimals: 18 },
+    [`${DST_MANAGER.toLowerCase()}.token`]: DST_TOKEN,
+  })
+
+  it('3. a locking hub in the committed list is accepted, on that list alone', async () => {
+    const hub = LOCKING_HUBS.find((h) => h.chain === 'ethereum')
+    expect(hub, 'locking-hubs.json has no ethereum entry to test with').toBeDefined()
+    const m = hub!.manager
+    const r = await verifyNttManager({
+      srcChain: 'ethereum',
+      dstChain: 'bsc',
+      manager: m,
+      srcClient: mockClient({
+        [`${m.toLowerCase()}.token`]: hub!.token,
+        [`${m.toLowerCase()}.chainId`]: ETH_WH,
+        [`${m.toLowerCase()}.getMode`]: 0, // locking: nothing mints, so no token anchor exists
+        [`${m.toLowerCase()}.tokenDecimals`]: 18,
+        [`${m.toLowerCase()}.getPeer`]: { peerAddress: pad(DST_MANAGER.toLowerCase() as Address, { size: 32 }), tokenDecimals: 18 },
+        [`${m.toLowerCase()}.getTransceivers`]: [TRANSCEIVER],
+        [`${TRANSCEIVER.toLowerCase()}.getTransceiverType`]: 'wormhole',
+        [`${TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
+        [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
+        [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
+        [`${hub!.token.toLowerCase()}.minter`]: new Error('locking hub: nothing mints'),
+        [`${hub!.token.toLowerCase()}.MINTER_ROLE`]: new Error('no role'),
+      }),
+      dstClient: mockClient(dstPeeringBackAt(m)),
+      tokenList: [],
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toEqual({ side: 'listed', kind: 'committed' })
+  })
+
+  it('3b. a listed hub does not vouch for a manager that has started naming another token', async () => {
+    const hub = LOCKING_HUBS.find((h) => h.chain === 'ethereum')!
+    const m = hub.manager
+    const r = await verifyNttManager({
+      srcChain: 'ethereum',
+      dstChain: 'bsc',
+      manager: m,
+      srcClient: mockClient({
+        // Same listed manager, different token: the match is chain + manager + token, all three.
+        [`${m.toLowerCase()}.token`]: REAL_TOKEN,
+        [`${m.toLowerCase()}.chainId`]: ETH_WH,
+        [`${m.toLowerCase()}.getMode`]: 0,
+        [`${m.toLowerCase()}.tokenDecimals`]: 6,
+        [`${m.toLowerCase()}.getPeer`]: { peerAddress: pad(DST_MANAGER.toLowerCase() as Address, { size: 32 }), tokenDecimals: 6 },
+        [`${m.toLowerCase()}.getTransceivers`]: [TRANSCEIVER],
+        [`${TRANSCEIVER.toLowerCase()}.getTransceiverType`]: 'wormhole',
+        [`${TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
+        [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
+        [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
+        [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('not a minter'),
+        [`${REAL_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('no role'),
+      }),
+      dstClient: mockClient(dstPeeringBackAt(m)),
+      tokenList: [],
+    })
+    expect(r).toMatchObject({ ok: false, code: 'unlisted_locking_hub' })
+  })
+
+  it('4. a locking manager that is not in the list is refused', async () => {
+    const r = await verify(
+      srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
+      dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),
+    )
+    expect(r).toMatchObject({ ok: false, code: 'unlisted_locking_hub' })
+  })
+
+  it('the far-side anchor is still reported, but only as context', async () => {
+    const r = await verify(srcAnswers(), dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }))
+    expect(r.ok).toBe(true)
+    // It is recorded...
+    if (r.ok) expect(r.verified.alsoOnDestination).toBe(true)
+    // ...and it is never the reason.
+    if (r.ok) expect(r.verified.anchor.side).toBe('source')
   })
 })
