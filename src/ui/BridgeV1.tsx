@@ -14,6 +14,7 @@ import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
+import { riskTickScope, tickCovers } from '@/core/riskTick'
 import { sameAddress } from '@/core/encoding'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
@@ -101,7 +102,8 @@ export function BridgeV1({
   const [storedPayloadAccepted, setStoredPayloadAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   const [txError, setTxError] = useState('')
-  const [risksAccepted, setRisksAccepted] = useState(false)
+  // The scope the one tick was given for (core/riskTick.ts); it counts only while that is still what is on screen.
+  const [tickedFor, setTickedFor] = useState<string | null>(null)
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
   // The contract decided at probe time; a route change never re-opens that question.
@@ -160,10 +162,23 @@ export function BridgeV1({
   // §Address book. LayerZero v1 routes in this app are EVM to EVM.
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
-  // The one tick covers what was on screen when it was ticked, recipient included.
+  // The one tick covers what was on screen when it was ticked: chain, token, route, amount,
+  // recipient and wallet. Any of them changing is a different scope.
+  const tickScope = riskTickScope({
+    chain: src.key,
+    contract: info.oft,
+    destination: dstKey,
+    amount: planData?.amounts.amountLD,
+    recipient: planData?.recipient,
+    sender: wallet,
+  })
+  const risksAccepted = tickCovers(tickedFor, tickScope)
+  const setRisksAccepted = (v: boolean) => setTickedFor(v ? tickScope : null)
+  // Derived state already ignores a stale tick; this also forgets it, so coming back to an earlier
+  // amount does not revive a tick given before the warnings on screen were last looked at.
   useEffect(() => {
-    setRisksAccepted(false)
-  }, [info.oft, dstKey, planData?.amounts.amountLD, planData?.recipient])
+    if (tickedFor !== null && tickedFor !== tickScope) setTickedFor(null)
+  }, [tickedFor, tickScope])
 
   const last6Ok = !recipientCustom || (recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6)))
 

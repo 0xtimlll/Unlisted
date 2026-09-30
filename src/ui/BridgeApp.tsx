@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
+import { riskTickScope, tickCovers } from '@/core/riskTick'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
@@ -111,7 +112,8 @@ export function BridgeApp({
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [pdaAccepted, setPdaAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
-  const [risksAccepted, setRisksAccepted] = useState(false)
+  // The scope the one tick was given for (core/riskTick.ts); it counts only while that is still what is on screen.
+  const [tickedFor, setTickedFor] = useState<string | null>(null)
   // §4 The test-amount limit is remembered per token (there is no default — see testLimit.ts); the
   // confirmation word is per transfer, because it is an answer about this one.
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
@@ -146,7 +148,7 @@ export function BridgeApp({
     setPeerBackAccepted(false)
     setPdaAccepted(false)
     setHighFeeAccepted(false)
-    setRisksAccepted(false)
+    setTickedFor(null)
     setSent(null)
     setTxError('')
   }, [])
@@ -443,12 +445,24 @@ export function BridgeApp({
   useEffect(() => {
     setHighFeeAccepted(false)
   }, [planData?.value])
-  // The one tick covers what was on screen when it was ticked. The token, the route, the amount and
-  // the recipient are all part of that, so any of them changing takes the acceptance with it.
-  const acceptedFor = info?.vm === 'evm' ? info.oft : undefined
+  // The one tick covers what was on screen when it was ticked: the chain, the token, the route, the
+  // amount, the recipient and the wallet. Any of them changing is a different scope, and the tick
+  // does not apply to it.
+  const tickScope = riskTickScope({
+    chain: src.key,
+    contract: info?.vm === 'evm' ? info.oft : info?.oftStore,
+    destination: dest.dstEid,
+    amount: planData?.amounts.amountLD,
+    recipient: planData?.recipient,
+    sender,
+  })
+  const risksAccepted = tickCovers(tickedFor, tickScope)
+  const setRisksAccepted = (v: boolean) => setTickedFor(v ? tickScope : null)
+  // Derived state already ignores a stale tick; this also forgets it, so coming back to an earlier
+  // amount does not revive a tick given before the warnings on screen were last looked at.
   useEffect(() => {
-    setRisksAccepted(false)
-  }, [acceptedFor, dest.dstEid, planData?.amounts.amountLD, planData?.recipient])
+    if (tickedFor !== null && tickedFor !== tickScope) setTickedFor(null)
+  }, [tickedFor, tickScope])
 
   const baseInput: GuardInput = useMemo(
     () => ({
