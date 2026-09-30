@@ -62,18 +62,23 @@ function CheckRow({ id, state }: { id: CheckId; state: CheckState }) {
  * and not nothing: an absent verdict is a thing the user should be able to see, or the OK on the
  * next route means less than it should.
  */
-export function RiskNotAssessed({ why }: { why?: string }) {
+export function RiskNotAssessed({ why, title }: { why?: string; title?: string }) {
   const d = useDict()
   return (
     <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-muted">
-      <div className="font-semibold">○ {d.risk.notCovered}</div>
-      <p className="mt-1 opacity-90">{why ?? d.risk.notCoveredWhy}</p>
+      <div className="font-semibold">○ {title ?? d.risk.notCovered}</div>
+      {why === '' ? null : <p className="mt-1 opacity-90">{why ?? d.risk.notCoveredWhy}</p>}
     </div>
   )
 }
 
 export function RiskPanel(p: {
   risk: RouteRisk | undefined
+  /**
+   * No destination chosen yet. There is no route to assess, and saying "not covered" here would
+   * be wrong — the route may well be covered once it exists — so the panel asks for the network.
+   */
+  awaitingDestination?: boolean
   /** True when §4 has no runner for this route; the panel then says so instead of staying blank. */
   notCovered?: boolean
   loading: boolean
@@ -82,6 +87,7 @@ export function RiskPanel(p: {
   const d = useDict()
   const [open, setOpen] = useState(false)
 
+  if (p.awaitingDestination) return <RiskNotAssessed title={d.risk.chooseDestination} why="" />
   if (p.notCovered) return <RiskNotAssessed />
   if (p.error) return <Alert kind="warn">{fmt(d.risk.failed, { reason: p.error })}</Alert>
   if (!p.risk) {

@@ -46,7 +46,7 @@ import { ProbeV1Error } from '@/protocols/lz-v1/detect'
 import { useV2RouteRisk } from './riskHooks'
 import { RiskPanel } from './components/RiskPanel'
 import { RiskWarnings } from './components/RiskWarnings'
-import { shownFailures } from '@/core/severity'
+import { shownFailures, waitsOnlyForApprove } from '@/core/severity'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -613,7 +613,7 @@ export function BridgeApp({
   const firstFailing = report.results.find((r) => !r.ok && !isPending(r)) ?? report.results.find((r) => !r.ok)
   // Reads in flight are "checking", not problems: they resolve on their own and there is nothing
   // in them to accept. Only shown once a plan exists, so an empty form is not a wall of red.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
   const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
   const cta: CtaState = !sender
     ? { kind: 'connect' }
@@ -631,8 +631,11 @@ export function BridgeApp({
                 ? planError
                   ? { kind: 'send', enabled: false, reason: describeError(d, planError) }
                   : { kind: 'quote' }
-                : approveIntent && report.approveReady
-                  ? { kind: 'approve', intent: approveIntent }
+                : approveIntent && waitsOnlyForApprove(report.blocks)
+                  ? // The approve is the next step whenever nothing but the allowance stands in the
+                    // way. It still waits for the tick (approveReady): an allowance to a contract whose
+                    // warnings were not accepted is the exploitable half of this app.
+                    { kind: 'approve', intent: approveIntent, enabled: report.approveReady, ...(report.approveReady ? {} : { reason: d.step3.approveAfterTick }) }
                   : !report.canSend && report.results.every((r) => r.ok || isPending(r))
                     ? { kind: 'checking' }
                     : { kind: 'send', enabled: report.canSend, ...(firstFailing && !firstFailing.ok ? { reason: d.guard[firstFailing.code] } : {}) }
@@ -796,6 +799,7 @@ export function BridgeApp({
               </PanelSection>
               <RiskPanel
                 risk={risk.data?.risk}
+                awaitingDestination={dest.dstEid === undefined}
                 notCovered={!riskCovered}
                 loading={risk.isFetching}
                 error={risk.error ? shortError(risk.error) : ''}

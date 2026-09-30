@@ -416,6 +416,8 @@ describe('an adapter is trusted by the committed list, or not at all', () => {
     // ...and each leg on its own does not.
     expect(reviewedAdapter(entry!.chain, entry!.adapter, '0x2222222222222222222222222222222222222222')).toBeUndefined()
     expect(reviewedAdapter(entry!.chain, '0x1111111111111111111111111111111111111111', entry!.token)).toBeUndefined()
+    // CT, added 2026-09-30 after an on-chain check of token(), peers(30102) and the BNB peer's peers(30101).
+    expect(reviewedAdapter('ethereum', '0x121873Fe37BE77372b69D7a8A642618b8305E71a', '0x0A092E544DA31150b439a1aAA1A3a2214a867F46')?.symbol).toBe('CT')
     expect(reviewedAdapter('bsc', entry!.adapter, entry!.token)).toBeUndefined()
     // Case must not matter: an address is not case-sensitive.
     expect(reviewedAdapter(entry!.chain, entry!.adapter.toLowerCase(), entry!.token.toLowerCase())?.symbol).toBe(entry!.symbol)

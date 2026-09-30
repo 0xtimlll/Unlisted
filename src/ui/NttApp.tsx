@@ -6,7 +6,7 @@
  * spender, so the four-part gate is what stands between the user and handing an allowance to a
  * look-alike contract. The gate's verdict is the first thing on the right.
  */
-import { shownFailures } from '@/core/severity'
+import { isStepCode, isWarningCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 import { RiskWarnings } from './components/RiskWarnings'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
@@ -329,7 +329,7 @@ export function NttApp({
   const busy = switching || approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading) || sendWrite.isPending
   const firstFailing = report.results.find((r) => !r.ok && !isNttPending(r)) ?? report.results.find((r) => !r.ok)
   // Reads in flight are "checking", not problems to accept.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
   const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
   const ctaLabel = !wallet
     ? d.ui.cta_connect
@@ -536,7 +536,11 @@ export function NttApp({
           onAccepted={tick.setAccepted}
           added={tick.added}
         />
-        {!report.canSend && firstFailing && !firstFailing.ok ? <div className="text-center text-xs text-muted">{d.nttGuard[firstFailing.code]}</div> : null}
+        {approveIntent && !report.approveReady && waitsOnlyForApprove(report.blocks) ? (
+          <div className="text-center text-xs text-muted">{d.step3.approveAfterTick}</div>
+        ) : !report.canSend && firstFailing && !firstFailing.ok && !(approveIntent && isStepCode(firstFailing.code)) ? (
+          <div className="text-center text-xs text-muted">{d.nttGuard[firstFailing.code]}</div>
+        ) : null}
       </div>
     </>
   )
@@ -594,8 +598,13 @@ export function NttApp({
             <div>
               <ul className="grid gap-x-3 gap-y-0.5 text-xs">
                 {report.results.map((r) => (
-                  <li key={r.id} className={r.ok ? 'text-ok' : isNttPending(r) ? 'text-muted' : 'text-danger'}>
-                    {r.ok ? '✓' : isNttPending(r) ? '○' : '✗'} {r.ok ? d.nttGuard[`ok_${r.id}` as keyof typeof d.nttGuard] ?? '' : d.nttGuard[r.code]}
+                  // Four tones: passed, in flight, the approve step (neutral), a warning (amber), a block (red).
+                  <li
+                    key={r.id}
+                    className={r.ok ? 'text-ok' : isNttPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger'}
+                  >
+                    {r.ok ? '✓' : isNttPending(r) ? '○' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗'}{' '}
+                    {r.ok ? d.nttGuard[`ok_${r.id}` as keyof typeof d.nttGuard] ?? '' : d.nttGuard[r.code]}
                   </li>
                 ))}
               </ul>

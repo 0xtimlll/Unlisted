@@ -91,6 +91,13 @@
 `lzReceive`): эти имена разрешены как `functionName` внутри `lz-risk/` ради `eth_call`, и сам модуль
 отдельно проверяется на отсутствие любого write-примитива.
 
+**Approve — шаг, а не ошибка.** `needs_approve` — единственный блок-«шаг» (`isStepCode` в
+`severity.ts`): он держит `canSend`, но не попадает в красный список «cannot be sent», не считается
+«issue to fix» и не прячет галочку. Иначе тупик: approve ждёт галочку (`approveReady`), а галочка
+пряталась за «блоком» approve. Кнопка Approve показывается, когда кроме allowance ничего не мешает
+(`waitsOnlyForApprove`), и активна после галочки; после подтверждения approve allowance перечитывается
+и та же галочка открывает Send.
+
 **Guard'ы** — `src/core/guards.ts`, 22 штуки, от `g1Chain` до `g22Risk`. Ключевые: `g11NoApprove`
 (нет unlimited approve), `g15ExecutorGas`, `g19RecipientVm`, `g20SvmSend` (отказ, если svm-destination не опознан),
 `g21FeeCeiling`, `g22Risk`.

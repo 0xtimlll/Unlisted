@@ -4,6 +4,7 @@ import { formatAmount } from '@/core/amounts'
 import { describeOptions, receiveTotals, type OptionItem } from '@/core/options'
 import { byEid, type ChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
+import { isStepCode, isWarningCode } from '@/core/severity'
 import type { SendPlan } from '@/core/plan'
 import type { SvmOptionsPlan } from '@/core/options'
 import type { SvmOftInfo } from '@/core/svm/discover'
@@ -226,7 +227,10 @@ export function Checks(p: {
   const d = useDict()
   const [open, setOpen] = useState(p.defaultOpen ?? false)
   const results = p.report.results
-  const failing = results.filter((r) => !r.ok && !isPending(r))
+  // "Issues to fix" are the blocks: a warning is accepted below the list, and the approve is a step.
+  const failing = results.filter((r) => !r.ok && !isPending(r) && !isStepCode(r.code) && !isWarningCode(r.code))
+  const warning = results.filter((r) => !r.ok && isWarningCode(r.code))
+  const stepping = results.filter((r) => !r.ok && isStepCode(r.code))
   const pending = results.filter((r) => isPending(r))
   const shown = results.filter((r) => (r.ok ? okLabel(r.id, d) : true))
   const passingShown = shown.filter((r) => r.ok).length
@@ -242,7 +246,11 @@ export function Checks(p: {
       <Spinner /> {fmt(d.ui.checksPending, { done: passingShown, total: totalShown })}
     </span>
   ) : (
-    <span className="text-ok">✓ {d.ui.checks}: {passingShown}/{totalShown}</span>
+    <span className={warning.length ? 'text-warn' : 'text-ok'}>
+      {warning.length ? '⚠' : '✓'} {d.ui.checks}: {passingShown}/{totalShown}
+      {warning.length ? ` · ${fmt(d.ui.checksWarnings, { n: warning.length })}` : ''}
+      {stepping.length ? ` · ${d.ui.checksStep}` : ''}
+    </span>
   )
 
   return (
@@ -298,9 +306,12 @@ export function Checks(p: {
             const label = r.ok ? okLabel(r.id, d) : d.guard[r.code]
             if (!label) return null
             const pend = isPending(r)
+            // Four tones: passed, in flight, the approve step (neutral), a warning (amber), a block (red).
+            const tone = r.ok ? 'text-ok' : pend ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger'
+            const glyph = r.ok ? '✓' : pend ? '○' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗'
             return (
-              <li key={r.id} className={r.ok ? 'text-ok' : pend ? 'text-muted' : 'text-danger'}>
-                {r.ok ? '✓' : pend ? '○' : '✗'} {label}
+              <li key={r.id} className={tone}>
+                {glyph} {label}
                 {!r.ok && r.detail && (r.code === 'simulation_failed' || r.code === 'selfcheck_failed' || r.code === 'peer_back_mismatch') ? (
                   <span className="mono block pl-4 text-xs opacity-80">{r.detail}</span>
                 ) : null}
@@ -321,7 +332,8 @@ export type CtaState =
   | { kind: 'amount' }
   | { kind: 'recipient' }
   | { kind: 'quote' }
-  | { kind: 'approve'; intent: ApproveIntent }
+  /** The allowance is the next step. Disabled until the warnings are accepted (`reason` says so). */
+  | { kind: 'approve'; intent: ApproveIntent; enabled: boolean; reason?: string }
   | { kind: 'checking' }
   | { kind: 'send'; enabled: boolean; reason?: string }
 
@@ -349,7 +361,16 @@ export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: bo
                   : s.kind === 'approve'
                   ? fmt(d.step3.approveBtn, { amount: formatAmount(s.intent.amount, p.info?.decimals ?? 18), symbol: p.info?.symbol ?? '' })
                   : d.ui.cta_send
-  const disabled = p.busy || s.kind === 'check' || s.kind === 'destination' || s.kind === 'amount' || s.kind === 'recipient' || s.kind === 'quote' || s.kind === 'checking' || (s.kind === 'send' && !s.enabled)
+  const disabled =
+    p.busy ||
+    s.kind === 'check' ||
+    s.kind === 'destination' ||
+    s.kind === 'amount' ||
+    s.kind === 'recipient' ||
+    s.kind === 'quote' ||
+    s.kind === 'checking' ||
+    (s.kind === 'send' && !s.enabled) ||
+    (s.kind === 'approve' && !s.enabled)
   return (
     <div className="space-y-2">
       {p.error ? <Alert kind="error">{p.error}</Alert> : null}
@@ -366,7 +387,7 @@ export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: bo
           label
         )}
       </Button>
-      {s.kind === 'send' && !s.enabled && s.reason ? <div className="text-center text-xs text-muted">{s.reason}</div> : null}
+      {(s.kind === 'send' || s.kind === 'approve') && !s.enabled && s.reason ? <div className="text-center text-xs text-muted">{s.reason}</div> : null}
       <div className="text-center text-xs text-faint">{d.step3.simulationHint}</div>
     </div>
   )
