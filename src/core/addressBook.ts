@@ -13,6 +13,10 @@
  *     That is the shape of an address-substitution attack: the swap keeps the head and tail a
  *     human glances at and changes the middle. There is no checkbox for it, because a user who
  *     could tick it is exactly the user who has already been fooled.
+ *   - being IN the book does not lift that refusal by itself. Two entries that share their ends
+ *     are allowed only when the user said, about that specific pair, "yes, this is a different
+ *     address" — on the add form or row by row in an import preview — and the answer is recorded
+ *     on the entry (`distinctFrom`). A twin that arrived any other way is still refused.
  *
  * Pure: no storage, no DOM, no crypto beyond id generation. ui/addressBookStore.ts persists it.
  */
@@ -51,6 +55,20 @@ export type AddressBookEntry = {
    * entry. The flag is absent rather than false on entries that never needed it.
    */
   imported?: boolean
+  /**
+   * Addresses this entry was explicitly confirmed to be DIFFERENT from, by the user, at the moment
+   * it went in: the twins it shares its first and last four characters with.
+   *
+   * Two entries that share their ends are a look-alike pair, and a look-alike is refused at send
+   * time (`lookUp`). The refusal is lifted for a pair only by this record — one of the two saying
+   * "yes, this is a different address" about the other. An entry that reached the book by any
+   * other path (an import applied without that answer, a hand-edited store) has no such record,
+   * and stays refused: its presence in the book proves nothing about who put it there.
+   *
+   * Addresses, not ids: ids are reissued on import, addresses are the thing being compared.
+   * Absent when there was nothing to confirm against.
+   */
+  distinctFrom?: string[]
 }
 
 export type AddressBook = { version: number; entries: AddressBookEntry[] }
@@ -124,14 +142,35 @@ export function findEntry(book: AddressBook, family: AddressFamily, address: str
  * An exact match is never a look-alike — `findEntry` covers that case and means the opposite.
  */
 export function findLookalike(book: AddressBook, family: AddressFamily, address: string): AddressBookEntry | undefined {
+  return twinsOf(book.entries, family, address)[0]
+}
+
+/** Every entry this address is dressed up as (see `findLookalike`), in book order. */
+export function twinsOf(entries: readonly AddressBookEntry[], family: AddressFamily, address: string): AddressBookEntry[] {
   const mine = addressEdges(family, address)
-  if (mine.head.length < EDGE || mine.tail.length < EDGE) return undefined
-  return book.entries.find((e) => {
+  if (mine.head.length < EDGE || mine.tail.length < EDGE) return []
+  return entries.filter((e) => {
     if (e.family !== family) return false
     if (sameBookAddress(family, e.address, address)) return false
     const theirs = addressEdges(family, e.address)
     return theirs.head === mine.head && theirs.tail === mine.tail
   })
+}
+
+/** Did the user, when `e` went in, say it is a different address from `other`? */
+function vouchedDistinct(e: AddressBookEntry, other: AddressBookEntry): boolean {
+  return (e.distinctFrom ?? []).some((a) => sameBookAddress(e.family, a, other.address))
+}
+
+/**
+ * The twin of `entry` inside the book that nobody has confirmed it is different from, if any.
+ *
+ * A pair sharing its ends is fine when either member was added with an explicit "this is a
+ * different address" about the other. Without that, the pair is exactly what an address swap
+ * leaves behind, and the entry that arrived is refused at send time as if it were not in the book.
+ */
+export function unvouchedTwin(book: AddressBook, entry: AddressBookEntry): AddressBookEntry | undefined {
+  return twinsOf(book.entries, entry.family, entry.address).find((t) => !vouchedDistinct(entry, t) && !vouchedDistinct(t, entry))
 }
 
 /** What the send form needs to know about a recipient, in one value. */
@@ -140,12 +179,22 @@ export type BookVerdict =
   | { kind: 'known'; entry: AddressBookEntry }
   /** In the book, but it arrived by import and has never been confirmed. Tail required. */
   | { kind: 'imported'; entry: AddressBookEntry }
+  /**
+   * Not in the book but dressed up as an entry — or in the book next to an entry it resembles,
+   * with nobody having confirmed the two are different. `entry` is the one it resembles.
+   */
   | { kind: 'lookalike'; entry: AddressBookEntry }
   | { kind: 'new' }
 
 export function lookUp(book: AddressBook, family: AddressFamily, address: string): BookVerdict {
   const exact = findEntry(book, family, address)
-  if (exact) return exact.imported ? { kind: 'imported', entry: exact } : { kind: 'known', entry: exact }
+  if (exact) {
+    // Being in the book is not enough on its own: a twin that got in without the explicit
+    // "different address" answer (an import, a hand-edited store) is still the shape of a swap.
+    const twin = unvouchedTwin(book, exact)
+    if (twin) return { kind: 'lookalike', entry: twin }
+    return exact.imported ? { kind: 'imported', entry: exact } : { kind: 'known', entry: exact }
+  }
   const alike = findLookalike(book, family, address)
   return alike ? { kind: 'lookalike', entry: alike } : { kind: 'new' }
 }
@@ -172,7 +221,7 @@ export function entryToStamp(v: BookVerdict | undefined): AddressBookEntry | und
 
 // ------------------------------------------------------------------ mutations ----
 
-export type BookErrorCode = 'invalid_address' | 'duplicate' | 'label_empty' | 'full' | 'not_found'
+export type BookErrorCode = 'invalid_address' | 'duplicate' | 'label_empty' | 'full' | 'not_found' | 'lookalike_unconfirmed'
 
 export class AddressBookError extends Error {
   constructor(public readonly code: BookErrorCode, message?: string) {
@@ -194,16 +243,27 @@ export function newId(): string {
   return `${Date.now().toString(36)}-${idCounter.toString(36)}`
 }
 
-export type NewEntry = { label: string; address: string; family: AddressFamily }
+export type NewEntry = {
+  label: string
+  address: string
+  family: AddressFamily
+  /**
+   * The user's explicit "yes, this is a different address" about the entries this one resembles.
+   * Required when there is such an entry; meaningless, and ignored, when there is none.
+   */
+  twinAccepted?: boolean
+}
 
 /**
  * Adds an entry, or throws. The address must be valid for its family and must not already be in
  * the book — a second label for the same account would make "is this address known" ambiguous
  * exactly where it has to be a yes or a no.
  *
- * A look-alike of an existing entry is NOT refused here: the book may legitimately hold two
- * addresses that happen to share their ends, and this is a deliberate act by the user. The refusal
- * belongs at send time, where an address arrived from somewhere else.
+ * A look-alike of an existing entry may be added — the book may legitimately hold two addresses
+ * that happen to share their ends — but only with `twinAccepted`: the form asks that question
+ * separately from the tail, and the answer is recorded on the entry (`distinctFrom`) so that the
+ * pair is not refused at send time. Without it the add is refused, because an entry that shares
+ * its ends with a saved one and was never confirmed different is what an address swap looks like.
  */
 export function addEntry(book: AddressBook, e: NewEntry, now: number, id: string = newId()): AddressBook {
   const label = sanitizeText(e.label, MAX_LABEL)
@@ -212,7 +272,11 @@ export function addEntry(book: AddressBook, e: NewEntry, now: number, id: string
   if (!address) throw new AddressBookError('invalid_address')
   if (findEntry(book, e.family, address)) throw new AddressBookError('duplicate')
   if (book.entries.length >= MAX_ENTRIES) throw new AddressBookError('full')
-  return { ...book, entries: [...book.entries, { id, label, address, family: e.family, createdAt: now }] }
+  const twins = twinsOf(book.entries, e.family, address)
+  if (twins.length > 0 && e.twinAccepted !== true) throw new AddressBookError('lookalike_unconfirmed')
+  const entry: AddressBookEntry = { id, label, address, family: e.family, createdAt: now }
+  if (twins.length > 0) entry.distinctFrom = twins.map((t) => t.address)
+  return { ...book, entries: [...book.entries, entry] }
 }
 
 export function renameEntry(book: AddressBook, id: string, label: string): AddressBook {
@@ -283,6 +347,14 @@ export function parseEntry(raw: unknown, now: number): AddressBookEntry | undefi
   const id = typeof r['id'] === 'string' && r['id'].trim() !== '' ? sanitizeText(r['id'], 64) : newId()
   const createdAt = isFiniteNumber(r['createdAt']) ? r['createdAt'] : now
   const lastUsedAt = isFiniteNumber(r['lastUsedAt']) ? r['lastUsedAt'] : undefined
+  // Kept so the user's own answer survives a reload. `previewImport` strips it again: in a file
+  // this field is the file's claim, not the user's, and a claim that lifts a refusal is worth nothing.
+  const distinctFrom = Array.isArray(r['distinctFrom'])
+    ? (r['distinctFrom'] as unknown[]).flatMap((a) => {
+        const n = typeof a === 'string' ? normalizeAddress(family, a) : undefined
+        return n ? [n] : []
+      })
+    : []
   return {
     id: id || newId(),
     label,
@@ -293,6 +365,7 @@ export function parseEntry(raw: unknown, now: number): AddressBookEntry | undefi
     // Survives a reload: an entry awaiting its first confirmation must not become trusted just
     // because the page was refreshed. A file that sets it itself only ever adds caution.
     ...(r['imported'] === true ? { imported: true as const } : {}),
+    ...(distinctFrom.length > 0 ? { distinctFrom } : {}),
   }
 }
 
@@ -345,6 +418,13 @@ export function exportBook(book: AddressBook): string {
 export type ImportPreview = {
   /** Entries that parsed and are not already in the book. */
   add: AddressBookEntry[]
+  /**
+   * By entry id: the entries — already in the book, or elsewhere in this same file — that the row
+   * shares its first and last four characters with. A row listed here is NOT imported unless the
+   * user confirms that specific row ("yes, this is a different address"), exactly as the add form
+   * asks; see `applyImport`.
+   */
+  twins: Record<string, AddressBookEntry[]>
   /** Parsed, but the same address is already present — skipped, not overwritten. */
   duplicates: number
   /** Rows that did not parse at all. */
@@ -378,15 +458,39 @@ export function previewImport(raw: unknown, book: AddressBook, now: number = Dat
       invalid += 1
       continue
     }
+    // The file's own word on who it resembles counts for nothing; the user answers that below.
+    delete e.distinctFrom
     add.push(e)
   }
   // Ids that clash with the book's own, or with each other, are reissued before anything is shown.
   // Everything an import brings in is marked: it has not been confirmed by this user yet.
   const marked = dedupeIds(add, new Set(book.entries.map((e) => e.id))).map((e) => ({ ...e, imported: true as const }))
-  return { add: marked, duplicates, invalid }
+  // Twins are looked for in the book AND among the other rows: two rows of one file that share
+  // their ends would otherwise land as an unvouched pair and refuse each other at send time.
+  const twins: Record<string, AddressBookEntry[]> = {}
+  for (const e of marked) {
+    const t = twinsOf([...book.entries, ...marked], e.family, e.address)
+    if (t.length > 0) twins[e.id] = t
+  }
+  return { add: marked, twins, duplicates, invalid }
 }
 
-/** Applies a preview the user accepted. */
-export function applyImport(book: AddressBook, preview: ImportPreview): AddressBook {
-  return { ...book, entries: [...book.entries, ...preview.add].slice(0, MAX_ENTRIES) }
+/** The rows of a preview that `applyImport` would bring in, given these confirmations. */
+export function importable(preview: ImportPreview, confirmedTwins: ReadonlySet<string> = new Set()): AddressBookEntry[] {
+  return preview.add.filter((e) => !(e.id in preview.twins) || confirmedTwins.has(e.id))
+}
+
+/**
+ * Applies a preview the user accepted. `confirmedTwins` holds the ids of the look-alike rows the
+ * user answered "yes, this is a different address" for, one by one. A look-alike row without that
+ * answer is left out — it is not refused later, it simply never enters the book — and a confirmed
+ * one records the answer (`distinctFrom`) the same way the add form does. Every row stays
+ * `imported`: the tail is still owed on first use, whatever was answered here.
+ */
+export function applyImport(book: AddressBook, preview: ImportPreview, confirmedTwins: ReadonlySet<string> = new Set()): AddressBook {
+  const rows = importable(preview, confirmedTwins).map((e) => {
+    const t = preview.twins[e.id]
+    return t ? { ...e, distinctFrom: t.map((x) => x.address) } : e
+  })
+  return { ...book, entries: [...book.entries, ...rows].slice(0, MAX_ENTRIES) }
 }

@@ -10,8 +10,10 @@
  *              confirmed it yet, and an imported row can carry an attacker's address under a label
  *              the user trusts — so it is treated as new until its first send confirms it.
  *   new        not in the book. The tail must be confirmed, exactly as before the book existed.
- *   lookalike  not in the book, but shares its first four and last four characters with an entry.
- *              That is the signature of an address swap, and it is a refusal with no override.
+ *   lookalike  shares its first four and last four characters with an entry and is not it — or is
+ *              in the book next to such an entry without the user ever having confirmed the two
+ *              are different (core/addressBook.ts, `distinctFrom`). That is the signature of an
+ *              address swap, and it is a refusal with no override.
  *
  * One component for all four tabs so the rule cannot drift between them.
  */

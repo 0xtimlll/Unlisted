@@ -45,7 +45,8 @@ export type AddressBookApi = {
    * Only ever called after a transfer the guards already let through.
    */
   confirmImported: (id: string) => void
-  applyPreview: (p: ImportPreview) => void
+  /** `confirmedTwins`: ids of the look-alike rows the user confirmed one by one; the rest are left out. */
+  applyPreview: (p: ImportPreview, confirmedTwins: ReadonlySet<string>) => void
 }
 
 const Ctx = createContext<AddressBookApi | undefined>(undefined)
@@ -100,7 +101,7 @@ export function AddressBookProvider({ children }: { children: ReactNode }) {
   // separately would leave a window where the entry is used but still marked unconfirmed.
   const touch = useCallback((id: string) => commit(touchEntry(book, id, Date.now())), [book, commit])
   const confirm = useCallback((id: string) => commit(confirmImported(touchEntry(book, id, Date.now()), id)), [book, commit])
-  const applyPreview = useCallback((p: ImportPreview) => commit(applyImport(book, p)), [book, commit])
+  const applyPreview = useCallback((p: ImportPreview, confirmedTwins: ReadonlySet<string>) => commit(applyImport(book, p, confirmedTwins)), [book, commit])
 
   const api = useMemo<AddressBookApi>(
     () => ({ book, status, corruptRaw, unsaved, add, rename, remove, touch, confirmImported: confirm, applyPreview }),

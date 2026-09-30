@@ -16,6 +16,7 @@ import {
   entriesFor,
   exportBook,
   findLookalike,
+  importable,
   normalizeAddress,
   previewImport,
   type AddressBookEntry,
@@ -52,6 +53,9 @@ export function AddressBookDialog({
   const ab = useAddressBook()
   const [adding, setAdding] = useState(!!initial)
   const [preview, setPreview] = useState<ImportPreview | undefined>(undefined)
+  // The look-alike rows of the preview the user has answered "yes, a different address" for. Per
+  // row and per preview: a new file starts from nothing, exactly as the add form does per address.
+  const [confirmedTwins, setConfirmedTwins] = useState<ReadonlySet<string>>(new Set())
   const [importError, setImportError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -74,6 +78,7 @@ export function AddressBookDialog({
   const onFile = async (file: File | undefined) => {
     setImportError('')
     setPreview(undefined)
+    setConfirmedTwins(new Set())
     if (!file) return
     try {
       const p = previewImport(JSON.parse(await file.text()), ab.book)
@@ -144,21 +149,48 @@ export function AddressBookDialog({
           <div className="mb-3 rounded-xl border border-line bg-surface-2 p-3">
             <div className="mb-2 text-xs text-muted">
               {fmt(d.addressBook.importPreview, { add: preview.add.length, duplicates: preview.duplicates, invalid: preview.invalid })}
+              {Object.keys(preview.twins).length > 0 ? (
+                <span className="ml-1 text-danger">{fmt(d.addressBook.importHeld, { held: Object.keys(preview.twins).length })}</span>
+              ) : null}
             </div>
             {preview.add.length > 0 ? (
-              <ul className="mb-2 max-h-40 space-y-1 overflow-y-auto">
+              <ul className="mb-2 max-h-56 space-y-1 overflow-y-auto">
                 {preview.add.map((e) => {
-                  // Shown, never blocked: the book may legitimately hold two addresses that share
-                  // their ends, and the user is looking at both in full right here.
-                  const twin = findLookalike(ab.book, e.family, e.address)
+                  // A row that resembles an entry (in the book, or elsewhere in this file) is
+                  // imported only with its own "different address" answer — the same question the
+                  // add form asks, for the same reason. Nothing is answered on the user's behalf.
+                  const twins = preview.twins[e.id]
+                  const twin = twins?.[0]
+                  const confirmed = confirmedTwins.has(e.id)
                   return (
                     <li key={e.id} className="text-xs">
                       <span className="text-ink">{e.label}</span> <span className="text-muted">({d.addressBook[`family_${e.family}`]})</span>
                       <div className="mono break-all text-muted">{e.address}</div>
                       {twin ? (
-                        <div className="mt-0.5 text-danger">
-                          ⛔ {fmt(d.addressBook.lookalikeOnAdd, { label: twin.label })}
-                          <div className="mono break-all opacity-90">{fmt(d.addressBook.lookalikeSaved, { label: twin.label, saved: twin.address })}</div>
+                        <div className="mt-0.5 rounded-lg border border-danger/40 bg-danger/10 p-2 text-danger">
+                          <div className="font-semibold">⛔ {fmt(d.addressBook.lookalikeOnAdd, { label: twin.label })}</div>
+                          {twins.map((t) => (
+                            <div key={t.id} className="mono break-all opacity-90">
+                              {fmt(d.addressBook.lookalikeSaved, { label: t.label, saved: t.address })}
+                            </div>
+                          ))}
+                          <label className="mt-1 flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5"
+                              checked={confirmed}
+                              onChange={(ev) =>
+                                setConfirmedTwins((prev) => {
+                                  const next = new Set(prev)
+                                  if (ev.target.checked) next.add(e.id)
+                                  else next.delete(e.id)
+                                  return next
+                                })
+                              }
+                            />
+                            <span>{d.addressBook.lookalikeConfirmAdd}</span>
+                          </label>
+                          <div className="mt-1 opacity-90">{d.addressBook.importTwinHold}</div>
                         </div>
                       ) : null}
                     </li>
@@ -171,14 +203,21 @@ export function AddressBookDialog({
             <div className="flex gap-2">
               <Button
                 onClick={() => {
-                  ab.applyPreview(preview)
+                  ab.applyPreview(preview, confirmedTwins)
                   setPreview(undefined)
+                  setConfirmedTwins(new Set())
                 }}
-                disabled={preview.add.length === 0 || readOnly}
+                disabled={importable(preview, confirmedTwins).length === 0 || readOnly}
               >
-                {fmt(d.addressBook.importApply, { add: preview.add.length })}
+                {fmt(d.addressBook.importApply, { add: importable(preview, confirmedTwins).length })}
               </Button>
-              <Button variant="ghost" onClick={() => setPreview(undefined)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPreview(undefined)
+                  setConfirmedTwins(new Set())
+                }}
+              >
                 {d.addressBook.cancel}
               </Button>
             </div>
@@ -312,7 +351,9 @@ function AddForm({
 
   const save = () => {
     setError('')
-    const r = ab.add({ label, address, family })
+    // The answer travels with the entry: core/addressBook.ts refuses a twin without it and records
+    // it on the entry when given, so the pair is not refused at send time.
+    const r = ab.add({ label, address, family, twinAccepted })
     if (r.ok) {
       onDone()
       return
