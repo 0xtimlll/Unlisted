@@ -185,6 +185,11 @@ export function warningWeight(code: string): WarningWeight {
 
 const ORDER: Record<WarningWeight, number> = { loss: 0, stuck: 1, note: 2 }
 
+/** Is `a` a heavier warning than `b`? (`loss` outweighs `stuck` outweighs `note`.) */
+export function outweighs(a: WarningWeight, b: WarningWeight): boolean {
+  return ORDER[a] < ORDER[b]
+}
+
 /** Sorts warning codes strongest first, keeping the original order within a weight. */
 export function sortWarnings<T extends { code: string }>(warnings: readonly T[]): T[] {
   return [...warnings].sort((a, b) => ORDER[warningWeight(a.code)] - ORDER[warningWeight(b.code)])

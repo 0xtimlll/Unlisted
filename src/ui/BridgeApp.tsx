@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { riskTickScope, tickCovers } from '@/core/riskTick'
+import { riskTickScope } from '@/core/riskTick'
+import { useRiskTick } from './useRiskTick'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
@@ -112,10 +113,6 @@ export function BridgeApp({
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [pdaAccepted, setPdaAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
-  // The scope the one tick was given for (core/riskTick.ts); it counts only while that is still what is on screen.
-  const [tickedFor, setTickedFor] = useState<string | null>(null)
-  // §4 The test-amount limit is remembered per token (there is no default — see testLimit.ts); the
-  // confirmation word is per transfer, because it is an answer about this one.
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored, 'lz-oft')
@@ -148,7 +145,8 @@ export function BridgeApp({
     setPeerBackAccepted(false)
     setPdaAccepted(false)
     setHighFeeAccepted(false)
-    setTickedFor(null)
+    // The one tick is not reset here: it is held per scope (ui/useRiskTick.ts), and emptying the
+    // destination above makes the scope null, which no tick covers.
     setSent(null)
     setTxError('')
   }, [])
@@ -446,8 +444,8 @@ export function BridgeApp({
     setHighFeeAccepted(false)
   }, [planData?.value])
   // The one tick covers what was on screen when it was ticked: the chain, the token, the route, the
-  // amount, the recipient and the wallet. Any of them changing is a different scope, and the tick
-  // does not apply to it.
+  // amount, the recipient and the wallet — and the warnings shown then (ui/useRiskTick.ts). Any of
+  // them changing is a different scope, and the tick does not apply to it.
   const tickScope = riskTickScope({
     chain: src.key,
     contract: info?.vm === 'evm' ? info.oft : info?.oftStore,
@@ -456,13 +454,6 @@ export function BridgeApp({
     recipient: planData?.recipient,
     sender,
   })
-  const risksAccepted = tickCovers(tickedFor, tickScope)
-  const setRisksAccepted = (v: boolean) => setTickedFor(v ? tickScope : null)
-  // Derived state already ignores a stale tick; this also forgets it, so coming back to an earlier
-  // amount does not revive a tick given before the warnings on screen were last looked at.
-  useEffect(() => {
-    if (tickedFor !== null && tickedFor !== tickScope) setTickedFor(null)
-  }, [tickedFor, tickScope])
 
   const baseInput: GuardInput = useMemo(
     () => ({
@@ -516,13 +507,24 @@ export function BridgeApp({
    * says so in grey rather than showing nothing — an absent verdict must not read as a passed one.
    */
   const riskCovered = info?.vm === 'evm' && dstVm === 'evm'
+  // Two passes on purpose. The warnings do not depend on the tick, so the first pass finds what
+  // is on screen; the tick is judged against that (its scope AND that list); the second pass is
+  // the verdict with the tick applied. `fullInput` is what the click re-runs, so it carries it.
+  const draft = runGuards({
+    ...baseInput,
+    gasCostWei: check.data?.gasCostWei,
+    simulation,
+    selfCheck: check.data?.selfCheck,
+    risk: risk.data?.risk,
+  })
+  const tick = useRiskTick(tickScope, planData ? shownFailures(draft.riskWarnings) : [])
   const fullInput: GuardInput = {
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
     simulation,
     selfCheck: check.data?.selfCheck,
     risk: risk.data?.risk,
-    risksAccepted,
+    risksAccepted: tick.accepted,
   }
   const report = runGuards(fullInput)
 
@@ -737,8 +739,9 @@ export function BridgeApp({
           blocks={shownBlocks}
           warnings={shownWarnings}
           label={(c) => d.guard[c as keyof typeof d.guard] ?? c}
-          accepted={risksAccepted}
-          onAccepted={setRisksAccepted}
+          accepted={tick.accepted}
+          onAccepted={tick.setAccepted}
+          added={tick.added}
         />
         <Cta state={cta} info={info} busy={busy} busyLabel={busyLabel} onClick={onCta} error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')} />
       </div>
