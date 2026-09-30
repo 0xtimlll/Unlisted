@@ -15,6 +15,7 @@ import { useRef, useState } from 'react'
 import {
   entriesFor,
   exportBook,
+  findLookalike,
   normalizeAddress,
   previewImport,
   type AddressBookEntry,
@@ -146,12 +147,23 @@ export function AddressBookDialog({
             </div>
             {preview.add.length > 0 ? (
               <ul className="mb-2 max-h-40 space-y-1 overflow-y-auto">
-                {preview.add.map((e) => (
-                  <li key={e.id} className="text-xs">
-                    <span className="text-ink">{e.label}</span> <span className="text-muted">({d.addressBook[`family_${e.family}`]})</span>
-                    <div className="mono break-all text-muted">{e.address}</div>
-                  </li>
-                ))}
+                {preview.add.map((e) => {
+                  // Shown, never blocked: the book may legitimately hold two addresses that share
+                  // their ends, and the user is looking at both in full right here.
+                  const twin = findLookalike(ab.book, e.family, e.address)
+                  return (
+                    <li key={e.id} className="text-xs">
+                      <span className="text-ink">{e.label}</span> <span className="text-muted">({d.addressBook[`family_${e.family}`]})</span>
+                      <div className="mono break-all text-muted">{e.address}</div>
+                      {twin ? (
+                        <div className="mt-0.5 text-danger">
+                          ⛔ {fmt(d.addressBook.lookalikeOnAdd, { label: twin.label })}
+                          <div className="mono break-all opacity-90">{fmt(d.addressBook.lookalikeSaved, { label: twin.label, saved: twin.address })}</div>
+                        </div>
+                      ) : null}
+                    </li>
+                  )
+                })}
               </ul>
             ) : (
               <div className="mb-2 text-xs text-muted">{d.addressBook.importNothing}</div>
@@ -286,12 +298,17 @@ function AddForm({
   const [family, setFamily] = useState<AddressFamily>(initial?.family ?? 'evm')
   const [tail, setTail] = useState('')
   const [error, setError] = useState('')
+  const [twinAccepted, setTwinAccepted] = useState(false)
 
   const normalized = normalizeAddress(family, address)
+  // A new entry that shares both ends with an existing one. Adding it is allowed — this is the
+  // user's own book — but it takes its own yes, separate from the tail, because the two say
+  // different things: the tail confirms what was typed, this confirms it is not the other one.
+  const twin = normalized ? findLookalike(ab.book, family, normalized) : undefined
   // The tail was already confirmed on the send form; asking again would teach the user that the
   // question is a formality. It is asked exactly once per address, and this is the other place.
   const tailOk = initial?.tailConfirmed === true || (!!normalized && tailMatches(family, normalized, tail))
-  const canSave = !!normalized && label.trim() !== '' && tailOk
+  const canSave = !!normalized && label.trim() !== '' && tailOk && (!twin || twinAccepted)
 
   const save = () => {
     setError('')
@@ -325,6 +342,16 @@ function AddForm({
           <span className="text-muted">{d.addressBook.label}</span>
           <Input value={label} onChange={(e) => setLabel(e.target.value)} className="mt-1" placeholder={d.addressBook.labelPlaceholder} autoFocus />
         </label>
+        {twin ? (
+          <div className="rounded-lg border border-danger/40 bg-danger/10 p-2 text-xs text-danger">
+            <div className="font-semibold">⛔ {fmt(d.addressBook.lookalikeOnAdd, { label: twin.label })}</div>
+            <div className="mono mt-1 break-all opacity-90">{fmt(d.addressBook.lookalikeSaved, { label: twin.label, saved: twin.address })}</div>
+            <label className="mt-2 flex items-start gap-2">
+              <input type="checkbox" className="mt-0.5" checked={twinAccepted} onChange={(e) => setTwinAccepted(e.target.checked)} />
+              <span>{d.addressBook.lookalikeConfirmAdd}</span>
+            </label>
+          </div>
+        ) : null}
         {initial?.tailConfirmed ? null : (
           <label className="block text-xs">
             {/* The expected value is deliberately absent — see the note at the top of this file. */}

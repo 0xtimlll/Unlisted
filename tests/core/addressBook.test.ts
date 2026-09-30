@@ -300,3 +300,38 @@ describe('an imported entry is a suggestion until its first use confirms it', ()
     expect(lookUp(b, 'evm', other).kind).toBe('lookalike')
   })
 })
+
+describe('a twin is flagged on the way in, on both paths', () => {
+  const saved = '0x1234000000000000000000000000000000005678'
+  const twin = '0x1234ffffffffffffffffffffffffffffffff5678'
+  const unrelated = '0x9999000000000000000000000000000000009999'
+  const book = () => addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Exchange', address: saved, family: 'evm' }, NOW, 'kept')
+
+  it('the manual add form can see the twin it is about to create', () => {
+    // The form gates its save on this; the rule itself is findLookalike.
+    expect(findLookalike(book(), 'evm', twin)?.label).toBe('Exchange')
+    expect(findLookalike(book(), 'evm', unrelated)).toBeUndefined()
+    // The address already saved is itself, not a twin of itself.
+    expect(findLookalike(book(), 'evm', saved)).toBeUndefined()
+  })
+
+  it('an imported row can be recognised as a twin of an existing entry', () => {
+    const b = book()
+    const p = previewImport({ version: 1, entries: [
+      { label: 'Fake', address: twin, family: 'evm' },
+      { label: 'Fine', address: unrelated, family: 'evm' },
+    ] }, b)
+    expect(p!.add).toHaveLength(2)
+    // The preview lists both; the screen marks the one that resembles a saved entry.
+    const marked = p!.add.map((e) => !!findLookalike(b, e.family, e.address))
+    expect(marked).toEqual([true, false])
+  })
+
+  it('adding a twin is still allowed — it is the user’s own book', () => {
+    const b = addEntry(book(), { label: 'Other', address: twin, family: 'evm' }, NOW)
+    expect(b.entries).toHaveLength(2)
+    // And once both are in, each looks up as itself rather than as the other’s twin.
+    expect(lookUp(b, 'evm', twin).kind).toBe('known')
+    expect(lookUp(b, 'evm', saved).kind).toBe('known')
+  })
+})
