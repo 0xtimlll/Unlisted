@@ -144,6 +144,8 @@ export type V1GuardReport = {
   riskWarnings: V1GuardResult[]
   /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
   warningsCleared: boolean
+  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
+  approveReady: boolean
   results: V1GuardResult[]
   warnings: SuspiciousFlag[]
   canSend: boolean
@@ -162,6 +164,8 @@ export function v1g1Chain(i: V1GuardInput): V1GuardResult {
   if (i.walletChainId !== i.srcChainId) return fail(1, 'chain_mismatch', `${i.walletChainId} != ${i.srcChainId}`)
   if (i.plan && i.info && !eq(i.plan.oft, i.info.oft)) return fail(1, 'oft_missing', 'plan.oft != info.oft')
   if (i.plan && i.info && i.plan.srcV1ChainId !== i.info.srcV1ChainId) return fail(1, 'chain_mismatch', 'plan.srcV1ChainId')
+  // The refund goes to plan.sender, so it must be the wallet that signs.
+  if (i.plan && !eq(i.plan.sender, i.walletAddress)) return fail(1, 'chain_mismatch', 'plan.sender != wallet')
   return ok(1)
 }
 

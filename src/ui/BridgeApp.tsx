@@ -629,7 +629,7 @@ export function BridgeApp({
                 ? planError
                   ? { kind: 'send', enabled: false, reason: describeError(d, planError) }
                   : { kind: 'quote' }
-                : approveIntent && report.warningsCleared
+                : approveIntent && report.approveReady
                   ? { kind: 'approve', intent: approveIntent }
                   : !report.canSend && report.results.every((r) => r.ok || isPending(r))
                     ? { kind: 'checking' }

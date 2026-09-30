@@ -350,7 +350,7 @@ export function CcipApp({
               : d.ui.cta_send
   // The approve grants an allowance, so it waits for the same tick the send does: an allowance
   // given to a contract whose risk has not been accepted is the exploitable half of this app.
-  const ctaEnabled = !busy && (!wallet || chainMismatch || (!!approveIntent && report.warningsCleared) || report.canSend)
+  const ctaEnabled = !busy && (!wallet || chainMismatch || (!!approveIntent && report.approveReady) || report.canSend)
   const onCta = () => {
     if (!wallet) return openConnectModal?.()
     if (chainMismatch && evmSrc) return switchChain({ chainId: evmSrc.chainId })

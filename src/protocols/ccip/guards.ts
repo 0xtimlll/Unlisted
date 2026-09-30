@@ -103,6 +103,8 @@ export type CcipGuardReport = {
   riskWarnings: CcipGuardResult[]
   /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
   warningsCleared: boolean
+  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
+  approveReady: boolean
   results: CcipGuardResult[]
   canSend: boolean
   /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
@@ -117,6 +119,7 @@ const fail = (id: number, code: CcipGuardCode, detail?: string): CcipGuardResult
 export function c1Chain(i: CcipGuardInput): CcipGuardResult {
   if (i.walletAddress === undefined || i.walletChainId === undefined) return fail(1, 'wallet_not_connected')
   if (i.walletChainId !== i.srcChainId) return fail(1, 'chain_mismatch', `${i.walletChainId} != ${i.srcChainId}`)
+  if (i.plan && !isAddressEqual(i.plan.sender, i.walletAddress)) return fail(1, 'chain_mismatch', 'plan.sender != wallet')
   return ok(1)
 }
 
