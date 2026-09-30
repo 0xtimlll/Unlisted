@@ -184,7 +184,8 @@ describe('the four-part gate', () => {
       srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
       dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),
     )
-    expect(r).toMatchObject({ ok: false, code: 'unlisted_locking_hub' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
   })
 
   it('verifies a token Wormhole has never listed, on the on-chain evidence alone', async () => {
@@ -217,7 +218,8 @@ describe('the four-part gate', () => {
     // The manager claims a token that never vouches for it. Wormhole's list has nothing to do
     // with this refusal; the missing anchor is the whole of it.
     const r = await verify(srcAnswers({ [`${MANAGER.toLowerCase()}.token`]: DST_TOKEN }), dstAnswers())
-    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
   })
 
   it('refuses when the peers do not point at each other', async () => {
@@ -243,11 +245,15 @@ describe('the four-part gate', () => {
     expect(r).toMatchObject({ ok: false, code: 'unverifiable' })
   })
 
-  it('REFUSES a fake manager with the right token(), its own matching peers, and a real-looking history', async () => {
+  it('leaves a fake manager UNVOUCHED FOR: right token(), matching peers, real-looking history, no anchor', async () => {
     // Everything a fake can control is correct here: it reports the real token, its own peer on the
     // other side points back at it, it has a Wormhole transceiver on the real core bridge, and it
     // could easily have one self-made transfer indexed by Wormholescan. The one thing it cannot
-    // forge is the token naming it — so it is refused, and no approve is ever offered.
+    // forge is the token naming it — and that is exactly what comes back as `anchor: null`.
+    //
+    // Unlisted warns rather than refuses (core/severity.ts), so verification now succeeds and the
+    // protection is guard 2b: `ntt_anchor_missing`, which holds the button until the user ticks
+    // the risk box. The test below this one is the half that matters most.
     const FAKE = getAddress('0xdeadbeef00000000000000000000000000000001')
     const FAKE_DST = getAddress('0xdeadbeef00000000000000000000000000000002')
     const src: Answers = {
@@ -281,9 +287,17 @@ describe('the four-part gate', () => {
       dstClient: mockClient(dst),
       tokenList: listWithBoth,
     })
-    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
-    // …and with no verification there is no approve to give.
-    expect(nttApprovePlan(r, planFixture(), 0n)).toBeNull()
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
+
+    // The protection that remains, and the one that matters: guard 2b holds the button.
+    const held = runNttGuards(guardInput({ verification: r }))
+    expect(held.canSend).toBe(false)
+    expect(held.riskWarnings.map((w) => !w.ok && w.code)).toContain('ntt_anchor_missing')
+    // It is a WARNING, not a block — the owner's decision, see core/severity.ts.
+    expect(held.blocks.map((b) => !b.ok && b.code)).not.toContain('ntt_anchor_missing')
+    // And the tick opens it, because this is a tool that warns rather than refuses.
+    expect(runNttGuards(guardInput({ verification: r, risksAccepted: true })).canSend).toBe(true)
   })
 })
 
@@ -362,7 +376,7 @@ describe('NTT guards', () => {
   })
 
   it('blocks everything while the manager is unverified', () => {
-    const r = runNttGuards(guardInput({ verification: { ok: false, code: 'no_token_anchor' } }))
+    const r = runNttGuards(guardInput({ verification: { ok: false, code: 'manager_unverified' as never } }))
     expect(r.canSend).toBe(false)
     expect(r.results.find((x) => x.id === 2)).toMatchObject({ ok: false, code: 'manager_unverified' })
   })
@@ -468,10 +482,24 @@ describe('the gate, asked twice (RPC quorum)', () => {
     expect(r.crossChecked).toBe(true)
   })
 
-  it('blocks when the second provider returns a definite rejection of its own', async () => {
+  it('blocks when the two providers name different tokens — that is a fact, not a reason', async () => {
     const second = srcAnswers({ [`${MANAGER.toLowerCase()}.token`]: DST_TOKEN })
     const r = await quorum(srcAnswers(), dstAnswers(), { src: second, dst: dstAnswers() })
-    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
+    expect(r).toMatchObject({ ok: false, code: 'unverifiable' })
+    expect(r.crossChecked).toBe(true)
+  })
+
+  it('a disagreement about the ANCHOR lowers the verdict instead of refusing it', async () => {
+    // One provider can read the token's minter and the other cannot — a flake, not a finding.
+    // The facts still match, so the route stands; it simply loses what vouched for it.
+    const blind = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: new Error('rpc hiccup'), [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('none') })
+    const r = await quorum(srcAnswers(), dstAnswers(), { src: blind, dst: dstAnswers() })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.verified.anchor).toBeNull()
+      expect(r.verified.manager).toBe(MANAGER)
+    }
+    expect(r.crossChecked).toBe(true)
   })
 
   it('never turns the primary’s rejection into a pass', async () => {
@@ -480,7 +508,8 @@ describe('the gate, asked twice (RPC quorum)', () => {
       src: srcAnswers(),
       dst: dstAnswers(),
     })
-    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
   })
 })
 
@@ -628,7 +657,8 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
       dstClient: mockClient(attackerDst()),
       tokenList: [],
     })
-    expect(r).toMatchObject({ ok: false, code: 'no_token_anchor' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
     // And it must not become a pass just because the far side is consistent with itself.
     if (!r.ok) expect(r.code).not.toBe('unverifiable')
   })
@@ -642,8 +672,10 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
       dstClient: mockClient(attackerDst()),
       tokenList: [],
     })
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.code).toBe('unlisted_locking_hub')
+    // Claiming `locking` changes nothing: the mode was never the reason. The missing anchor comes
+    // back as `anchor: null`, which guard 2b turns into a loud warning.
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
   })
 
   it('2. a burning manager the source token names is accepted', async () => {
@@ -728,7 +760,8 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
       dstClient: mockClient(dstPeeringBackAt(m)),
       tokenList: [],
     })
-    expect(r).toMatchObject({ ok: false, code: 'unlisted_locking_hub' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
   })
 
   it('4. a locking manager that is not in the list is refused', async () => {
@@ -736,7 +769,8 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
       srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
       dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),
     )
-    expect(r).toMatchObject({ ok: false, code: 'unlisted_locking_hub' })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.verified.anchor).toBeNull()
   })
 
   it('the far-side anchor is still reported, but only as context', async () => {
@@ -745,6 +779,6 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
     // It is recorded...
     if (r.ok) expect(r.verified.alsoOnDestination).toBe(true)
     // ...and it is never the reason.
-    if (r.ok) expect(r.verified.anchor.side).toBe('source')
+    if (r.ok) expect(r.verified.anchor?.side).toBe('source')
   })
 })

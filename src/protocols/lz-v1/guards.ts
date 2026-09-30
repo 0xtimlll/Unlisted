@@ -9,6 +9,7 @@
  *
  * Pure functions over a snapshot. Text lives in i18n; these return codes.
  */
+import { renameWarnings, verdictOf } from '../../core/severity'
 import { isAddressEqual, type Address, type Hex } from 'viem'
 import { aboveFeeCeiling, byKey } from '../../core/chains'
 import type { SuspiciousFlag } from '../../core/types'
@@ -139,9 +140,19 @@ export type V1GuardInput = {
    * the route or the amount changes — an acceptance must not outlive what it was given for.
    */
   adapterRiskAccepted?: boolean | undefined
+  /**
+   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
+   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
+   * token, the route, the amount or the recipient changes.
+   */
+  risksAccepted?: boolean | undefined
 }
 
 export type V1GuardReport = {
+  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  blocks: V1GuardResult[]
+  /** Failures the single tick covers, strongest first (core/severity.ts). */
+  riskWarnings: V1GuardResult[]
   results: V1GuardResult[]
   warnings: SuspiciousFlag[]
   canSend: boolean
@@ -437,7 +448,7 @@ export function runV1Guards(i: V1GuardInput): V1GuardReport {
   return {
     results,
     warnings: g16.warnings,
-    canSend: results.every((r) => r.ok),
+    ...renameWarnings(verdictOf(results, i.risksAccepted === true)),
     needsHighFeeConfirmation: v1FeeAboveCeiling(i.plan),
   }
 }

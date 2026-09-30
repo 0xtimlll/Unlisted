@@ -5,6 +5,7 @@
  * — never from the pool, never from the token, never from anything a user typed. Guard 9 checks
  * that at the moment of use, not at the moment of rendering.
  */
+import { renameWarnings, verdictOf } from '../../core/severity'
 import { isAddressEqual, type Address } from 'viem'
 import { aboveFeeCeiling, type ChainKey } from '../../core/chains'
 import { ccipConfig } from './chains'
@@ -87,9 +88,19 @@ export type CcipGuardInput = {
   selfCheck: { ok: true } | { ok: false; mismatches: string[] } | undefined
   /** User read and accepted a fee above the source chain's ceiling (guard 14). */
   highFeeAccepted?: boolean
+  /**
+   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
+   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
+   * token, the route, the amount or the recipient changes.
+   */
+  risksAccepted?: boolean | undefined
 }
 
 export type CcipGuardReport = {
+  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  blocks: CcipGuardResult[]
+  /** Failures the single tick covers, strongest first (core/severity.ts). */
+  riskWarnings: CcipGuardResult[]
   results: CcipGuardResult[]
   canSend: boolean
   /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
@@ -266,7 +277,7 @@ export function runCcipGuards(i: CcipGuardInput): CcipGuardReport {
     c6RateLimits(i), c7Fee(i), c8Native(i), c9Allowance(i), c10Spender(i),
     c11PlainMessage(i), c12Simulation(i), c13SelfCheck(i), c14FeeCeiling(i),
   ]
-  return { results, canSend: results.every((r) => r.ok), needsHighFeeConfirmation: ccipFeeAboveCeiling(i.plan) }
+  return { results, ...renameWarnings(verdictOf(results, i.risksAccepted === true)), needsHighFeeConfirmation: ccipFeeAboveCeiling(i.plan) }
 }
 
 /**

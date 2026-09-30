@@ -3,6 +3,7 @@
  * snapshot of app state. The Send button is enabled only when every guard
  * returns ok. Text lives in i18n; guards return codes only.
  */
+import { renameWarnings, verdictOf } from './severity'
 import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
 import { aboveFeeCeiling, byChainId, byEid } from './chains'
@@ -160,9 +161,19 @@ export type GuardInput = {
    * warning (§types.SuspiciousFlag), not a reason to refuse a route the EVM side still quotes.
    */
   svmDestinationRecognised?: boolean
+  /**
+   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
+   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
+   * token, the route, the amount or the recipient changes.
+   */
+  risksAccepted?: boolean | undefined
 }
 
 export type GuardReport = {
+  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  blocks: GuardResult[]
+  /** Failures the single tick covers, strongest first (core/severity.ts). */
+  riskWarnings: GuardResult[]
   results: GuardResult[]
   /** Soft flags (§6.16). Shown, never block. */
   warnings: SuspiciousFlag[]
@@ -527,7 +538,7 @@ export function runGuards(i: GuardInput): GuardReport {
   return {
     results,
     warnings: g16.warnings,
-    canSend: results.every((r) => r.ok),
+    ...renameWarnings(verdictOf(results, i.risksAccepted === true)),
     needsNoGasConfirmation: needsNoGasConfirmation(i.info, i.plan),
     needsHighFeeConfirmation: feeAboveCeiling(i.plan),
   }
