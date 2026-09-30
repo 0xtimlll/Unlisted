@@ -423,12 +423,32 @@ describe('an adapter is trusted by the committed list, or not at all', () => {
     ...over,
   })
 
-  it('a fresh fake adapter — nothing locked, no history — is BLOCKED', () => {
+  it('a fresh adapter is red but NOT refused — a new token looks exactly like this', () => {
     const r = assessRisk(clean({ adapter: standing({ lockedBps: 0, outboundNonce: 0n }) }))
-    expect(r.tier).toBe('BLOCKED')
+    expect(r.tier).not.toBe('BLOCKED')
+    expect(r.adapterUnproven).toBe(true)
+    expect(r.testLimitOnly).toBe(true)
+    // The full amount is reachable, but only through an explicit acknowledgement.
+    expect(r.overridable).toBe(true)
+  })
+
+  it('red: a test amount needs nothing, the full amount needs the tick', () => {
+    const r = assessRisk(clean({ adapter: standing({ lockedBps: 0, outboundNonce: 0n }) }))
+    const limit = 100n
+    // Within the test limit: no extra step at all.
+    expect(sendAllowed(r, limit, limit)).toEqual({ allowed: true })
+    expect(sendAllowed(r, 1n, limit)).toEqual({ allowed: true })
+    // Over it, unticked: refused, and told which limit it was.
+    expect(sendAllowed(r, limit + 1n, limit)).toMatchObject({ allowed: false, why: 'over_test_limit' })
+    // Ticked: allowed.
+    expect(sendAllowed(r, limit + 1n, limit, '', true)).toEqual({ allowed: true })
+  })
+
+  it('amber is NOT liftable by the tick — there the app wants the evidence, not a click', () => {
+    const r = assessRisk(clean({ adapter: standing() }))
+    expect(r.adapterUnproven).toBe(false)
     expect(r.overridable).toBe(false)
-    // Not a cap: a test amount into a lockbox that may not be one is still a loss.
-    expect(r.testLimitOnly).toBe(false)
+    expect(sendAllowed(r, 101n, 100n, '', true)).toMatchObject({ allowed: false, why: 'over_test_limit' })
   })
 
   it('healthy signals but no listing is amber, capped, and not overridable by a word', () => {
@@ -450,15 +470,19 @@ describe('an adapter is trusted by the committed list, or not at all', () => {
     expect(assessRisk(clean()).tier).toBe('OK')
   })
 
-  it('a read that did not answer is not a pass', () => {
+  it('a read that did not answer is not a pass — it lands in red, not amber', () => {
     for (const over of [{ lockedBps: undefined }, { outboundNonce: undefined }]) {
-      expect(assessRisk(clean({ adapter: standing(over) })).tier).toBe('BLOCKED')
+      expect(assessRisk(clean({ adapter: standing(over) })).adapterUnproven).toBe(true)
     }
   })
 
   it('each floor is enforced on its own', () => {
-    expect(assessRisk(clean({ adapter: standing({ lockedBps: ADAPTER_MIN_LOCKED_BPS - 1 }) })).tier).toBe('BLOCKED')
-    expect(assessRisk(clean({ adapter: standing({ outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE - 1n }) })).tier).toBe('BLOCKED')
+    expect(assessRisk(clean({ adapter: standing({ lockedBps: ADAPTER_MIN_LOCKED_BPS - 1 }) })).adapterUnproven).toBe(true)
+    expect(assessRisk(clean({ adapter: standing({ outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE - 1n }) })).adapterUnproven).toBe(true)
+  })
+
+  it('a listed adapter is never red, whatever the signals say', () => {
+    expect(assessRisk(clean({ adapter: standing({ listed: true, lockedBps: 0, outboundNonce: 0n }) })).adapterUnproven).toBe(false)
   })
 
   it('lockedBps is a share of supply, and an unreadable supply is unknown rather than zero', () => {

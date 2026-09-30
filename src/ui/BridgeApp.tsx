@@ -110,6 +110,7 @@ export function BridgeApp({
   const [peerBackAccepted, setPeerBackAccepted] = useState(false)
   const [pdaAccepted, setPdaAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
+  const [adapterRiskAccepted, setAdapterRiskAccepted] = useState(false)
   // §4 The test-amount limit is remembered per token (there is no default — see testLimit.ts); the
   // confirmation word is per transfer, because it is an answer about this one.
   const [testLimit, setTestLimit] = useState('')
@@ -146,6 +147,7 @@ export function BridgeApp({
     setPeerBackAccepted(false)
     setPdaAccepted(false)
     setHighFeeAccepted(false)
+    setAdapterRiskAccepted(false)
     setTestLimit('')
     setRiskOverride('')
     setSent(null)
@@ -444,6 +446,12 @@ export function BridgeApp({
   useEffect(() => {
     setHighFeeAccepted(false)
   }, [planData?.value])
+  // §Adapter Same rule for the adapter tick: the token, the route and the amount are all part of
+  // what was accepted, so any of them changing takes the acceptance with it.
+  const acceptedFor = info?.vm === 'evm' ? info.oft : undefined
+  useEffect(() => {
+    setAdapterRiskAccepted(false)
+  }, [acceptedFor, dest.dstEid, planData?.amounts.amountLD])
 
   const baseInput: GuardInput = useMemo(
     () => ({
@@ -519,6 +527,7 @@ export function BridgeApp({
     risk: risk.data?.risk,
     testLimitLD: limitLD,
     riskOverride,
+    adapterRiskAccepted,
   }
   const report = runGuards(fullInput)
 
@@ -794,6 +803,8 @@ export function BridgeApp({
                 amountLD={planData?.amounts.amountLD}
                 override={riskOverride}
                 onOverride={setRiskOverride}
+                adapterAccepted={adapterRiskAccepted}
+                onAdapterAccepted={setAdapterRiskAccepted}
               />
               <Checks
                 report={report}

@@ -700,6 +700,9 @@ export const en = {
     testLimitNote: 'Until a test transfer on this route is confirmed delivered, at most {limit} {symbol} can be sent.',
     overLimit: 'The amount above is over this limit.',
     overrideLabel: 'To send the full amount anyway, type {word}',
+    adapterUnproven:
+      'This adapter is not confirmed: it is not on the reviewed list and has little history — a new token, or a fake. Send a test amount first. If it is a fake, everything you send will be stolen.',
+    adapterAccept: 'I understand the risk, sending without a test',
     notOverridable:
       'This cap cannot be typed away: it comes from a check that could not be made, or from a contract standard no live deployment has ever verified here. Send a test amount and let it arrive — that lifts it for 24 hours.',
     verified: 'A test transfer on this route arrived {ago} — the cap is lifted for 24 hours.',
