@@ -12,10 +12,9 @@
  *     in the token's own units and the field to change it, rather than leaving the user to discover
  *     it from a disabled button.
  */
-import { formatAmount } from '@/core/amounts'
-import { CHECK_IDS, isHard, OVERRIDE_WORD, type CheckId, type CheckState, type RouteRisk, type Tier } from '@/protocols/lz-risk/risk'
+import { CHECK_IDS, isHard, type CheckId, type CheckState, type RouteRisk, type Tier } from '@/protocols/lz-risk/risk'
 import { fmt, useDict, type Dict } from '@/i18n'
-import { Alert, Box, BoxLabel, Disclosure, Input, Spinner } from './ui'
+import { Alert, Disclosure, Spinner } from './ui'
 import { useState } from 'react'
 
 const TIER_STYLE: Record<Tier, string> = {
@@ -83,16 +82,8 @@ export function RiskPanel(p: {
   decimals: number
   symbol: string
   /** The test-amount limit, as the user typed it, and the raw value it parsed to. */
-  testLimit: string
-  onTestLimit: (v: string) => void
-  testLimitLD: bigint | undefined
   /** The amount this transfer would send, to say whether it is over the limit. */
   amountLD: bigint | undefined
-  override: string
-  onOverride: (v: string) => void
-  /** §Adapter The tick under the red adapter warning. */
-  adapterAccepted: boolean
-  onAdapterAccepted: (v: boolean) => void
 }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
@@ -109,7 +100,6 @@ export function RiskPanel(p: {
     )
   }
   const r = p.risk
-  const overLimit = p.testLimitLD !== undefined && p.amountLD !== undefined && p.amountLD > p.testLimitLD
 
   return (
     <div className="space-y-2">
@@ -133,35 +123,9 @@ export function RiskPanel(p: {
       {r.adapterUnproven ? (
         <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           <p>{d.risk.adapterUnproven}</p>
-          <label className="mt-2 flex items-start gap-2 text-xs">
-            <input type="checkbox" className="mt-0.5" checked={p.adapterAccepted} onChange={(e) => p.onAdapterAccepted(e.target.checked)} />
-            <span>{d.risk.adapterAccept}</span>
-          </label>
         </div>
       ) : null}
 
-      {r.testLimitOnly ? (
-        <Box>
-          <BoxLabel>{d.risk.testLimit}</BoxLabel>
-          <Input value={p.testLimit} onChange={(e) => p.onTestLimit(e.target.value)} placeholder="1" inputMode="decimal" spellCheck={false} />
-          <p className="mt-1 text-xs text-muted">
-            {fmt(d.risk.testLimitNote, {
-              limit: p.testLimitLD === undefined ? '—' : formatAmount(p.testLimitLD, p.decimals, { maxFraction: 8 }),
-              symbol: p.symbol,
-            })}
-          </p>
-          {overLimit ? <p className="mt-1 text-xs text-danger">{d.risk.overLimit}</p> : null}
-          {/* The adapter case is accepted by the tick above, not by typing a word here. */}
-          {r.overridable && !r.adapterUnproven ? (
-            <div className="mt-2">
-              <BoxLabel>{fmt(d.risk.overrideLabel, { word: OVERRIDE_WORD })}</BoxLabel>
-              <Input value={p.override} onChange={(e) => p.onOverride(e.target.value)} placeholder={OVERRIDE_WORD} spellCheck={false} />
-            </div>
-          ) : r.overridable ? null : (
-            <p className="mt-2 text-xs text-warn">{d.risk.notOverridable}</p>
-          )}
-        </Box>
-      ) : null}
 
       <Disclosure
         title={

@@ -23,7 +23,7 @@ import {
 import { buildV1SendPlan, encodeV1SendCalldata, toWireRecipient, V1PlanError, type V1SendPlan } from '@/protocols/lz-v1/plan'
 import { v1SelfCheck } from '@/protocols/lz-v1/selfcheck'
 import { submitV1Send, V1SendRefused, type V1Writer } from '@/protocols/lz-v1/send'
-import { assessRisk, CHECK_IDS, emptyRiskInput, OVERRIDE_WORD, type CheckId, type CheckState, type RouteRisk } from '@/protocols/lz-risk/risk'
+import { assessRisk, CHECK_IDS, emptyRiskInput, type CheckId, type CheckState, type RouteRisk } from '@/protocols/lz-risk/risk'
 
 /** Every check ran and passed: OK, uncapped. Guard 22's own cases build their own verdicts. */
 function cleanRisk(over: Parameters<typeof assessRisk>[0] | undefined = undefined): RouteRisk {
@@ -34,12 +34,6 @@ function cleanRisk(over: Parameters<typeof assessRisk>[0] | undefined = undefine
 }
 
 /** The verdict a route gets when a hard check could not be made: capped, and not overridable. */
-function cappedRisk(): RouteRisk {
-  const checks = {} as Record<CheckId, CheckState>
-  for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-  checks['delivery_sim'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
-  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
-}
 
 function blockedRisk(): RouteRisk {
   const checks = {} as Record<CheckId, CheckState>
@@ -154,7 +148,6 @@ function guardInput(plan: V1SendPlan, i: OftV1Info, over: Partial<V1GuardInput> 
     storedPayload: { status: 'clear' },
     storedPayloadUnavailableAccepted: false,
     risk: cleanRisk(),
-    testLimitLD: 10n ** 18n,
     ...over,
   }
 }
@@ -379,56 +372,16 @@ describe('the v1 guards', () => {
   })
 })
 
-describe('guard 22: the route verdict decides how much may go', () => {
-  it('passes on an OK route', async () => {
+describe('guard 22: the route verdict is a warning, not a cap', () => {
+  it('a blocked verdict warns and the tick sends any amount', async () => {
     const i = info()
     const p = await build(i, '1')
-    expect(runV1Guards(guardInput(p, i)).results.find((x) => x.id === 22)).toMatchObject({ ok: true })
-  })
-
-  it('refuses every amount on a blocked route, test amount included', async () => {
-    const i = info()
-    const p = await build(i, '1')
-    const r = runV1Guards(guardInput(p, i, { risk: blockedRisk(), testLimitLD: p.amounts.amountLD }))
-    expect(r.results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
-    expect(r.canSend).toBe(false)
-  })
-
-  it('caps the amount when a hard check could not be made, and the word does not lift it', async () => {
-    const i = info()
-    const big = await build(i, '10')
-    const capped = cappedRisk()
-    expect(capped.tier).toBe('UNVERIFIED')
-    const overLimit = guardInput(big, i, { risk: capped, testLimitLD: 10n ** 18n })
-    expect(runV1Guards(overLimit).results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_over_test_limit' })
-    // Typing the confirmation word changes nothing: only a delivered test transfer does.
-    expect(runV1Guards({ ...overLimit, riskOverride: OVERRIDE_WORD }).results.find((x) => x.id === 22)).toMatchObject({
-      ok: false,
-      code: 'risk_over_test_limit',
-    })
-    // A test-sized amount is allowed.
-    const small = await build(i, '1')
-    expect(runV1Guards(guardInput(small, i, { risk: capped, testLimitLD: 10n ** 18n })).results.find((x) => x.id === 22)).toMatchObject({ ok: true })
-  })
-
-  it('sends nothing on a capped route until a test limit is chosen', async () => {
-    const i = info()
-    const p = await build(i, '1')
-    const capped = cappedRisk()
-    // No limit set: not "the amount is fine", and not "over the limit" either — a third answer.
-    const unset = runV1Guards(guardInput(p, i, { risk: capped, testLimitLD: undefined }))
-    expect(unset.results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_test_limit_unset' })
-    expect(unset.canSend).toBe(false)
-    // Once chosen, a test-sized amount goes.
-    expect(runV1Guards(guardInput(p, i, { risk: capped, testLimitLD: p.amounts.amountLD })).results.find((x) => x.id === 22)).toMatchObject({ ok: true })
-  })
-
-  it('is pending, not permissive, before the checks have run', async () => {
-    const i = info()
-    const p = await build(i, '1')
-    const r = runV1Guards(guardInput(p, i, { risk: undefined }))
-    expect(r.results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_unknown' })
-    expect(r.canSend).toBe(false)
+    const rep = runV1Guards(guardInput(p, i, { risk: blockedRisk() }))
+    expect(rep.results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
+    // A warning, never a block — the owner's decision (CLAUDE.md rule 2).
+    expect(rep.blocks.some((b) => !b.ok && b.code === 'risk_blocked')).toBe(false)
+    expect(rep.canSend).toBe(false)
+    expect(runV1Guards(guardInput(p, i, { risk: blockedRisk(), risksAccepted: true })).canSend).toBe(true)
   })
 })
 

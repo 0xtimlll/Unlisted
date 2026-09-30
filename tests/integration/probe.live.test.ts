@@ -63,7 +63,7 @@ describe('HyperEVM / TREAD OFT', () => {
       recipientIsCustom: false, customRecipientConfirmed: false,
       tokenBalance: 10n ** 18n, nativeBalance: plan.value + 10n ** 16n, allowance: 0n, gasCostWei: 10n ** 15n,
       simulation: { ok: true }, selfCheck: { ok: true }, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
-      risk: cleanRisk(), testLimitLD: plan.amounts.amountLD,
+      risk: cleanRisk(),
     })
     expect(rep.results.filter((r) => !r.ok)).toEqual([])
   })

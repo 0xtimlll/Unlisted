@@ -13,7 +13,7 @@ import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type S
 import type { SourceInfo, SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
 import type { PeerBackResult } from './verify'
-import { sendAllowed, type RouteRisk } from '../protocols/lz-risk/risk'
+import { riskWarningCode, type RouteRisk } from '../protocols/lz-risk/risk'
 
 /** Hard cap on slippage: below this floor a high-fee or hostile OFT could keep most of the amount. */
 export const MAX_SLIPPAGE_BPS = 500
@@ -64,8 +64,7 @@ export type GuardCode =
   | 'fee_above_ceiling_unconfirmed'
   | 'risk_unknown'
   | 'risk_blocked'
-  | 'risk_over_test_limit'
-  | 'risk_test_limit_unset'
+  | 'risk_unverified'
 
 /** Codes that mean "not known yet" (a read is in flight), not "wrong". The UI shows them muted. */
 export const PENDING_CODES: ReadonlySet<GuardCode> = new Set<GuardCode>([
@@ -139,16 +138,6 @@ export type GuardInput = {
    * treats that as pending rather than permission — a verdict nobody computed is not a verdict.
    */
   risk?: RouteRisk | undefined
-  /** §4 The test-amount limit in this token's own units, as a raw amount. */
-  testLimitLD?: bigint | undefined
-  /** §4 What the user typed to lift an overridable UNVERIFIED. Never lifts a hard-unchecked cap. */
-  riskOverride?: string | undefined
-  /**
-   * §Adapter The tick on "I understand the risk, sending without a test". Only ever consulted for
-   * an unproven adapter (`RouteRisk.adapterUnproven`), and the screen clears it whenever the token,
-   * the route or the amount changes — an acceptance must not outlive what it was given for.
-   */
-  adapterRiskAccepted?: boolean | undefined
   /** Solana destinations only: what kind of account the recipient is (svm/recipient.ts). */
   svmRecipientClass?: SvmRecipientClass | undefined
   /** User explicitly accepted sending to a program-owned (PDA) Solana account. */
@@ -485,13 +474,15 @@ export function riskCovers(i: GuardInput): boolean {
 }
 
 /**
- * §4, guard 22: the route's own verdict decides how much may go, and nothing in the UI can argue.
+ * §4, guard 22: the route's verdict, said out loud.
  *
- * This is where the risk indicator stops being a colour and starts being a rule. Three answers:
- * a verdict that has not been computed is pending; BLOCKED refuses every amount, test included;
- * and a capped route refuses anything above the test limit. `sendAllowed` consults the typed
- * confirmation word only where the verdict says it may — a cap that came from a hard check nobody
- * could run is not one a word can lift, only a test transfer that arrives.
+ * It no longer decides how much may go. The indicator computes a tier honestly — green only from
+ * facts an attacker cannot write about himself — and the tier then picks how loudly this guard
+ * speaks. `BLOCKED` and `UNVERIFIED` are warnings that core/severity.ts weighs as a possible loss;
+ * the single tick is what sends the transfer, and it sends any amount.
+ *
+ * Routes the indicator has no runner for (a Solana source or destination) pass silently: there is
+ * no verdict to report, and guards 1-21 are the whole rule there.
  */
 export function g22Risk(i: GuardInput): GuardResult {
   if (!i.plan) return fail(22, 'plan_missing')
@@ -501,14 +492,10 @@ export function g22Risk(i: GuardInput): GuardResult {
   // rather than left as an accident: the day a Solana runner lands, this line is what changes.
   if (!riskCovers(i)) return ok(22)
   if (!i.risk) return fail(22, 'risk_unknown')
-  // A capped route with no limit chosen sends nothing, and says which of the two it is: "over the
-  // limit" and "no limit set" are different things to do about it.
-  if (i.risk.testLimitOnly && i.testLimitLD === undefined && !(i.risk.overridable && i.riskOverride)) {
-    return fail(22, 'risk_test_limit_unset')
-  }
-  const permission = sendAllowed(i.risk, i.plan.amounts.amountLD, i.testLimitLD ?? 0n, i.riskOverride ?? '', i.adapterRiskAccepted === true)
-  if (permission.allowed) return ok(22)
-  return permission.why === 'blocked' ? fail(22, 'risk_blocked') : fail(22, 'risk_over_test_limit', `${permission.limit}`)
+  // The verdict is a warning now, not a permission: core/severity.ts weighs both codes as a
+  // possible loss, and the single tick is what lets the transfer through.
+  const code = riskWarningCode(i.risk)
+  return code ? fail(22, code) : ok(22)
 }
 
 export function runGuards(i: GuardInput): GuardReport {

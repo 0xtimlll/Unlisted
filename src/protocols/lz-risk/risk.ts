@@ -118,8 +118,6 @@ export type RiskInput = {
   thinGas: boolean
   /** The amount is close to a rate limit this route enforces. */
   nearLimit: boolean
-  /** A test transfer on this exact route was confirmed delivered within the last 24 hours. */
-  testVerified: boolean
   /**
    * Did a SECOND, independent operator confirm the contract↔token link this whole verdict rests on?
    *
@@ -155,18 +153,6 @@ export type RouteRisk = {
   checks: Record<CheckId, CheckState>
   /** Hard checks that could not be run. Non-empty means the amount is capped, whatever else holds. */
   hardUnchecked: CheckId[]
-  /**
-   * True when only a test-sized amount may be sent. Never true for BLOCKED — a blocked route takes
-   * nothing at all, not even a test — so read `tier` first, or use sendAllowed() which does.
-   */
-  testLimitOnly: boolean
-  /**
-   * True when the user may lift the cap by typing the confirmation word. False whenever the cap
-   * came from a hard check that did not run, or from a standard with no live verification behind
-   * it — in both cases the only thing that lifts it is a test transfer that actually arrives.
-   * BLOCKED is never overridable.
-   */
-  overridable: boolean
   /**
    * §Adapter The source is an OFTAdapter that is not on the reviewed list AND whose indirect
    * signals did not clear their floors — a brand-new token, or a fake. Distinct from the amber
@@ -248,14 +234,11 @@ export function assessRisk(i: RiskInput): RouteRisk {
     })
   }
   if (blocking.length > 0) {
-    // Not `testLimitOnly`: §4 disables a blocked route entirely, test amount included.
     return {
       tier: 'BLOCKED',
       reasons: blocking,
       checks: i.checks,
       hardUnchecked: hardUncheckedOf(i),
-      testLimitOnly: false,
-      overridable: false,
       // A blocked route has no adapter question left to answer.
       adapterUnproven: false,
     }
@@ -270,7 +253,6 @@ export function assessRisk(i: RiskInput): RouteRisk {
   }
 
   let tier: Tier = 'OK'
-  let overridable = true
 
   // ---- the caps: at most UNVERIFIED -----------------------------------------
   const hardUnchecked = hardUncheckedOf(i)
@@ -280,8 +262,6 @@ export function assessRisk(i: RiskInput): RouteRisk {
       reasons.push({ text: `not checked: ${c.status === 'unchecked' ? c.reason : 'no answer'}`, check: id })
     }
     tier = worse(tier, 'UNVERIFIED')
-    // Rule 2: nothing the user can type substitutes for a check that did not happen.
-    overridable = false
   }
   // §Adapter Two cases, and they differ in what lifts the cap rather than in how much may go.
   //
@@ -299,18 +279,15 @@ export function assessRisk(i: RiskInput): RouteRisk {
         check: 'adapter_liquidity',
       })
       tier = worse(tier, 'UNVERIFIED')
-      overridable = false
     } else {
       adapterUnproven = true
       reasons.push({ text: adapterRedReason(i.adapter), check: 'adapter_liquidity' })
       tier = worse(tier, 'UNVERIFIED')
-      // Deliberately left overridable: see RouteRisk.adapterUnproven.
     }
   }
   if (i.unverifiedStandard) {
     reasons.push({ text: 'this contract’s standard has never been verified against a live deployment, so only a test amount goes out on it' })
     tier = worse(tier, 'UNVERIFIED')
-    overridable = false
   }
   if (i.delayed) {
     const { packets, oldestMinutes } = i.delayed
@@ -324,7 +301,6 @@ export function assessRisk(i: RiskInput): RouteRisk {
     tier = worse(tier, 'UNVERIFIED')
     // An hour of no movement is not "slow", it is evidence that nothing is moving. A word cannot
     // stand in for the delivery that has not happened; only a test that arrives can.
-    if (stopped) overridable = false
   }
   const h = i.history
   if (h.kind === 'never') {
@@ -392,13 +368,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
   if (reasons.length > 0) tier = worse(tier, 'CAUTION')
 
   // ---- a delivered test lifts the cap, and nothing else does -------------------
-  if (i.testVerified && tier === 'UNVERIFIED') {
-    tier = 'CAUTION'
-    overridable = true
-    reasons.push({ text: 'a test transfer on this route was confirmed delivered in the last 24 hours' })
-  }
 
-  const testLimitOnly = tier === 'UNVERIFIED' || tier === 'BLOCKED'
 
   // Rule 3, enforced rather than trusted: a colour with nothing to say is a colour we do not show.
   if (tier !== 'OK' && reasons.length === 0) {
@@ -407,7 +377,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
   if (tier === 'OK' && reasons.length > 0) {
     throw new Error('lz-risk: OK with reasons')
   }
-  return { tier, reasons, checks: i.checks, hardUnchecked, testLimitOnly, overridable: testLimitOnly ? overridable : false, adapterUnproven }
+  return { tier, reasons, checks: i.checks, hardUnchecked, adapterUnproven }
 }
 
 function hardUncheckedOf(i: RiskInput): CheckId[] {
@@ -439,38 +409,19 @@ export function emptyRiskInput(reason = 'not run yet'): RiskInput {
     delayed: undefined,
     thinGas: false,
     nearLimit: false,
-    testVerified: false,
   }
 }
 
-/** The confirmation word a user types to lift an overridable UNVERIFIED. */
-export const OVERRIDE_WORD = 'UNVERIFIED'
-
-export function overrideAccepted(typed: string): boolean {
-  return typed.trim().toUpperCase() === OVERRIDE_WORD
-}
-
-export type SendPermission =
-  | { allowed: true }
-  | { allowed: false; why: 'blocked' }
-  /** Over the test limit on a route that only takes a test amount. */
-  | { allowed: false; why: 'over_test_limit'; limit: bigint }
 
 /**
- * The one place the verdict turns into a decision about money.
+ * The verdict, as the one thing guard 22 needs from it.
  *
- * `override` is the word the user typed, and it is consulted only when the verdict says it may be.
- * A blocked route refuses every amount; a capped route refuses everything above the test limit.
+ * There is no amount in this any more. §4 used to cap an unproven route to a test amount and hold
+ * the rest behind a typed word or a delivered test transfer; the app now warns instead of refusing
+ * (CLAUDE.md rule 2), so the tier decides how loudly guard 22 speaks and the single tick decides
+ * whether the transfer goes. `BLOCKED` is the loudest sentence this file can say, not a refusal.
  */
-/**
- * `accepted` is the tick on the adapter warning (§Adapter). It reaches the same `overridable` gate
- * the typed word does — one mechanism, two ways of saying yes — because the two caps it lifts are
- * asked for in different places: the word sits under the risk panel, the tick under a red alert
- * that names the specific thing being accepted.
- */
-export function sendAllowed(risk: RouteRisk, amountLD: bigint, testLimitLD: bigint, override = '', accepted = false): SendPermission {
-  if (risk.tier === 'BLOCKED') return { allowed: false, why: 'blocked' }
-  if (!risk.testLimitOnly) return { allowed: true }
-  if (risk.overridable && (accepted || overrideAccepted(override))) return { allowed: true }
-  return amountLD <= testLimitLD ? { allowed: true } : { allowed: false, why: 'over_test_limit', limit: testLimitLD }
+export function riskWarningCode(risk: RouteRisk): 'risk_blocked' | 'risk_unverified' | undefined {
+  if (risk.tier === 'BLOCKED') return 'risk_blocked'
+  return risk.tier === 'UNVERIFIED' ? 'risk_unverified' : undefined
 }

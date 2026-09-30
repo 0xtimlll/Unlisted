@@ -68,7 +68,7 @@ async function fullCheck(f: Fork, info: OftInfo, plan: EvmSendPlan, allowance: b
     // §4 guard 22 is handed a clean verdict: these tests execute real approve/send transactions on a
     // fork, and the route checks they would otherwise need are covered by their own tests. Without
     // this the fork's `canSend` would be false for a reason that has nothing to do with the fork.
-    risk: cleanRisk(), testLimitLD: plan.amounts.amountLD,
+    risk: cleanRisk(),
     ...svm,
   }
   return { report: runGuards(input), simulation, calldata, args }

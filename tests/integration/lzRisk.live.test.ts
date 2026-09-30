@@ -26,7 +26,7 @@ import { probeOft } from '@/core/probe'
 import { evmRecipient } from '@/core/recipient'
 import { probeOftV1 } from '@/protocols/lz-v1/detect'
 import { buildV1SendPlan } from '@/protocols/lz-v1/plan'
-import { assessRoute, CHECK_IDS, dvnInfo, HARD_CHECKS, sendAllowed, OVERRIDE_WORD, dstOftOf, type RouteRisk } from '@/protocols/lz-risk'
+import { assessRoute, CHECK_IDS, dvnInfo, HARD_CHECKS, dstOftOf, type RouteRisk } from '@/protocols/lz-risk'
 
 const SOMEONE = getAddress('0x000000000000000000000000000000000000dEaD')
 const JOE = getAddress('0x371c7ec6D8039ff7933a2AA28EB827Ffe1F52f07')
@@ -51,7 +51,6 @@ function assertInvariants(risk: RouteRisk) {
   const hardFailed = HARD_CHECKS.filter((id) => risk.checks[id].status === 'fail')
   if (hardFailed.length > 0) expect(risk.tier).toBe('BLOCKED')
   if (risk.tier === 'BLOCKED') {
-    expect(sendAllowed(risk, 1n, 10n ** 30n, OVERRIDE_WORD)).toEqual({ allowed: false, why: 'blocked' })
   }
 
   // Every state carries text a person can read; nothing is a bare status.
@@ -124,11 +123,7 @@ describe('a real v1 route', () => {
         // Both wordings say the same thing about the queue; which one appears depends on its age.
         const queued = risk.reasons.find((r) => r.check === 'path')
         expect(queued?.text).toMatch(/queue[s]? behind them/)
-        const stopped = /verification may have stopped/.test(queued?.text ?? '')
-        expect(risk.overridable).toBe(!stopped)
         // Either way a test amount still goes; only a stored payload refuses everything.
-        expect(sendAllowed(risk, 1n, 10n ** 18n)).toEqual({ allowed: true })
-        expect(sendAllowed(risk, 10n ** 30n, 1n, OVERRIDE_WORD).allowed).toBe(!stopped)
       }
       // A stored payload is the only thing that makes this check fail outright.
       if (path.status === 'fail') expect(path.reason).toMatch(/stuck packet|no path/)

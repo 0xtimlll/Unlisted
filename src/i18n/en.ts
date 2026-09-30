@@ -212,9 +212,10 @@ export const en = {
     svm_dest_unknown: 'Reading the Solana side of this OFT…',
     fee_above_ceiling_unconfirmed: 'Confirm the unusually high LayerZero fee',
     risk_unknown: 'Checking the route…',
-    risk_blocked: 'This route is blocked by the checks below — nothing can be sent on it, not even a test',
-    risk_over_test_limit: 'This route is unverified: only a test amount can be sent until a test transfer arrives',
-    risk_test_limit_unset: 'This route is unverified — set the test amount limit before sending',
+    risk_blocked:
+      'The route checks below found something that can cost you the transfer. Read them before sending.',
+    risk_unverified:
+      'This route could not be confirmed — the checks below say which part. It may be new, or it may not be what it claims.',
     ok_risk: 'route checks ok',
     ok_recipient_class: 'recipient is a wallet',
     ok_peer_back: 'destination peer points back',
@@ -837,9 +838,10 @@ export const en = {
     stored_payload_unavailable_unconfirmed: 'The stuck-packet check could not be made',
     fee_above_ceiling_unconfirmed: 'The fee is above this chain’s ceiling — read it and accept it',
     risk_unknown: 'Checking the route…',
-    risk_blocked: 'This route is blocked by the route checks — nothing can be sent on it, not even a test',
-    risk_over_test_limit: 'This route is unverified: only a test amount can be sent until a test transfer arrives',
-    risk_test_limit_unset: 'This route is unverified — set the test amount limit before sending',
+    risk_blocked:
+      'The route checks below found something that can cost you the transfer. Read them before sending.',
+    risk_unverified:
+      'This route could not be confirmed — the checks below say which part. It may be new, or it may not be what it claims.',
   },
   ui: {
     contractTab: 'Contract',

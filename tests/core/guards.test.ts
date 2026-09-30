@@ -48,7 +48,7 @@ import {
   treadPlan,
   WALLET,
 } from './fixtures'
-import { assessRisk, CHECK_IDS, emptyRiskInput, OVERRIDE_WORD, type CheckId, type CheckState } from '@/protocols/lz-risk/risk'
+import { assessRisk, CHECK_IDS, emptyRiskInput, type CheckId, type CheckState } from '@/protocols/lz-risk/risk'
 import { bookConfirms } from '@/core/addressBook'
 
 const code = (r: GuardResult) => (r.ok ? 'ok' : r.code)
@@ -555,43 +555,40 @@ describe('g16 surfaces the contract enforced options', () => {
   })
 })
 
-describe('22. the route verdict caps the amount, and the Solana path is not swept up in it', () => {
-  it('refuses every amount on a blocked route', () => {
+describe('22. the route verdict is a warning, and the Solana path is not swept up in it', () => {
+  const riskWith = (id: CheckId, state: CheckState) => {
     const checks = {} as Record<CheckId, CheckState>
-    for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-    checks['peers'] = { status: 'fail', reason: 'the destination peer does not point back' }
-    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
+    for (const c of CHECK_IDS) checks[c] = { status: 'pass' }
+    checks[id] = state
+    return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
+  }
+
+  it('a blocked route warns loudly, and the tick sends any amount', () => {
+    const risk = riskWith('peers', { status: 'fail', reason: 'the destination peer does not point back' })
     expect(risk.tier).toBe('BLOCKED')
-    const rep = runGuards(goodInput({ risk, testLimitLD: 10n ** 30n }))
+    const rep = runGuards(goodInput({ risk }))
     expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
+    // It is a WARNING, not a block: the owner's decision (CLAUDE.md rule 2).
+    expect(rep.riskWarnings.some((w) => !w.ok && w.code === 'risk_blocked')).toBe(true)
+    expect(rep.blocks.some((b) => !b.ok && b.code === 'risk_blocked')).toBe(false)
     expect(rep.canSend).toBe(false)
+    // Any amount, including the full one — there is no test limit any more.
+    expect(runGuards(goodInput({ risk, risksAccepted: true })).canSend).toBe(true)
   })
 
-  it('caps an unverified route at the test limit, and the word does not lift a hard-unchecked cap', () => {
-    const checks = {} as Record<CheckId, CheckState>
-    for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-    checks['adapter_liquidity'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
-    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
+  it('an unverified route warns too, and no amount is special', () => {
+    const risk = riskWith('adapter_liquidity', { status: 'unchecked', reason: 'destination RPC did not answer' })
     expect(risk.tier).toBe('UNVERIFIED')
-    const plan = treadPlan()
-    const over = goodInput({ risk, testLimitLD: plan.amounts.amountLD - 1n })
-    expect(runGuards(over).results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_over_test_limit' })
-    expect(runGuards({ ...over, riskOverride: OVERRIDE_WORD }).results.find((r) => r.id === 22)).toMatchObject({
-      ok: false,
-      code: 'risk_over_test_limit',
-    })
-    expect(runGuards(goodInput({ risk, testLimitLD: plan.amounts.amountLD })).results.find((r) => r.id === 22)).toMatchObject({ ok: true })
+    const rep = runGuards(goodInput({ risk }))
+    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_unverified' })
+    expect(rep.canSend).toBe(false)
+    expect(runGuards(goodInput({ risk, risksAccepted: true })).canSend).toBe(true)
   })
 
-  it('sends nothing on a capped route until a test limit is chosen', () => {
-    const checks = {} as Record<CheckId, CheckState>
-    for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-    checks['limits'] = { status: 'unchecked', reason: 'destination RPC did not answer' }
-    const risk = assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
-    expect(risk.testLimitOnly).toBe(true)
-    const rep = runGuards(goodInput({ risk, testLimitLD: undefined }))
-    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_test_limit_unset' })
-    expect(rep.canSend).toBe(false)
+  it('a CAUTION route needs no tick at all', () => {
+    const risk = riskWith('recent_changes', { status: 'fail', reason: 'a peer changed two days ago' })
+    expect(risk.tier).toBe('CAUTION')
+    expect(runGuards(goodInput({ risk })).results.find((r) => r.id === 22)).toMatchObject({ ok: true })
   })
 
   it('is pending before the checks have run', () => {

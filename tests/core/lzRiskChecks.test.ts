@@ -8,15 +8,12 @@
  *      every chain, so comparing the send side's addresses with the receive side's calls every
  *      healthy V2 route broken — which is exactly what happened before this test existed.
  */
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getAddress, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
 import { assessRisk, CHECK_IDS, HARD_CHECKS } from '@/protocols/lz-risk/risk'
 import { assessV1Route, v1Payload } from '@/protocols/lz-risk/v1'
 import { compareUlnShape } from '@/protocols/lz-risk/v2'
-import { forgetVerifiedRoutes, isRouteVerified, markRouteVerified, routeKey, routeVerifiedAt, VERIFIED_TTL_MS } from '@/protocols/lz-risk/verified'
-import { forgetTestLimits, rememberedTestLimit, rememberTestLimit, tokenKey } from '@/protocols/lz-risk/testLimit'
-import { testLimitLD } from '@/protocols/lz-risk'
 import dvnTable from '@/protocols/lz-risk/dvns.json'
 import type { OftV1Info, V1Route } from '@/protocols/lz-v1/detect'
 import { encodeAdapterParamsType1 } from '@/protocols/lz-v1/adapterParams'
@@ -114,8 +111,6 @@ describe('an RPC that does not answer', () => {
     expect(risk.tier).toBe('UNVERIFIED')
     expect(risk.hardUnchecked.sort()).toEqual([...HARD_CHECKS].sort())
     // And it cannot be typed away.
-    expect(risk.overridable).toBe(false)
-    expect(risk.testLimitOnly).toBe(true)
     // And when the dead provider was also the only one asked, there is nothing to cap: the
     // contract itself is uncorroborated, which is a block rather than a small allowance.
     expect(assessRisk({ ...input, linkCrossChecked: false }).tier).toBe('BLOCKED')
@@ -195,164 +190,5 @@ describe('DVNs are compared by operator, not by address', () => {
     const lz = pair('layerzero-labs')!
     const stranger = getAddress('0x1234567890123456789012345678901234567890')
     expect(compareUlnShape(uln([stranger]), uln([lz[1]]), 'ethereum', 'arbitrum')).toMatchObject({ same: 'unknown' })
-  })
-})
-
-describe('a route a test transfer arrived on', () => {
-  const id = { protocol: 'lz-v1' as const, srcChain: 'ethereum', oft: OFT, dstChain: 'arbitrum' }
-
-  /**
-   * These tests run in the node environment, where there is no localStorage at all — which is also
-   * a real browser state (a private window, blocked site data). So storage is installed explicitly
-   * for the cases that are about remembering, and its absence is a case of its own below.
-   */
-  function withStorage<T>(fn: () => T): T {
-    const map = new Map<string, string>()
-    const stub = {
-      getItem: (k: string) => map.get(k) ?? null,
-      setItem: (k: string, v: string) => void map.set(k, v),
-      removeItem: (k: string) => void map.delete(k),
-    }
-    const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
-    Object.defineProperty(globalThis, 'localStorage', { value: stub, configurable: true, writable: true })
-    try {
-      return fn()
-    } finally {
-      if (had) Object.defineProperty(globalThis, 'localStorage', had)
-      else delete (globalThis as { localStorage?: unknown }).localStorage
-    }
-  }
-
-  afterEach(() => forgetVerifiedRoutes())
-
-  it('keys a route by protocol, both chains and the contract, case-insensitively on the address', () => {
-    expect(routeKey(id)).toBe(`lz-v1:ethereum:${OFT.toLowerCase()}:arbitrum`)
-    expect(routeKey({ ...id, oft: OFT.toLowerCase() })).toBe(routeKey(id))
-  })
-
-  it('remembers a delivery for 24 hours and forgets it after', () => {
-    withStorage(() => {
-      const now = 1_700_000_000_000
-      markRouteVerified(id, now)
-      expect(isRouteVerified(id, now)).toBe(true)
-      expect(routeVerifiedAt(id, now)).toBe(now)
-      expect(isRouteVerified(id, now + VERIFIED_TTL_MS - 1)).toBe(true)
-      expect(isRouteVerified(id, now + VERIFIED_TTL_MS)).toBe(false)
-      expect(routeVerifiedAt(id, now + VERIFIED_TTL_MS)).toBeUndefined()
-    })
-  })
-
-  it('never confuses one route with another', () => {
-    withStorage(() => {
-      const now = Date.now()
-      markRouteVerified(id, now)
-      expect(isRouteVerified(id, now)).toBe(true)
-      expect(isRouteVerified({ ...id, dstChain: 'base' }, now)).toBe(false)
-      expect(isRouteVerified({ ...id, protocol: 'lz-oft' }, now)).toBe(false)
-      expect(isRouteVerified({ ...id, oft: REMOTE }, now)).toBe(false)
-    })
-  })
-
-  it('drops an entry past the TTL instead of letting the table grow', () => {
-    withStorage(() => {
-      const old = 1_000_000_000_000
-      markRouteVerified({ ...id, dstChain: 'base' }, old)
-      // A later write prunes what has expired, so the stale note cannot come back.
-      markRouteVerified(id, old + VERIFIED_TTL_MS + 1)
-      expect(isRouteVerified({ ...id, dstChain: 'base' }, old + VERIFIED_TTL_MS + 1)).toBe(false)
-    })
-  })
-
-  it('reports "not verified" and stays silent when there is no storage at all', () => {
-    // No localStorage: a private window, or an origin with site data blocked. The cap simply stays.
-    expect(globalThis.localStorage).toBeUndefined()
-    expect(isRouteVerified(id)).toBe(false)
-    expect(() => markRouteVerified(id)).not.toThrow()
-    expect(routeVerifiedAt(id)).toBeUndefined()
-  })
-
-  it('ignores a corrupt entry rather than throwing', () => {
-    withStorage(() => {
-      globalThis.localStorage.setItem('oft-bridge-ui:verified-routes:v1', '{"a":"not a number","b":[1],"c":-5}')
-      expect(isRouteVerified(id)).toBe(false)
-      const now = Date.now()
-      markRouteVerified(id, now)
-      expect(isRouteVerified(id, now)).toBe(true)
-    })
-  })
-})
-
-describe('the test-amount limit has no default', () => {
-  /** Same in-memory stand-in as the verified-routes tests use. */
-  function withStorage<T>(fn: () => T): T {
-    const map = new Map<string, string>()
-    const stub = {
-      getItem: (k: string) => map.get(k) ?? null,
-      setItem: (k: string, v: string) => void map.set(k, v),
-      removeItem: (k: string) => void map.delete(k),
-    }
-    const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
-    Object.defineProperty(globalThis, 'localStorage', { value: stub, configurable: true, writable: true })
-    try {
-      return fn()
-    } finally {
-      if (had) Object.defineProperty(globalThis, 'localStorage', had)
-      else delete (globalThis as { localStorage?: unknown }).localStorage
-    }
-  }
-
-  afterEach(() => forgetTestLimits())
-
-  const token = { chain: 'ethereum', token: OFT }
-
-  it('parses nothing out of an empty field, so a capped route sends nothing', () => {
-    expect(testLimitLD('', 18)).toBeUndefined()
-    expect(testLimitLD('   ', 18)).toBeUndefined()
-    expect(testLimitLD('0', 18)).toBeUndefined()
-    expect(testLimitLD('abc', 18)).toBeUndefined()
-    expect(testLimitLD('1', 18)).toBe(10n ** 18n)
-    expect(testLimitLD('0.5', 6)).toBe(500_000n)
-  })
-
-  it('starts empty for a token nothing was ever set for', () => {
-    withStorage(() => {
-      expect(rememberedTestLimit(token)).toBe('')
-    })
-  })
-
-  it('remembers what was typed, per token and per chain', () => {
-    withStorage(() => {
-      rememberTestLimit(token, '2.5')
-      expect(rememberedTestLimit(token)).toBe('2.5')
-      // The same symbol on another chain is another token as far as a limit is concerned.
-      expect(rememberedTestLimit({ ...token, chain: 'arbitrum' })).toBe('')
-      expect(rememberedTestLimit({ ...token, token: REMOTE })).toBe('')
-      expect(tokenKey(token)).toBe(`ethereum:${OFT.toLowerCase()}`)
-    })
-  })
-
-  it('clearing the field forgets the limit rather than storing an empty one', () => {
-    withStorage(() => {
-      rememberTestLimit(token, '2.5')
-      rememberTestLimit(token, '')
-      expect(rememberedTestLimit(token)).toBe('')
-    })
-  })
-
-  it('refuses to hand back anything that is not a decimal amount', () => {
-    withStorage(() => {
-      globalThis.localStorage.setItem(
-        'oft-bridge-ui:test-limits:v1',
-        JSON.stringify({ [tokenKey(token)]: '1e18', 'a:b': { nested: true }, 'c:d': '9'.repeat(80) }),
-      )
-      // '1e18' would parse as something unintended, so it never comes back out.
-      expect(rememberedTestLimit(token)).toBe('')
-    })
-  })
-
-  it('works with no storage at all', () => {
-    expect(globalThis.localStorage).toBeUndefined()
-    expect(rememberedTestLimit(token)).toBe('')
-    expect(() => rememberTestLimit(token, '1')).not.toThrow()
   })
 })
