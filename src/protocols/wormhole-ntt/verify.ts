@@ -7,10 +7,12 @@
  *
  *   1. The manager agrees about its own identity: token(), chainId() for this chain, getMode(),
  *      tokenDecimals() — all readable, and the chain id is the one we are actually on.
- *   2. A token-side anchor on at least ONE side of the pair: the token names the manager as its
- *      minter — minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens,
- *      with the role read from the token itself. A locking hub has no minter, so it is confirmed
- *      transitively through the burning spoke's anchor.
+ *   2. A token-side anchor ON THE SOURCE SIDE: the token this manager names must name it back —
+ *      minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens, with the
+ *      role read from the token itself. This is the only fact in the whole gate the manager's
+ *      deployer cannot write, so it is the only one that can establish trust (CLAUDE.md rule 2).
+ *      A locking hub has no minter and is established instead by the committed list in
+ *      lockingHubs.ts, matched on chain + manager + token.
  *   3. Peers in both directions: source.getPeer(dst) == destination manager AND
  *      destination.getPeer(src) == source manager, read on the destination's own RPC.
  *   4. A Wormhole transceiver: it reports the Wormhole type and points at the core bridge whose
@@ -26,6 +28,14 @@
  * Wormholescan's decoded operations are deliberately NOT evidence here: `sourceNttManager` is
  * written by the manager itself, so one self-made transfer would launder a fake. They are shown as
  * context in the details and never feed a decision.
+ *
+ * Neither is the DESTINATION-side anchor, and that one was a real hole rather than a precaution.
+ * It used to substitute for the source anchor, but the only way to reach the destination is
+ * `manager.getPeer()` — the manager's own claim — so an attacker supplied both halves: a fake
+ * manager naming real USDC, peered to a fake manager on the far side naming a token the attacker
+ * also wrote, which duly named it back. Every other check passed, because a contract can return
+ * the real core bridge address as easily as any other. The destination anchor is still read and
+ * still shown, and it can now only ever be context.
  */
 import { getAddress, isAddressEqual, type Address } from 'viem'
 import { erc20Abi } from '../../core/abi'
@@ -35,6 +45,7 @@ import type { ReadClient } from '../../core/client'
 import { isZeroBytes32, peerToAddress } from '../../core/encoding'
 import { nttManagerAbi, nttTokenAnchorAbi, WORMHOLE_TRANSCEIVER_TYPE, wormholeTransceiverAbi, nttMode, type NttMode } from './abi'
 import { WORMHOLE_CHAINS, wormholeChainId } from './chains'
+import { listedLockingHub } from './lockingHubs'
 import { findListedToken, type NttToken } from './tokenList'
 
 export type NttRejectionCode =
@@ -45,14 +56,21 @@ export type NttRejectionCode =
   | 'peer_not_evm'
   | 'peer_mismatch'
   | 'no_token_anchor'
+  | 'unlisted_locking_hub'
   | 'no_wormhole_transceiver'
   | 'transceiver_wrong_core_bridge'
   | 'manual_delivery_only'
   | 'unverifiable'
 
-/** Which side of the pair the token vouched for the manager on. */
-export type AnchorSide = 'source' | 'destination'
-export type AnchorKind = 'minter' | 'role'
+/**
+ * What established this manager.
+ *
+ * `source` is the token itself vouching; `listed` is our committed locking-hub file. Those are the
+ * only two, because they are the only two an attacker cannot author. A destination-side anchor is
+ * reported separately as `alsoOnDestination` and is never a reason on its own.
+ */
+export type AnchorSide = 'source' | 'listed'
+export type AnchorKind = 'minter' | 'role' | 'committed'
 
 export type VerifiedNttManager = {
   chain: ChainKey
@@ -79,6 +97,12 @@ export type VerifiedNttManager = {
   /** The Wormhole transceiver that will carry the message. */
   transceiver: Address
   anchor: { side: AnchorSide; kind: AnchorKind }
+  /**
+   * The destination token also names the destination manager. Context for the details panel only:
+   * we reached that token through this manager's own `getPeer()`, so it says nothing about whether
+   * this manager is real.
+   */
+  alsoOnDestination: boolean
 }
 
 export type NttVerification = { ok: true; verified: VerifiedNttManager } | { ok: false; code: NttRejectionCode; detail?: string }
@@ -164,13 +188,29 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
     return fail('unverifiable', 'destination token() is not an address')
   }
 
-  // ---- 2. the token-side anchor, on either side -----------------------------
-  // The anchor is read from the token the MANAGER named, not from a listed address: the two used
-  // to be required equal, and the equality was the only thing the list contributed.
+  // ---- 2. the token-side anchor — SOURCE side only --------------------------
+  //
+  // The token the manager named has to name it back. That is a fact about a contract the manager's
+  // deployer does not control, which is what makes it worth anything. Everything else in this
+  // function is the manager's own account of itself.
   const srcAnchor = await tokenAnchors(p.srcClient, token, manager)
-  const dstAnchor = srcAnchor ? undefined : await tokenAnchors(p.dstClient, dstToken, dstManager)
-  const anchor = srcAnchor ? ({ side: 'source' as const, kind: srcAnchor }) : dstAnchor ? ({ side: 'destination' as const, kind: dstAnchor }) : undefined
-  if (!anchor) return fail('no_token_anchor', `${token} / ${dstToken}`)
+
+  // Read for the details panel, never for the verdict: we only know about `dstToken` because this
+  // manager told us where to look.
+  const dstAnchor = await tokenAnchors(p.dstClient, dstToken, dstManager)
+
+  let anchor: { side: AnchorSide; kind: AnchorKind }
+  if (srcAnchor) {
+    anchor = { side: 'source', kind: srcAnchor }
+  } else {
+    // No anchor from the token. A genuine locking hub cannot have one — nothing is minted there —
+    // so the committed list is the only thing that may speak for it. `getMode()` is deliberately
+    // not consulted to get here: the mode is the manager's own claim, so "I am a locking hub"
+    // cannot be the reason we trust a locking hub.
+    const hub = listedLockingHub(p.srcChain, manager, token)
+    if (!hub) return fail(mode === 'locking' ? 'unlisted_locking_hub' : 'no_token_anchor', `${token}`)
+    anchor = { side: 'listed', kind: 'committed' }
+  }
 
   // ---- 4. a Wormhole transceiver with automatic delivery --------------------
   const transceivers = await read(() => p.srcClient.readContract({ ...base, functionName: 'getTransceivers' }))
@@ -225,6 +265,7 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
       dst: { chain: p.dstChain, wormholeChainId: dstWh, manager: dstManager, token: dstToken, tokenDecimals: peer.tokenDecimals },
       transceiver: wormholeTransceiver,
       anchor,
+      alsoOnDestination: !!dstAnchor,
     },
   }
 }
@@ -283,6 +324,9 @@ export function sameNttVerdict(a: VerifiedNttManager, b: VerifiedNttManager): bo
     isAddressEqual(a.token, b.token) &&
     isAddressEqual(a.transceiver, b.transceiver) &&
     a.mode === b.mode &&
+    // The anchor is a REASON, and reasons may legitimately differ between providers only in the
+    // ways noted below — but WHICH KIND of reason decides the verdict, so `side` is compared.
+    a.anchor.side === b.anchor.side &&
     // `listed` is deliberately absent: it comes from one shared HTTP response, not from either
     // provider, so comparing it would compare the API with itself.
 

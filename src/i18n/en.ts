@@ -347,6 +347,8 @@ export const en = {
     manager: 'NttManager',
     anchor: 'Vouched for by',
     anchorValue: 'the token on {side} ({kind})',
+    anchorListed: 'this app’s reviewed list of locking hubs',
+    anchorAlsoDst: 'The token on {chain} also names the manager there. Shown for information only — we found that token through this manager, so it cannot vouch for it.',
     transceiver: 'Transceiver',
     peer: 'Manager on the destination',
     mode: 'Mode',
@@ -381,7 +383,10 @@ export const en = {
     peer_missing: 'This manager has no peer on the destination network.',
     peer_not_evm: 'The peer on the destination is not an EVM address.',
     peer_mismatch: 'The manager on the destination does not point back at this one.',
-    no_token_anchor: 'The token does not name this manager as its minter on either side. A contract can claim any token; only the token can vouch for the manager — so this one is refused.',
+    no_token_anchor:
+      'This bridge contract is not confirmed. If it is a fake, everything you send through it will be stolen. The token on this network does not name this manager as its minter, and only the token can vouch for a manager — a contract can claim any token it likes.',
+    unlisted_locking_hub:
+      'This bridge contract is not confirmed. If it is a fake, everything you send through it will be stolen. It reports itself as a locking hub, which by design no token vouches for — so nothing on chain can establish it, and it is not in this app’s reviewed list of locking hubs either.',
     no_wormhole_transceiver: 'This manager has no Wormhole transceiver.',
     transceiver_wrong_core_bridge: 'The transceiver points at something other than this network’s official Wormhole core bridge.',
     manual_delivery_only: 'This route has no automatic delivery: the transfer would have to be redeemed by hand on the other side, which Unlisted does not support.',

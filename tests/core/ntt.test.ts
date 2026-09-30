@@ -172,17 +172,15 @@ describe('the four-part gate', () => {
     if (r.ok) expect(r.verified.anchor).toEqual({ side: 'source', kind: 'role' })
   })
 
-  it('confirms a locking hub through the anchor on the burning side', async () => {
+  it('refuses a locking hub that only the far side vouches for — that anchor is reachable only through this manager', async () => {
+    // This is the shape the old code accepted: no minter on the source token, but the destination
+    // token names the destination manager. We reached that token through `manager.getPeer()`, so
+    // an attacker supplies both halves. Now it takes the committed list instead.
     const r = await verify(
-      // The hub locks; its token has no minter at all.
       srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
       dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),
     )
-    expect(r.ok).toBe(true)
-    if (r.ok) {
-      expect(r.verified.mode).toBe('locking')
-      expect(r.verified.anchor).toEqual({ side: 'destination', kind: 'minter' })
-    }
+    expect(r).toMatchObject({ ok: false, code: 'unlisted_locking_hub' })
   })
 
   it('verifies a token Wormhole has never listed, on the on-chain evidence alone', async () => {
@@ -295,6 +293,7 @@ const verifiedFixture = (): NttVerification => ({
     token: TOKEN,
     tokenSymbol: 'W',
   listed: true,
+  alsoOnDestination: true,
     mode: 'burning',
     tokenDecimals: 18,
     dst: { chain: 'bsc', wormholeChainId: BSC_WH, manager: DST_MANAGER, token: DST_TOKEN, tokenDecimals: 18 },
