@@ -5,7 +5,7 @@ import { ProbeError } from '@/core/probe'
 import { decodeTxQuorum, probeOftQuorum, sameOftInfo, sameTx, type Pair } from '@/core/quorum'
 import { assembleSendArgs, encodeSendCalldata } from '@/core/plan'
 import { addressToBytes32 } from '@/core/encoding'
-import { OTHER, TREAD_ADAPTER, TREAD_OFT, treadOftInfo, treadPlan } from './fixtures'
+import { ENDPOINT_HYPER, OTHER, TREAD_ADAPTER, TREAD_OFT, treadOftInfo, treadPlan } from './fixtures'
 
 // probeOft / decodeTx are exercised elsewhere; here we mock them to test the quorum logic.
 vi.mock('@/core/probe', async (orig) => {
@@ -22,8 +22,8 @@ import { decodeTx } from '@/core/decodeTx'
 const A = { tag: 'A' } as unknown as ReadClient
 const B = { tag: 'B' } as unknown as ReadClient
 // Providers are distinct, so these secondaries are genuine second opinions.
-const pair: Pair = { primary: A, primaryProvider: 'a.example', secondaries: [{ client: B, provider: 'b.example' }] }
-const single: Pair = { primary: A, primaryProvider: 'a.example', secondaries: [] }
+const pair: Pair = { primary: A, primaryProvider: 'a.example', endpointV2: ENDPOINT_HYPER, secondaries: [{ client: B, provider: 'b.example' }] }
+const single: Pair = { primary: A, primaryProvider: 'a.example', endpointV2: ENDPOINT_HYPER, secondaries: [] }
 // Returns a mock implementation that answers differently for client A and client B.
 const byClient = (a: unknown, b: unknown): never =>
   (async (client: ReadClient) => {
@@ -67,7 +67,7 @@ describe('probeOftQuorum', () => {
   })
   it('a second endpoint from the SAME operator agrees but does not cross-check', async () => {
     // The Solana case: two hostnames, one company. Agreement is real, independence is not.
-    const sibling: Pair = { primary: A, primaryProvider: 'publicnode.com', secondaries: [{ client: B, provider: 'publicnode.com' }] }
+    const sibling: Pair = { primary: A, primaryProvider: 'publicnode.com', endpointV2: ENDPOINT_HYPER, secondaries: [{ client: B, provider: 'publicnode.com' }] }
     vi.mocked(probeOft).mockImplementation(byClient(good, good))
     expect((await probeOftQuorum(sibling, TREAD_OFT)).crossChecked).toBe(false)
     // ...but it still has to AGREE: one operator contradicting itself is worse, not better.
@@ -79,6 +79,7 @@ describe('probeOftQuorum', () => {
     const mixed: Pair = {
       primary: A,
       primaryProvider: 'publicnode.com',
+      endpointV2: ENDPOINT_HYPER,
       secondaries: [{ client: B, provider: 'publicnode.com' }, { client: C, provider: 'drpc.org' }],
     }
     vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
@@ -92,7 +93,7 @@ describe('probeOftQuorum', () => {
   })
   it('one secondary down, another agrees → crossChecked; all down → not', async () => {
     const C = { tag: 'C' } as unknown as ReadClient
-    const three: Pair = { primary: A, primaryProvider: 'a.example', secondaries: [{ client: B, provider: 'b.example' }, { client: C, provider: 'c.example' }] }
+    const three: Pair = { primary: A, primaryProvider: 'a.example', endpointV2: ENDPOINT_HYPER, secondaries: [{ client: B, provider: 'b.example' }, { client: C, provider: 'c.example' }] }
     vi.mocked(probeOft).mockImplementation((async (client: ReadClient) => {
       if (client === B) throw new Error('timeout')
       return good

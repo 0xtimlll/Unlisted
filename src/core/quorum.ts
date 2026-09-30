@@ -15,7 +15,13 @@ import type { OftV1Info } from '../protocols/lz-v1/detect'
 /** A second opinion, and whose it is. */
 export type Secondary = { client: ReadClient; provider: string }
 
-export type Pair = { primary: ReadClient; primaryProvider: string; secondaries: Secondary[] }
+export type Pair = {
+  primary: ReadClient
+  primaryProvider: string
+  secondaries: Secondary[]
+  /** The chain's committed EndpointV2, handed to probeOft so it can refuse a foreign one. */
+  endpointV2: `0x${string}`
+}
 
 /**
  * Primary = user's RPC if set, else registry[0]. Secondaries = every other registry RPC, each
@@ -30,6 +36,7 @@ export function clientPair(chain: EvmChainDef, customRpc?: string): Pair {
   return {
     primary: makeReadClient(chain, customRpc ? customRpc : undefined),
     primaryProvider: providerOfUrl(primaryUrl),
+    endpointV2: chain.endpointV2,
     secondaries: chain.rpcUrls
       .filter((u) => u !== primaryUrl)
       .map((u) => ({ client: makeReadClientSingle(chain, u), provider: providerOfUrl(u) })),
@@ -81,14 +88,20 @@ type Opinion<T> = { ok: true; r: T } | { ok: false; e: unknown }
 const settle = <T,>(p: Promise<T>): Promise<Opinion<T>> => p.then((r) => ({ ok: true as const, r })).catch((e: unknown) => ({ ok: false as const, e }))
 
 export async function probeOftQuorum(pair: Pair, address: string): Promise<Quorum<ProbeResult>> {
-  const [p, ...others] = await Promise.all([probeOft(pair.primary, address), ...pair.secondaries.map((c) => settle(probeOft(c.client, address)))])
+  const [p, ...others] = await Promise.all([
+    probeOft(pair.primary, address, pair.endpointV2),
+    ...pair.secondaries.map((c) => settle(probeOft(c.client, address, pair.endpointV2))),
+  ])
   let agreed = false
   for (const [i, s] of others.entries()) {
     const independent = pair.secondaries[i]!.provider !== pair.primaryProvider
     if (s.ok) {
       if (!sameOftInfo(p.info, s.r.info)) throw new ProbeError('rpc_mismatch', 'RPC providers disagree about this contract')
       if (independent) agreed = true
-    } else if (s.e instanceof ProbeError && (s.e.code === 'not_oft' || s.e.code === 'not_contract' || s.e.code === 'rate_mismatch')) {
+    } else if (
+      s.e instanceof ProbeError &&
+      (s.e.code === 'not_oft' || s.e.code === 'not_contract' || s.e.code === 'rate_mismatch' || s.e.code === 'foreign_endpoint')
+    ) {
       // A definite "not an OFT" from another provider is a disagreement, not an outage.
       throw new ProbeError('rpc_mismatch', `another RPC: ${s.e.code}`)
     }

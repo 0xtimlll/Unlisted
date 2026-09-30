@@ -100,7 +100,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   afterAll(() => f?.stop())
 
   it('TREAD: plan → simulate → guards → send succeeds on chain, OFTSent matches the plan', async () => {
-    const { info } = await probeOft(f.client, TREAD_OFT)
+    const { info } = await probeOft(f.client, TREAD_OFT, f.chain.endpointV2)
     await setTokenBalance(f, info.token, USER, 100n * 10n ** 18n)
     const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1.5', sender: USER, recipient: evmRecipient(USER) })
     const { report, simulation } = await fullCheck(f, info, plan, undefined)
@@ -120,7 +120,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   }, 120_000)
 
   it('TREAD: without token balance the simulation reverts and Send is blocked', async () => {
-    const { info } = await probeOft(f.client, TREAD_OFT)
+    const { info } = await probeOft(f.client, TREAD_OFT, f.chain.endpointV2)
     await setTokenBalance(f, info.token, USER, 0n)
     const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })
     const { report, simulation } = await fullCheck(f, info, plan, undefined)
@@ -131,7 +131,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   }, 120_000)
 
   it('TREAD: value below quoted fee is rejected by the contract (fee/value invariant is real)', async () => {
-    const { info } = await probeOft(f.client, TREAD_OFT)
+    const { info } = await probeOft(f.client, TREAD_OFT, f.chain.endpointV2)
     await setTokenBalance(f, info.token, USER, 10n * 10n ** 18n)
     const plan = await buildSendPlan(f.client, { info, src: f.chain, dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })
     const bad: EvmSendPlan = { ...plan, value: plan.quote.nativeFee - 1n }
@@ -141,7 +141,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork', () => {
   }, 120_000)
 
   it('USDT0 adapter: approvalRequired=false → no approve, send succeeds', async () => {
-    const { info } = await probeOft(f.client, USDT0_OFT)
+    const { info } = await probeOft(f.client, USDT0_OFT, f.chain.endpointV2)
     expect(info.kind).toBe('OFTAdapter')
     expect(info.approvalRequired).toBe(false)
     await setTokenBalance(f, info.token, USER, 50n * 10n ** 6n)
@@ -169,7 +169,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork → Solana (PENGU)', () => {
   afterAll(() => f?.stop())
 
   it('send to a Solana wallet succeeds on chain with empty extraOptions (enforced covers CU + rent)', async () => {
-    const { info } = await probeOft(f.client, PENGU)
+    const { info } = await probeOft(f.client, PENGU, f.chain.endpointV2)
     await setTokenBalance(f, info.token, USER, 100n * 10n ** 18n)
     const opts = planSvmOptions({ enforced: info.enforced[SOLANA_EID] ?? '0x', ataExists: false })
     expect(opts.extraOptions).toBe('0x')
@@ -186,7 +186,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork → Solana (PENGU)', () => {
   }, 120_000)
 
   it('extra lzReceive value (ATA rent on top of enforced) is accepted by the contract and raises the fee', async () => {
-    const { info } = await probeOft(f.client, PENGU)
+    const { info } = await probeOft(f.client, PENGU, f.chain.endpointV2)
     await setTokenBalance(f, info.token, USER, 100n * 10n ** 18n)
     const base = await buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '1', sender: USER, recipient: svmRecipient(FRESH) })
     const withRent = await buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '1', sender: USER, recipient: svmRecipient(FRESH), extraOptions: encodeLzReceive(0n, 2_039_280n) })
@@ -199,7 +199,7 @@ describe.skipIf(!hasAnvil)('HyperEVM fork → Solana (PENGU)', () => {
   }, 120_000)
 
   it('an EVM recipient can never be sent to Solana — refused before quoting', async () => {
-    const { info } = await probeOft(f.client, PENGU)
+    const { info } = await probeOft(f.client, PENGU, f.chain.endpointV2)
     await expect(buildSendPlan(f.client, { info, src: f.chain, dstEid: SOLANA_EID, amountInput: '1', sender: USER, recipient: evmRecipient(USER) })).rejects.toMatchObject({ code: 'recipient_vm_mismatch' })
   }, 60_000)
 })
@@ -213,7 +213,7 @@ describe.skipIf(!hasAnvil)('Ethereum fork', () => {
   afterAll(() => f?.stop())
 
   it('TREAD adapter: blocked until approve of EXACTLY amountLD to the adapter, then send succeeds', async () => {
-    const { info } = await probeOft(f.client, TREAD_ADAPTER)
+    const { info } = await probeOft(f.client, TREAD_ADAPTER, f.chain.endpointV2)
     expect(info.approvalRequired).toBe(true)
     // The token is a proxy with non-trivial balance storage; the adapter holds the locked supply.
     await fundFromHolder(f, info.token, TREAD_ADAPTER, USER, 100n * 10n ** 18n)

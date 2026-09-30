@@ -54,7 +54,7 @@ describe('Robinhood Chain: the registry entry itself', () => {
   })
 
   it('the eid comes from the endpoint the OFT names, not from a table', async () => {
-    const { info } = await probeOft(robinhood(), DEGEN_ROBINHOOD)
+    const { info } = await probeOft(robinhood(), DEGEN_ROBINHOOD, evmByKey('robinhood').endpointV2)
     const eid = await robinhood().readContract({
       address: info.endpoint,
       abi: parseAbi(['function eid() view returns (uint32)']),
@@ -91,7 +91,7 @@ describe('Robinhood Chain: the OFT tab', () => {
 
   it('quotes Robinhood -> Ethereum and Robinhood -> Arbitrum without sending anything', async () => {
     const client = robinhood()
-    const { info } = await probeOft(client, DEGEN_ROBINHOOD)
+    const { info } = await probeOft(client, DEGEN_ROBINHOOD, evmByKey('robinhood').endpointV2)
     for (const dstEid of [30101, 30110]) {
       const plan = await buildSendPlan(client, {
         info,
@@ -110,8 +110,8 @@ describe('Robinhood Chain: the OFT tab', () => {
   })
 
   it('is reachable from the other side: Ethereum and Arbitrum both peer back to 30416', async () => {
-    const fromEth = await probeOft(ethereum(), DEGEN_ETHEREUM)
-    const fromArb = await probeOft(arbitrum(), DEGEN_ARBITRUM)
+    const fromEth = await probeOft(ethereum(), DEGEN_ETHEREUM, evmByKey('ethereum').endpointV2)
+    const fromArb = await probeOft(arbitrum(), DEGEN_ARBITRUM, evmByKey('arbitrum').endpointV2)
     expect(fromEth.info.routes.map((r) => r.eid)).toContain(30416)
     expect(fromArb.info.routes.map((r) => r.eid)).toContain(30416)
   })

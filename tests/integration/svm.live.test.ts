@@ -23,7 +23,7 @@ const rpc = new SvmRpc(byKey('solana').rpcUrls)
 
 describe('PENGU: HyperEVM OFT with a Solana peer', () => {
   it('routes contain a 32-byte Solana peer that is NOT an EVM address', async () => {
-    const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM)
+    const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM, evmByKey('hyperevm').endpointV2)
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)
     expect(sol).toBeDefined()
     expect(sol!.peer).toHaveLength(66)
@@ -34,7 +34,7 @@ describe('PENGU: HyperEVM OFT with a Solana peer', () => {
   }, 60_000)
 
   it('discovery reaches program, mint, escrow, token program; PeerConfig points back', async () => {
-    const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM)
+    const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM, evmByKey('hyperevm').endpointV2)
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)!
     const found = await discoverSvmOft(rpc, sol.peer, evmByKey('hyperevm').eid)
     expect(found.recognised).toBe(true)
@@ -58,7 +58,7 @@ describe('PENGU: HyperEVM OFT with a Solana peer', () => {
   }, 60_000)
 
   it('recipient classification: escrow is a token account, mint is program-owned, a fresh key is missing', async () => {
-    const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM)
+    const { info } = await probeOft(makeReadClient(evmByKey('hyperevm')), PENGU_HYPEREVM, evmByKey('hyperevm').endpointV2)
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)!
     const found = await discoverSvmOft(rpc, sol.peer, evmByKey('hyperevm').eid)
     expect(found.recognised).toBe(true)
@@ -81,7 +81,7 @@ describe('PENGU: HyperEVM OFT with a Solana peer', () => {
 describe('EVM → Solana plan on the live HyperEVM contract', () => {
   it('quotes a send to a fresh Solana wallet; enforced options already fund the ATA, so extra is empty', async () => {
     const hyper = makeReadClient(evmByKey('hyperevm'))
-    const { info } = await probeOft(hyper, PENGU_HYPEREVM)
+    const { info } = await probeOft(hyper, PENGU_HYPEREVM, evmByKey('hyperevm').endpointV2)
     const fresh = encodeBase58(Uint8Array.from({ length: 32 }, (_, i) => (i * 13 + 7) & 0xff))
     const opts = planSvmOptions({ enforced: info.enforced[SOLANA_EID] ?? '0x', ataExists: false })
     expect(opts.error).toBeUndefined()

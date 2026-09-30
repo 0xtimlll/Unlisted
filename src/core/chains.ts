@@ -68,6 +68,18 @@ type ChainCommon = {
 export type EvmChainDef = ChainCommon & {
   vm: 'evm'
   chainId: number
+  /**
+   * LayerZero EndpointV2 on this chain.
+   *
+   * An OFT answers `endpoint()`, but that is the OFT's own claim — and every §4 risk check then
+   * reads `outboundNonce` and `getSendLibrary` from whatever address it named, so a fake OFT that
+   * names a fake endpoint gets to answer the questions about itself. probeOft() compares the two
+   * and refuses a mismatch, the way lz-v1/detect.ts has always done with Endpoint V1.
+   *
+   * Every address here was read back on chain: `eid()` on each one returns this chain's `eid`
+   * (selector 0x416ecebf, from `toFunctionSelector('function eid() view returns (uint32)')`).
+   */
+  endpointV2: `0x${string}`
   /** Fee rounding step (wei). `value` is rounded UP to a multiple of this so the wallet shows a clean number. */
   feeStepWei: bigint
 }
@@ -134,6 +146,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'ethereum',
     name: 'Ethereum',
     chainId: 1,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30101,
     nativeSymbol: 'ETH',
     rpcs: [{ url: 'https://ethereum-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://eth.drpc.org', provider: 'drpc.org' }],
@@ -148,6 +161,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'arbitrum',
     name: 'Arbitrum',
     chainId: 42161,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30110,
     nativeSymbol: 'ETH',
     rpcs: [{ url: 'https://arb1.arbitrum.io/rpc', provider: 'arbitrum.io' }, { url: 'https://arbitrum-one-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -162,6 +176,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'optimism',
     name: 'Optimism',
     chainId: 10,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30111,
     nativeSymbol: 'ETH',
     rpcs: [{ url: 'https://mainnet.optimism.io', provider: 'optimism.io' }, { url: 'https://optimism-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -176,6 +191,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'base',
     name: 'Base',
     chainId: 8453,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30184,
     nativeSymbol: 'ETH',
     rpcs: [{ url: 'https://mainnet.base.org', provider: 'base.org' }, { url: 'https://base-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -190,6 +206,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'bsc',
     name: 'BNB Chain',
     chainId: 56,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30102,
     nativeSymbol: 'BNB',
     rpcs: [{ url: 'https://bsc-dataseed.bnbchain.org', provider: 'bnbchain.org' }, { url: 'https://bsc-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -204,6 +221,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'polygon',
     name: 'Polygon',
     chainId: 137,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30109,
     nativeSymbol: 'POL',
     rpcs: [{ url: 'https://polygon-bor-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://polygon.drpc.org', provider: 'drpc.org' }],
@@ -218,6 +236,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'avalanche',
     name: 'Avalanche',
     chainId: 43114,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30106,
     nativeSymbol: 'AVAX',
     rpcs: [{ url: 'https://api.avax.network/ext/bc/C/rpc', provider: 'avax.network' }, { url: 'https://avalanche-c-chain-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -232,6 +251,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'hyperevm',
     name: 'HyperEVM',
     chainId: 999,
+    endpointV2: '0x3A73033C0b1407574C76BdBAc67f126f6b4a9AA9',
     eid: 30367,
     nativeSymbol: 'HYPE',
     rpcs: [{ url: 'https://rpc.hyperliquid.xyz/evm', provider: 'hyperliquid.xyz' }, { url: 'https://rpc.hypurrscan.io', provider: 'hypurrscan.io' }, { url: 'https://hyperliquid-json-rpc.stakely.io', provider: 'stakely.io' }],
@@ -246,6 +266,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'linea',
     name: 'Linea',
     chainId: 59144,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30183,
     nativeSymbol: 'ETH',
     rpcs: [{ url: 'https://rpc.linea.build', provider: 'linea.build' }, { url: 'https://linea-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -260,6 +281,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     key: 'scroll',
     name: 'Scroll',
     chainId: 534352,
+    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
     eid: 30214,
     nativeSymbol: 'ETH',
     rpcs: [{ url: 'https://rpc.scroll.io', provider: 'scroll.io' }, { url: 'https://scroll-rpc.publicnode.com', provider: 'publicnode.com' }],
@@ -275,6 +297,7 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     // "Robinhood Chain" in its own documentation; the pill shows the short form.
     name: 'Robinhood',
     chainId: 4663,
+    endpointV2: '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B',
     eid: 30416,
     nativeSymbol: 'ETH',
     // The operator publishes one RPC and rate-limits it; drpc serves the chain as a second opinion,

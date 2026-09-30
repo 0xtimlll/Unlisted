@@ -21,7 +21,7 @@ describe('decodeTx + track on a real HyperEVM send', () => {
   it('prefills contract + dstEid, and the contract probes as an OFT with that route', async () => {
     const p = await decodeTx(hyper, HASH)
     expect(p.dstEid).toBeGreaterThan(30000)
-    const { info } = await probeOft(hyper, p.oft)
+    const { info } = await probeOft(hyper, p.oft, evmByKey('hyperevm').endpointV2)
     expect(info.routes.some((r) => r.eid === p.dstEid)).toBe(true)
     expect(p.observed.amountLD % info.conversionRate).toBe(0n)
     if (HASH === DEFAULT_TX) {
