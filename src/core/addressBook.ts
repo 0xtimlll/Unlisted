@@ -223,10 +223,28 @@ export function parseEntry(raw: unknown, now: number): AddressBookEntry | undefi
   if (!address) return undefined
   const label = sanitizeText(r['label'], MAX_LABEL)
   if (label === '') return undefined
+  // The id is kept only so a re-import does not renumber a book the user already has. It is NOT
+  // trusted to be unique — an imported file can repeat one, and rename/remove work by id, so a
+  // collision would quietly act on two entries. `dedupeIds` below settles that.
   const id = typeof r['id'] === 'string' && r['id'].trim() !== '' ? sanitizeText(r['id'], 64) : newId()
   const createdAt = isFiniteNumber(r['createdAt']) ? r['createdAt'] : now
   const lastUsedAt = isFiniteNumber(r['lastUsedAt']) ? r['lastUsedAt'] : undefined
   return { id: id || newId(), label, address, family, createdAt, ...(lastUsedAt !== undefined ? { lastUsedAt } : {}) }
+}
+
+/** Gives a fresh id to anything whose id is already taken, so one id always means one entry. */
+function dedupeIds(entries: readonly AddressBookEntry[], taken: ReadonlySet<string> = new Set()): AddressBookEntry[] {
+  const seen = new Set(taken)
+  return entries.map((e) => {
+    if (!seen.has(e.id)) {
+      seen.add(e.id)
+      return e
+    }
+    let id = newId()
+    while (seen.has(id)) id = newId()
+    seen.add(id)
+    return { ...e, id }
+  })
 }
 
 export type ParseOutcome =
@@ -251,7 +269,7 @@ export function parseBook(raw: unknown, now: number = Date.now()): ParseOutcome 
     if (e && !findEntry({ version: ADDRESS_BOOK_VERSION, entries }, e.family, e.address)) entries.push(e)
     if (entries.length >= MAX_ENTRIES) break
   }
-  return { ok: true, book: { version: ADDRESS_BOOK_VERSION, entries } }
+  return { ok: true, book: { version: ADDRESS_BOOK_VERSION, entries: dedupeIds(entries) } }
 }
 
 // ------------------------------------------------------------------ import / export ----
@@ -298,7 +316,8 @@ export function previewImport(raw: unknown, book: AddressBook, now: number = Dat
     }
     add.push(e)
   }
-  return { add, duplicates, invalid }
+  // Ids that clash with the book's own, or with each other, are reissued before anything is shown.
+  return { add: dedupeIds(add, new Set(book.entries.map((e) => e.id))), duplicates, invalid }
 }
 
 /** Applies a preview the user accepted. */
