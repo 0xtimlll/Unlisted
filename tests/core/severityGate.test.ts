@@ -457,6 +457,16 @@ describe('7. the tick opens warnings and nothing else', () => {
     expect(stray, 'a file outside the guards and the screens reads the tick').toEqual([])
   })
 
+  it('every send handler judges the guards of the render it is called from, not of an earlier one', () => {
+    // A memoised onSend keeps the guardInput of the render it was created in: the tick, the balance
+    // and the simulation would all be stale at the moment of the click.
+    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
+      const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
+      expect(src, f).not.toMatch(/onSend\s*=\s*useCallback/)
+      expect(src, f).not.toMatch(/onApprove\s*=\s*useCallback/)
+    }
+  })
+
   it('the calldata is a function of the plan alone: the same plan encodes to the same bytes', async () => {
     // The encoders take a plan. There is no parameter through which the tick could reach them, and
     // the source scan above is what keeps it that way; this pins that the output is stable.

@@ -9,7 +9,7 @@
  */
 import { shownFailures } from '@/core/severity'
 import { RiskWarnings } from './components/RiskWarnings'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
@@ -243,7 +243,10 @@ export function BridgeV1({
     )
   }
 
-  const onSend = useCallback(async () => {
+  // Not memoised: it reads `guardInput`, which is new every render. A callback kept across renders
+  // would judge the guards of the render it was made in, and "at the moment of the click" would be
+  // a comment rather than a fact — the other three tabs define theirs the same way.
+  const onSend = async () => {
     setTxError('')
     if (!planData || !dstKey) return
     // Re-run every guard against the state at the moment of the click, not at the last render.
@@ -271,8 +274,7 @@ export function BridgeV1({
       }
       setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planData, dstKey, src, info.oft, stored])
+  }
 
   const chainMismatch = walletChainId !== undefined && walletChainId !== src.chainId
   const adapter = planData ? v1AdapterParamsSummary(planData.adapterParams) : undefined
