@@ -12,7 +12,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { getAddress, pad, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
 import { addEntry, applyImport, bookConfirms, bookRefuses, EMPTY_BOOK, lookUp, parseBook, previewImport, type AddressBook } from '@/core/addressBook'
-import { guardSeverity, isBlockingCode, isPendingCode, verdictOf, type FailedGuard } from '@/core/severity'
+import { guardSeverity, isBlockingCode, isPendingCode, isStepCode, isWarningCode, shownFailures, verdictOf, waitsOnlyForApprove, type FailedGuard } from '@/core/severity'
 import { LOCKING_HUBS } from '@/protocols/wormhole-ntt/lockingHubs'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
 import { verifyNttManager } from '@/protocols/wormhole-ntt/verify'
@@ -600,5 +600,76 @@ describe('8. a failed simulation is a warning that says what the node said, on e
     const src = readFileSync(join(ROOT, 'src/ui/components/RiskWarnings.tsx'), 'utf8')
     expect(src).toMatch(/DETAILED\.has\(w\.code\) && w\.detail/)
     expect(src).toMatch(/'simulation_failed'/)
+  })
+})
+
+// ------------------------------------------------ 9. the approve is a step, not a problem ----
+
+describe('9. an adapter with allowance 0: the approve is the next step, not an issue and not a red block', () => {
+  const AFTER_APPROVE = { allowance: 2n ** 200n }
+  // The scenario from the preview: an OFTAdapter that is not on the reviewed list, all eight route
+  // checks passed, and the allowance still at zero.
+  const unlisted = () => riskOf({ adapter: { listed: false, lockedBps: 247, outboundNonce: 5n } })
+
+  it('needs_approve is a step: it holds canSend, but is never shown as a block', () => {
+    expect(isStepCode('needs_approve')).toBe(true)
+    expect(guardSeverity('needs_approve')).toBe('block')
+    for (const h of all) {
+      const rep = h.run(h.blockers['needs_approve']!())
+      expect(rep.canSend, h.name).toBe(false)
+      expect(shownFailures(rep.blocks, { dropPending: true, dropSteps: true }), h.name).toEqual([])
+      expect(waitsOnlyForApprove(rep.blocks), h.name).toBe(true)
+      // Nothing warns here, so the approve is ready at once: the button is Approve.
+      expect(rep.approveReady, h.name).toBe(true)
+    }
+  })
+
+  it('an unlisted adapter with allowance 0: a warning and the tick, no block; Approve after the tick; Send after the approve', () => {
+    for (const name of ['OFT V2', 'OFT v1']) {
+      const h = all.find((x) => x.name === name)!
+      const step = { ...h.blockers['needs_approve']!(), risk: unlisted() }
+      const before = h.run(step)
+      // The adapter is a warning, not an issue to fix...
+      expect(codesOf(before.riskWarnings), name).toContain('risk_unverified')
+      expect(before.riskWarnings.every((w) => !w.ok && isWarningCode(w.code)), name).toBe(true)
+      // ...and the red list is empty, so the tick is on screen (RiskWarnings hides it behind blocks).
+      expect(shownFailures(before.blocks, { dropPending: true, dropSteps: true }), name).toEqual([])
+      expect(waitsOnlyForApprove(before.blocks), name).toBe(true)
+      // Approve waits for the tick and for nothing else.
+      expect(before.approveReady, name).toBe(false)
+      const ticked = h.run({ ...step, risksAccepted: true })
+      expect(ticked.approveReady, name).toBe(true)
+      expect(ticked.canSend, name).toBe(false)
+      // After the approve lands the allowance is read back and the same tick sends any amount.
+      const after = h.run({ ...step, ...AFTER_APPROVE, risksAccepted: true })
+      expect(codesOf(after.blocks), name).toEqual([])
+      expect(after.canSend, name).toBe(true)
+      expect(h.run({ ...step, ...AFTER_APPROVE }).canSend, `${name} without the tick`).toBe(false)
+    }
+  })
+
+  it('a real block next to the approve step is still a red block, and the approve is not offered', () => {
+    for (const h of all) {
+      const rep = h.run({ ...h.blockers['needs_approve']!(), ...h.blockers['recipient_zero']!() })
+      expect(codesOf(shownFailures(rep.blocks, { dropPending: true, dropSteps: true })), h.name).toEqual(['recipient_zero'])
+      expect(waitsOnlyForApprove(rep.blocks), h.name).toBe(false)
+      expect(rep.approveReady, h.name).toBe(false)
+    }
+  })
+
+  it('the screens drop the step from the red list, grade the check rows, and offer the approve on that rule', () => {
+    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
+      const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
+      expect(src, f).toContain('shownFailures(report.blocks, { dropPending: true, dropSteps: true })')
+    }
+    expect(readFileSync(join(ROOT, 'src/ui/BridgeApp.tsx'), 'utf8')).toMatch(/approveIntent && waitsOnlyForApprove\(report\.blocks\)/)
+    for (const f of ['src/ui/components/Review.tsx', 'src/ui/BridgeV1.tsx', 'src/ui/NttApp.tsx', 'src/ui/CcipApp.tsx']) {
+      const src = readFileSync(join(ROOT, f), 'utf8')
+      expect(src, f).toContain('isStepCode(r.code)')
+      expect(src, f).toContain('isWarningCode(r.code)')
+    }
+    // The route panel asks for a destination before it says anything about coverage.
+    expect(readFileSync(join(ROOT, 'src/ui/BridgeApp.tsx'), 'utf8')).toContain('awaitingDestination={dest.dstEid === undefined}')
+    expect(readFileSync(join(ROOT, 'src/ui/components/RiskPanel.tsx'), 'utf8')).toMatch(/if \(p\.awaitingDestination\) return/)
   })
 })

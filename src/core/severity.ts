@@ -128,6 +128,16 @@ const APPROVE_STEP: ReadonlySet<string> = new Set([
   'native_balance_unknown',
 ])
 
+/**
+ * Blocks that are a STEP, not a problem: the send cannot go yet, but nothing is wrong and there is
+ * nothing to fix or to accept — the app itself will clear it with the next transaction. The one
+ * member is the allowance. It holds `canSend` like any block (the send would revert without it),
+ * but a screen must not show it in the red "cannot be sent" list, count it as an issue, or let it
+ * hide the tick: the approve is what the user does NEXT, and the approve itself waits for the tick
+ * (`approveReady`), so hiding the tick behind this "block" was a deadlock.
+ */
+const STEP: ReadonlySet<string> = new Set(['needs_approve'])
+
 export type GuardSeverity = 'pending' | 'block' | 'warn'
 
 /** Unknown codes are warnings on purpose: a new check must not silently become a refusal. */
@@ -138,6 +148,16 @@ export function guardSeverity(code: string): GuardSeverity {
 
 export const isBlockingCode = (code: string): boolean => guardSeverity(code) === 'block'
 export const isWarningCode = (code: string): boolean => guardSeverity(code) === 'warn'
+/** A block that is the next step rather than a problem — see `STEP`. Always also a block. */
+export const isStepCode = (code: string): boolean => STEP.has(code)
+
+/**
+ * Do these blocks consist only of the approve step and the reads that wait on it? True means the
+ * approve is the right button to show: nothing else stands in the way of this transfer.
+ */
+export function waitsOnlyForApprove(blocks: readonly AnyGuardResult[]): boolean {
+  return blocks.every((b) => b.ok || APPROVE_STEP.has(b.code))
+}
 
 /**
  * How loudly a warning should be said, so the screen can sort them with the dangerous ones on top.
@@ -236,7 +256,7 @@ export function verdictOf<R extends AnyGuardResult>(results: readonly R[], risks
   }
   const sorted = sortWarnings(warnings as unknown as { code: string }[]) as unknown as R[]
   const warningsCleared = sorted.length === 0 || risksAccepted
-  const approveReady = warningsCleared && blocks.every((b) => APPROVE_STEP.has((b as unknown as FailedGuard).code))
+  const approveReady = warningsCleared && waitsOnlyForApprove(blocks)
   return { blocks, warnings: sorted, warningsCleared, approveReady, canSend: blocks.length === 0 && warningsCleared }
 }
 
@@ -253,12 +273,19 @@ export function renameWarnings<R>(v: GuardVerdict<R>): { blocks: R[]; riskWarnin
 export const isPendingCode = (code: string): boolean => guardSeverity(code) === 'pending'
 
 /**
- * Narrows a report's list to the failures a screen should show, dropping reads still in flight.
- * A type predicate so the screens keep `code` without a cast.
+ * Narrows a report's list to the failures a screen should show, dropping reads still in flight
+ * and, for the red "cannot be sent" list, the approve step (`dropSteps`). A type predicate so the
+ * screens keep `code` without a cast.
  */
 export function shownFailures<R extends { ok: boolean }>(
   list: readonly R[],
-  opts: { dropPending: boolean } = { dropPending: false },
+  opts: { dropPending?: boolean; dropSteps?: boolean } = {},
 ): (R & FailedGuard)[] {
-  return list.filter((r): r is R & FailedGuard => !r.ok && !(opts.dropPending && isPendingCode((r as unknown as FailedGuard).code)))
+  return list.filter((r): r is R & FailedGuard => {
+    if (r.ok) return false
+    const code = (r as unknown as FailedGuard).code
+    if (opts.dropPending && isPendingCode(code)) return false
+    if (opts.dropSteps && isStepCode(code)) return false
+    return true
+  })
 }

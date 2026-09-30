@@ -6,7 +6,7 @@
  * the pool, never from the token, never from anything typed here. The pool is only used to learn
  * where the token can go and what the rate limits are.
  */
-import { shownFailures } from '@/core/severity'
+import { isStepCode, isWarningCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 import { RiskWarnings } from './components/RiskWarnings'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
@@ -332,7 +332,7 @@ export function CcipApp({
   const busy = switching || approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading) || sendWrite.isPending
   const firstFailing = report.results.find((r) => !r.ok && !isCcipPending(r)) ?? report.results.find((r) => !r.ok)
   // Reads in flight are "checking", not problems to accept.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
   const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
   const ctaLabel = !wallet
     ? d.ui.cta_connect
@@ -535,7 +535,11 @@ export function CcipApp({
           onAccepted={tick.setAccepted}
           added={tick.added}
         />
-        {!report.canSend && firstFailing && !firstFailing.ok ? <div className="text-center text-xs text-muted">{d.ccipGuard[firstFailing.code]}</div> : null}
+        {approveIntent && !report.approveReady && waitsOnlyForApprove(report.blocks) ? (
+          <div className="text-center text-xs text-muted">{d.step3.approveAfterTick}</div>
+        ) : !report.canSend && firstFailing && !firstFailing.ok && !(approveIntent && isStepCode(firstFailing.code)) ? (
+          <div className="text-center text-xs text-muted">{d.ccipGuard[firstFailing.code]}</div>
+        ) : null}
       </div>
     </>
   )
@@ -619,8 +623,13 @@ export function CcipApp({
 
             <ul className="grid gap-x-3 gap-y-0.5 text-xs">
               {report.results.map((r) => (
-                <li key={r.id} className={r.ok ? 'text-ok' : isCcipPending(r) ? 'text-muted' : 'text-danger'}>
-                  {r.ok ? '✓' : isCcipPending(r) ? '○' : '✗'} {r.ok ? (d.ccipGuard[`ok_${r.id}` as keyof typeof d.ccipGuard] ?? '') : d.ccipGuard[r.code]}
+                // Four tones: passed, in flight, the approve step (neutral), a warning (amber), a block (red).
+                <li
+                  key={r.id}
+                  className={r.ok ? 'text-ok' : isCcipPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger'}
+                >
+                  {r.ok ? '✓' : isCcipPending(r) ? '○' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗'}{' '}
+                  {r.ok ? (d.ccipGuard[`ok_${r.id}` as keyof typeof d.ccipGuard] ?? '') : d.ccipGuard[r.code]}
                 </li>
               ))}
             </ul>

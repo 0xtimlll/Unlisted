@@ -7,7 +7,7 @@
  * does not — a `bytes` recipient, adapter params, a stuck-payload check on the destination — lives
  * here, and the V2 screen is left exactly as it was.
  */
-import { shownFailures } from '@/core/severity'
+import { isStepCode, isWarningCode, shownFailures } from '@/core/severity'
 import { RiskWarnings } from './components/RiskWarnings'
 import { useEffect, useMemo, useState } from 'react'
 import { erc20Abi } from 'viem'
@@ -45,9 +45,14 @@ const GUARD_LABEL = (d: Dict, code: string): string => (d.v1Guard as Record<stri
 /** The guard list, compact: real failures in red, reads still in flight in grey, passes in green. */
 function V1Checks({ results }: { results: V1GuardResult[] }) {
   const d = useDict()
-  const failing = results.filter((r) => !r.ok && !isV1Pending(r))
+  // "Issues to fix" are the blocks: a warning is accepted below the list, and the approve is a step.
+  const failing = results.filter((r) => !r.ok && !isV1Pending(r) && !isStepCode(r.code) && !isWarningCode(r.code))
+  const warning = results.filter((r) => !r.ok && isWarningCode(r.code))
+  const stepping = results.filter((r) => !r.ok && isStepCode(r.code))
   const pending = results.filter((r) => isV1Pending(r))
   const passing = results.filter((r) => r.ok).length
+  const tone = (r: V1GuardResult) => (isV1Pending(r) ? 'text-muted' : r.ok ? 'text-ok' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger')
+  const glyph = (r: V1GuardResult) => (isV1Pending(r) ? '○' : r.ok ? '✓' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗')
   return (
     <div className="space-y-1.5">
       <div className="text-xs">
@@ -58,14 +63,16 @@ function V1Checks({ results }: { results: V1GuardResult[] }) {
             <Spinner /> {fmt(d.ui.checksPending, { done: passing, total: results.length })}
           </span>
         ) : (
-          <span className="text-ok">
-            ✓ {d.ui.checks}: {passing}/{results.length}
+          <span className={warning.length ? 'text-warn' : 'text-ok'}>
+            {warning.length ? '⚠' : '✓'} {d.ui.checks}: {passing}/{results.length}
+            {warning.length ? ` · ${fmt(d.ui.checksWarnings, { n: warning.length })}` : ''}
+            {stepping.length ? ` · ${d.ui.checksStep}` : ''}
           </span>
         )}
       </div>
-      {[...failing, ...pending].map((r) => (
-        <div key={r.id} className={`text-xs ${isV1Pending(r) ? 'text-muted' : 'text-danger'}`}>
-          {!r.ok ? GUARD_LABEL(d, r.code) : null}
+      {[...failing, ...stepping, ...warning, ...pending].map((r) => (
+        <div key={r.id} className={`text-xs ${tone(r)}`}>
+          {glyph(r)} {!r.ok ? GUARD_LABEL(d, r.code) : null}
           {!r.ok && r.detail ? <span className="mono ml-1 opacity-70">{r.detail}</span> : null}
         </div>
       ))}
@@ -210,7 +217,7 @@ export function BridgeV1({
   const guardInput: V1GuardInput = { ...draftInput, risksAccepted: tick.accepted }
   const report = runV1Guards(guardInput)
   // Reads in flight are "checking", not problems to accept.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
   const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
 
   const approveWrite = useWriteContract()
@@ -480,6 +487,7 @@ export function BridgeV1({
 
         <RiskPanel
           risk={risk.data?.risk}
+          awaitingDestination={dstKey === undefined}
           loading={risk.isFetching}
           error={risk.error ? shortError(risk.error) : ''}
         />
