@@ -291,13 +291,125 @@ describe('an imported entry is a suggestion until its first use confirms it', ()
     const twin = '0x1234ffffffffffffffffffffffffffffffff5678'
     const b = addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Real', address: saved, family: 'evm' }, NOW)
     const p = previewImport(file([{ label: 'Fake', address: twin, family: 'evm' }]), b)
-    // The import itself is allowed — the book may hold two addresses sharing their ends...
+    // The preview lists it, marked as a twin of "Real"...
     expect(p!.add).toHaveLength(1)
-    // ...but once it is in, it is an entry of its own, so it looks up as itself.
-    expect(lookUp(applyImport(b, p!), 'evm', twin).kind).toBe('imported')
-    // And a twin that is NOT in the book is still blocked.
+    expect(p!.twins[p!.add[0]!.id]!.map((t) => t.label)).toEqual(['Real'])
+    // ...and applying without the row's own answer leaves it out: the book is as it was, and the
+    // address is still refused as a look-alike.
+    const after = applyImport(b, p!)
+    expect(after.entries).toHaveLength(1)
+    expect(lookUp(after, 'evm', twin).kind).toBe('lookalike')
+    // A twin that is NOT in the book is blocked as before.
     const other = '0x1234aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5678'
     expect(lookUp(b, 'evm', other).kind).toBe('lookalike')
+  })
+})
+
+describe('a twin in the book is refused until someone confirmed the pair is two addresses', () => {
+  const saved = '0x1234000000000000000000000000000000005678'
+  const twin = '0x1234ffffffffffffffffffffffffffffffff5678'
+  const third = '0x1234aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5678'
+  const file = (entries: unknown[]) => ({ version: 1, entries })
+  const real = () => addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Real', address: saved, family: 'evm' }, NOW, 'real')
+
+  it('1. import: the twin row is marked and not imported without its own confirmation', () => {
+    const p = previewImport(file([{ label: 'Fake', address: twin, family: 'evm' }]), real())!
+    const row = p.add[0]!
+    expect(p.twins[row.id]!.map((t) => t.address)).toEqual([getAddress(saved)])
+    const b = applyImport(real(), p)
+    expect(b.entries.map((e) => e.label)).toEqual(['Real'])
+    // The refusal is what the guards see, on the very address the file tried to slip in.
+    expect(lookUp(b, 'evm', twin)).toMatchObject({ kind: 'lookalike', entry: { label: 'Real' } })
+    // The entry it resembles is untouched by the attempt.
+    expect(lookUp(b, 'evm', saved).kind).toBe('known')
+  })
+
+  it('2. import with the row confirmed: in the book, still imported, tail owed on first use', () => {
+    const p = previewImport(file([{ label: 'Other', address: twin, family: 'evm' }]), real())!
+    const b = applyImport(real(), p, new Set([p.add[0]!.id]))
+    expect(b.entries.map((e) => e.label)).toEqual(['Real', 'Other'])
+    const added = b.entries[1]!
+    expect(added.imported).toBe(true)
+    expect(added.distinctFrom).toEqual([getAddress(saved)])
+    // Confirmed different, but not yet confirmed at all: the tail is still required.
+    const v = lookUp(b, 'evm', twin)
+    expect(v.kind).toBe('imported')
+    // After the first send confirms it, it is an ordinary entry — and the pair stays fine.
+    const after = confirmImported(b, added.id)
+    expect(lookUp(after, 'evm', twin).kind).toBe('known')
+    expect(lookUp(after, 'evm', saved).kind).toBe('known')
+    // The answer survives a reload of the store.
+    const back = parseBook(JSON.parse(exportBook(after)))
+    expect(back.ok && lookUp(back.book, 'evm', twin).kind).toBe('known')
+  })
+
+  it('3. a twin that got in by any path without that answer is still refused', () => {
+    // A hand-edited store: two entries sharing their ends, neither vouching for the other.
+    const stored = parseBook({
+      version: ADDRESS_BOOK_VERSION,
+      entries: [
+        { id: 'a', label: 'Real', address: saved, family: 'evm', createdAt: NOW },
+        { id: 'b', label: 'Fake', address: twin, family: 'evm', createdAt: NOW },
+      ],
+    })
+    expect(stored.ok).toBe(true)
+    if (!stored.ok) return
+    expect(lookUp(stored.book, 'evm', twin)).toMatchObject({ kind: 'lookalike', entry: { label: 'Real' } })
+    expect(lookUp(stored.book, 'evm', saved)).toMatchObject({ kind: 'lookalike', entry: { label: 'Fake' } })
+    // The add form's path refuses it outright without the answer, and records the answer with it.
+    expect(() => addEntry(real(), { label: 'Fake', address: twin, family: 'evm' }, NOW)).toThrow(AddressBookError)
+    try {
+      addEntry(real(), { label: 'Fake', address: twin, family: 'evm' }, NOW)
+    } catch (e) {
+      expect((e as AddressBookError).code).toBe('lookalike_unconfirmed')
+    }
+    const ok = addEntry(real(), { label: 'Other', address: twin, family: 'evm', twinAccepted: true }, NOW)
+    expect(ok.entries[1]!.distinctFrom).toEqual([getAddress(saved)])
+    expect(lookUp(ok, 'evm', twin).kind).toBe('known')
+    expect(lookUp(ok, 'evm', saved).kind).toBe('known')
+  })
+
+  it('an answer given about one pair does not cover a third address that shares the same ends', () => {
+    const b = addEntry(real(), { label: 'Other', address: twin, family: 'evm', twinAccepted: true }, NOW, 'other')
+    const stored = parseBook({ ...JSON.parse(exportBook(b)), entries: [...b.entries, { id: 'c', label: 'Third', address: third, family: 'evm', createdAt: NOW }] })
+    expect(stored.ok).toBe(true)
+    if (!stored.ok) return
+    expect(lookUp(stored.book, 'evm', third)).toMatchObject({ kind: 'lookalike' })
+    // The refusal is symmetric on purpose: while an unvouched twin sits in the book, the entries it
+    // resembles are refused too, each naming "Third" as the thing to look at. A user who sees that
+    // and removes the stranger gets the vouched pair back exactly as it was.
+    expect(lookUp(stored.book, 'evm', twin)).toMatchObject({ kind: 'lookalike', entry: { label: 'Third' } })
+    expect(lookUp(stored.book, 'evm', saved)).toMatchObject({ kind: 'lookalike', entry: { label: 'Third' } })
+    const cleaned = removeEntry(stored.book, 'c')
+    expect(lookUp(cleaned, 'evm', twin).kind).toBe('known')
+    expect(lookUp(cleaned, 'evm', saved).kind).toBe('known')
+  })
+
+  it("a file's own distinctFrom is ignored: the confirmation is the user's to give, not the file's", () => {
+    const p = previewImport(file([{ label: 'Fake', address: twin, family: 'evm', distinctFrom: [saved] }]), real())!
+    expect(p.add[0]!.distinctFrom).toBeUndefined()
+    expect(Object.keys(p.twins)).toEqual([p.add[0]!.id])
+    expect(applyImport(real(), p).entries).toHaveLength(1)
+  })
+
+  it('two rows of one file that share their ends are twins of each other, and each needs its own answer', () => {
+    const p = previewImport(file([
+      { label: 'One', address: twin, family: 'evm' },
+      { label: 'Two', address: third, family: 'evm' },
+    ]), { ...EMPTY_BOOK, entries: [] })!
+    expect(p.add).toHaveLength(2)
+    const [one, two] = p.add as [typeof p.add[0], typeof p.add[0]]
+    expect(p.twins[one.id]!.map((t) => t.label)).toEqual(['Two'])
+    expect(p.twins[two.id]!.map((t) => t.label)).toEqual(['One'])
+    // Only the confirmed one goes in, and it records the answer about the other.
+    const b = applyImport({ ...EMPTY_BOOK, entries: [] }, p, new Set([one.id]))
+    expect(b.entries.map((e) => e.label)).toEqual(['One'])
+    expect(b.entries[0]!.distinctFrom).toEqual([getAddress(third)])
+    // Both confirmed: both in, and neither refuses the other.
+    const both = applyImport({ ...EMPTY_BOOK, entries: [] }, p, new Set([one.id, two.id]))
+    expect(both.entries).toHaveLength(2)
+    expect(lookUp(both, 'evm', twin).kind).toBe('imported')
+    expect(lookUp(both, 'evm', third).kind).toBe('imported')
   })
 })
 
@@ -322,13 +434,14 @@ describe('a twin is flagged on the way in, on both paths', () => {
       { label: 'Fine', address: unrelated, family: 'evm' },
     ] }, b)
     expect(p!.add).toHaveLength(2)
-    // The preview lists both; the screen marks the one that resembles a saved entry.
-    const marked = p!.add.map((e) => !!findLookalike(b, e.family, e.address))
+    // The preview lists both and names the one that resembles a saved entry.
+    const marked = p!.add.map((e) => e.id in p!.twins)
     expect(marked).toEqual([true, false])
+    expect(p!.add.map((e) => !!findLookalike(b, e.family, e.address))).toEqual(marked)
   })
 
-  it('adding a twin is still allowed — it is the user’s own book', () => {
-    const b = addEntry(book(), { label: 'Other', address: twin, family: 'evm' }, NOW)
+  it('adding a twin is allowed with the explicit answer — it is the user’s own book', () => {
+    const b = addEntry(book(), { label: 'Other', address: twin, family: 'evm', twinAccepted: true }, NOW)
     expect(b.entries).toHaveLength(2)
     // And once both are in, each looks up as itself rather than as the other’s twin.
     expect(lookUp(b, 'evm', twin).kind).toBe('known')

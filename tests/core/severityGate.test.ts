@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { getAddress, pad, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
-import { addEntry, applyImport, bookConfirms, bookRefuses, EMPTY_BOOK, lookUp, previewImport, type AddressBook } from '@/core/addressBook'
+import { addEntry, applyImport, bookConfirms, bookRefuses, EMPTY_BOOK, lookUp, parseBook, previewImport, type AddressBook } from '@/core/addressBook'
 import { guardSeverity, isBlockingCode, isPendingCode, verdictOf, type FailedGuard } from '@/core/severity'
 import { LOCKING_HUBS } from '@/protocols/wormhole-ntt/lockingHubs'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
@@ -342,12 +342,27 @@ describe('4. a twin of a saved address is refused, and nothing lifts it', () => 
     expect(bookConfirms(v)).toBe(true)
   })
 
-  it('an imported copy of the twin does not launder it: it is imported, so the tail is still owed', () => {
+  it('an imported copy of the twin does not launder it: without its own confirmation it is not imported and stays refused', () => {
     const p = previewImport({ version: 1, entries: [{ label: 'Fake', address: twin, family: 'evm' }] }, book())
     const merged = applyImport(book(), p!)
+    expect(merged.entries).toHaveLength(1)
+    const v = lookUp(merged, 'evm', twin)
+    expect(v.kind).toBe('lookalike')
+    expect(bookRefuses(v)).toBe(true)
+    for (const h of all) {
+      const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: bookRefuses(v), risksAccepted: true })
+      expect(codesOf(rep.blocks), h.name).toContain('recipient_lookalike')
+      expect(rep.canSend, h.name).toBe(false)
+    }
+  })
+
+  it('an imported twin the user confirmed row by row is imported, so the tail is still owed', () => {
+    const p = previewImport({ version: 1, entries: [{ label: 'Other', address: twin, family: 'evm' }] }, book())!
+    const merged = applyImport(book(), p, new Set([p.add[0]!.id]))
     const v = lookUp(merged, 'evm', twin)
     expect(v.kind).toBe('imported')
     expect(bookConfirms(v)).toBe(false)
+    expect(bookRefuses(v)).toBe(false)
     // The screens compute recipientConfirmed = bookConfirms(v) || confirmsTail(...). With neither,
     // the recipient is unconfirmed on every protocol.
     for (const h of all) {
@@ -356,7 +371,26 @@ describe('4. a twin of a saved address is refused, and nothing lifts it', () => 
       expect(rep.canSend, h.name).toBe(false)
     }
   })
+
+  it('a twin that is in the book without anyone having confirmed the pair is refused on every protocol', () => {
+    // A hand-edited store, or any path that skipped the question.
+    const stored = { version: 1, entries: [{ id: 'e1', label: 'Exchange', address: saved, family: 'evm' }, { id: 'e2', label: 'Fake', address: twin, family: 'evm' }] }
+    const v = lookUp(applyImportless(stored), 'evm', twin)
+    expect(v.kind).toBe('lookalike')
+    for (const h of all) {
+      const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: bookRefuses(v), risksAccepted: true })
+      expect(codesOf(rep.blocks), h.name).toContain('recipient_lookalike')
+      expect(rep.canSend, h.name).toBe(false)
+    }
+  })
 })
+
+/** The store as `parseBook` reads it back — the path an import preview never sees. */
+function applyImportless(raw: unknown): AddressBook {
+  const r = parseBook(raw)
+  if (!r.ok) throw new Error('fixture is not a book')
+  return r.book
+}
 
 // --------------------------------------------- 5. a recipient that is any contract ----
 
