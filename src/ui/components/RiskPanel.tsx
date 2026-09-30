@@ -8,9 +8,9 @@
  *     the fold guarantees that list is non-empty for anything other than OK.
  *   - **Grey means not checked.** A check that could not be made is grey and carries the reason it
  *     could not, so it is never mistaken for a pass. That is the whole point of the colour scheme.
- *   - **A cap is not a warning.** When only a test amount may go, the panel says so with the limit
- *     in the token's own units and the field to change it, rather than leaving the user to discover
- *     it from a disabled button.
+ *   - **A tier is not a refusal.** The panel says what was found and how bad it is; guard 22 turns
+ *     the tier into a warning, and the single tick under the warnings list is what sends (CLAUDE.md
+ *     rule 2). Nothing here disables a button or caps an amount.
  */
 import { CHECK_IDS, isHard, type CheckId, type CheckState, type RouteRisk, type Tier } from '@/protocols/lz-risk/risk'
 import { fmt, useDict, type Dict } from '@/i18n'
@@ -78,12 +78,6 @@ export function RiskPanel(p: {
   notCovered?: boolean
   loading: boolean
   error: string
-  /** The token being moved, for the limit field's units. */
-  decimals: number
-  symbol: string
-  /** The test-amount limit, as the user typed it, and the raw value it parsed to. */
-  /** The amount this transfer would send, to say whether it is over the limit. */
-  amountLD: bigint | undefined
 }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
@@ -119,7 +113,7 @@ export function RiskPanel(p: {
       {r.tier === 'BLOCKED' ? <Alert kind="error">{d.risk.blockedNote}</Alert> : null}
 
       {/* §Adapter An unproven adapter is red but not refused: a new token's lockbox looks exactly
-          like a fake on its first day. The test amount needs nothing; the full amount needs this. */}
+          like a fake on its first day. Guard 22 carries it as a warning the single tick covers. */}
       {r.adapterUnproven ? (
         <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           <p>{d.risk.adapterUnproven}</p>

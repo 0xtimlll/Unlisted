@@ -111,7 +111,7 @@ describe('a real v1 route', () => {
 
   it('treats undelivered packets ahead of ours as a delay, not a blocked path', async () => {
     // Whether a queue exists today is not this test's business; that it is never a BLOCKED is, and
-    // that how long it has waited decides whether the cap can be typed away.
+    // that how long it has waited decides which sentence the reason carries.
     for (const [src, dst] of [
       ['arbitrum', 'avalanche'],
       ['avalanche', 'arbitrum'],
@@ -123,7 +123,7 @@ describe('a real v1 route', () => {
         // Both wordings say the same thing about the queue; which one appears depends on its age.
         const queued = risk.reasons.find((r) => r.check === 'path')
         expect(queued?.text).toMatch(/queue[s]? behind them/)
-        // Either way a test amount still goes; only a stored payload refuses everything.
+        // Either way it is a warning at the send screen; only a stored payload fails the check outright.
       }
       // A stored payload is the only thing that makes this check fail outright.
       if (path.status === 'fail') expect(path.reason).toMatch(/stuck packet|no path/)

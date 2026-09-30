@@ -140,7 +140,7 @@ describe('guard 19/20 on a Solana destination', () => {
     expect(codeOf(20, base())).toBe('ok')
     expect(codeOf(20, goodInput())).toBe('ok')
   })
-  it('15: with no CU anywhere a Solana send is a hard block, no checkbox; EVM keeps the checkbox', () => {
+  it('15: with no CU anywhere a Solana send gets no_executor_options_svm whatever the checkbox says (a warning, see severity.ts); EVM keeps its own checkbox', () => {
     const noEnforced = treadOftInfo({ routes: info.routes, enforced: {} })
     const i = { ...base(), info: noEnforced }
     expect(codeOf(15, i)).toBe('no_executor_options_svm')

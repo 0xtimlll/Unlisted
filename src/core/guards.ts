@@ -364,8 +364,10 @@ export function needsNoGasConfirmation(info: SourceInfo | undefined, plan: SendP
   return receiveTotals(enforced).gas + receiveTotals(plan.extraOptions).gas === 0n
 }
 
-// 15. no executor gas -> EVM: requires explicit confirmation; Solana: hard block, no override
-//     (a stuck message on Solana cannot simply be retried).
+// 15. no executor gas -> EVM: requires its own explicit confirmation; Solana: a warning with no
+//     confirmation of its own (`no_executor_options_svm`, weighed `stuck` in core/severity.ts and
+//     covered by the single tick) — said loudly because a stuck message on Solana cannot simply be
+//     retried, but the person decides (CLAUDE.md rule 2).
 export function g15ExecutorGas(i: GuardInput): GuardResult {
   if (!i.plan) return fail(15, 'plan_missing')
   if (!i.info) return fail(15, 'oft_missing')

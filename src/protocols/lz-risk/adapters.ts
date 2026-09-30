@@ -41,8 +41,9 @@
  * Neither proves anything. The owner of a fake adapter can deposit real tokens, pass the check and
  * withdraw afterwards, and can pay for twenty real sends. What the two do is raise the cost of the
  * attack from "deploy a contract" to "tie up capital and pay fees" — which is worth having, and is
- * emphatically not evidence. So they can only ever reach amber (§4 `UNVERIFIED`, a test amount),
- * never green, and no typed word lifts that: only a test transfer that actually arrives does.
+ * emphatically not evidence. So they can only ever reach amber (§4 `UNVERIFIED`), never green: the
+ * list is the only thing that vouches for an adapter. Amber is a warning the single tick covers,
+ * not a cap (CLAUDE.md rule 2).
  */
 import { getAddress, isAddress, type Address } from 'viem'
 import { CHAINS, type ChainKey } from '../../core/chains'
@@ -64,7 +65,7 @@ export type ReviewedAdapter = {
  * `MIN_LOCKED_BPS` is 10 (0.1% of supply) rather than the 50 first proposed. 0.5% of a large
  * token's supply is a very high bar: an OFTAdapter holds exactly what has been bridged out through
  * it, so a real but modestly used lockbox on a big token sits well below that, and the penalty for
- * missing the bar is total (`BLOCKED` sends nothing at all, test amount included). 0.1% still costs
+ * missing the bar is the red "unproven" warning, the loudest thing the panel says. 0.1% still costs
  * an attacker real capital while being reachable by adapters that are genuinely in service.
  *
  * `MIN_OUTBOUND_NONCE` is 20, as proposed. Twenty deliveries recorded by the real EndpointV2 are

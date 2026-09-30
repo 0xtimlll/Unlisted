@@ -176,8 +176,8 @@ async function checkPath(c: V1RiskContext): Promise<Outcome> {
   if (minutes > INFLIGHT_GRACE_MINUTES) {
     // Not a failure of the path: the endpoint is holding nothing, so the route itself works. What it
     // means is that v1 delivers in nonce order and these are ahead of us, so a transfer sent now
-    // waits for them. A delay caps the amount; it does not refuse the send. Only a stored payload
-    // above does that. How long they have been waiting is what the fold reads — see risk.ts.
+    // waits for them. A delay holds the tier at UNVERIFIED; it does not fail the check. Only a
+    // stored payload above does that. How long they have been waiting is what the fold reads — see risk.ts.
     return {
       state: { status: 'pass', note: `${gap} packet(s) undelivered, the oldest sent ${Math.floor(minutes)} minutes ago` },
       extra: { delayed: { packets: Number(gap), oldestMinutes: minutes } },
