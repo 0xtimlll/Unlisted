@@ -492,8 +492,29 @@ describe('an adapter is trusted by the committed list, or not at all', () => {
   })
 
   it('the list matches on chain + adapter + token, all three', () => {
-    // The file ships empty, so nothing is listed — which is exactly the shipped default.
-    expect(REVIEWED_ADAPTERS).toHaveLength(0)
-    expect(reviewedAdapter('ethereum', '0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222')).toBeUndefined()
+    const entry = REVIEWED_ADAPTERS[0]
+    expect(entry, 'adapters.json has no rows to test the matcher with').toBeDefined()
+    // The exact triple matches...
+    expect(reviewedAdapter(entry!.chain, entry!.adapter, entry!.token)?.symbol).toBe(entry!.symbol)
+    // ...and each leg on its own does not.
+    expect(reviewedAdapter(entry!.chain, entry!.adapter, '0x2222222222222222222222222222222222222222')).toBeUndefined()
+    expect(reviewedAdapter(entry!.chain, '0x1111111111111111111111111111111111111111', entry!.token)).toBeUndefined()
+    expect(reviewedAdapter('bsc', entry!.adapter, entry!.token)).toBeUndefined()
+    // Case must not matter: an address is not case-sensitive.
+    expect(reviewedAdapter(entry!.chain, entry!.adapter.toLowerCase(), entry!.token.toLowerCase())?.symbol).toBe(entry!.symbol)
+  })
+
+  it('every committed row is well formed and names a distinct adapter+token pair', () => {
+    const seen = new Set<string>()
+    for (const a of REVIEWED_ADAPTERS) {
+      expect(a.adapter).toMatch(/^0x[0-9a-fA-F]{40}$/)
+      expect(a.token).toMatch(/^0x[0-9a-fA-F]{40}$/)
+      // A lockbox that holds itself would be a plain OFT, not an adapter.
+      expect(a.adapter.toLowerCase()).not.toBe(a.token.toLowerCase())
+      expect(a.note.length, `${a.symbol} needs a note saying why it was accepted`).toBeGreaterThan(40)
+      const key = `${a.chain}:${a.adapter.toLowerCase()}:${a.token.toLowerCase()}`
+      expect(seen.has(key), `duplicate row for ${key}`).toBe(false)
+      seen.add(key)
+    }
   })
 })

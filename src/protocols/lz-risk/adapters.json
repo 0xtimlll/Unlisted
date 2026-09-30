@@ -1,4 +1,21 @@
 {
-  "note": "Reviewed OFTAdapter lockboxes. Empty on purpose: every entry is a human decision. See adapters.ts.",
-  "adapters": []
+  "note": "Reviewed OFTAdapter lockboxes. Every row is a human decision — see adapters.ts. Re-read the diff on any change.",
+  "adapters": [
+    {
+      "chain": "ethereum",
+      "adapter": "0x58538e6A46E07434d7E7375Bc268D3cb839C0133",
+      "token": "0x57e114B691Db790C35207b2e685D4A43181e6061",
+      "symbol": "ENA",
+      "addedAt": "2026-09-30",
+      "note": "Verified on chain 2026-09-30: token() is ENA (15B supply, 18 decimals), endpoint() is the committed EndpointV2, approvalRequired=true, 172.9M locked (1.15% of supply) and 3119 outbound deliveries across 9 routes. Address is the one this repo's integration fixtures have used since the NTT/OFT work."
+    },
+    {
+      "chain": "ethereum",
+      "adapter": "0xe68AD53cf0D5E49CF83FBC003672f6D0eBcAe311",
+      "token": "0x31EEA0EDeb85B0cB65c1400bd2F4e487fD61B537",
+      "symbol": "TREAD",
+      "addedAt": "2026-09-30",
+      "note": "Verified on chain 2026-09-30: token() is TREAD (100M supply, 18 decimals), endpoint() is the committed EndpointV2, approvalRequired=true, 11.4M locked (11.41% of supply) and 141 outbound deliveries on its single route to HyperEVM. Address is the one this repo's integration fixtures have used since the OFT adapter tests."
+    }
+  ]
 }
