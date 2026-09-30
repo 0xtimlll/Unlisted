@@ -235,6 +235,8 @@ function EntryRow({ entry, readOnly }: { entry: AddressBookEntry; readOnly: bool
           ) : (
             <div className="text-sm font-semibold text-ink">
               {entry.label} <span className="ml-1 text-xs font-normal text-muted">{d.addressBook[`family_${entry.family}`]}</span>
+              {/* An imported entry is a suggestion until its first send confirms it. */}
+              {entry.imported ? <span className="ml-2 text-xs font-normal text-warn">{d.addressBook.importedBadge}</span> : null}
             </div>
           )}
           {/* Full address, never shortened: the middle is what a look-alike changes. */}

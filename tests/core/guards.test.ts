@@ -49,6 +49,7 @@ import {
   WALLET,
 } from './fixtures'
 import { assessRisk, CHECK_IDS, emptyRiskInput, OVERRIDE_WORD, type CheckId, type CheckState } from '@/protocols/lz-risk/risk'
+import { bookConfirms } from '@/core/addressBook'
 
 const code = (r: GuardResult) => (r.ok ? 'ok' : r.code)
 
@@ -144,6 +145,22 @@ describe('3. recipient', () => {
     expect(code(g3Recipient(goodInput({ plan, recipientIsCustom: true })))).toBe('recipient_unconfirmed')
     expect(code(g3Recipient(goodInput({ plan, customRecipientConfirmed: true })))).toBe('recipient_unconfirmed')
     expect(code(g3Recipient(goodInput({ plan, recipientIsCustom: true, customRecipientConfirmed: true })))).toBe('ok')
+  })
+  it('an imported entry does not waive the tail; a confirmed one does', () => {
+    // What the tabs compute: recipientConfirmed = bookConfirms(verdict) || confirmsTail(typed).
+    // The verdict is the only thing that differs between these two cases.
+    const plan = treadPlan({ recipient: OTHER })
+    const entry = { id: 'e', label: 'Exchange', address: OTHER, family: 'evm' as const, createdAt: 0 }
+
+    const imported = bookConfirms({ kind: 'imported', entry: { ...entry, imported: true } })
+    expect(imported).toBe(false)
+    // With no tail typed either, guard 3 refuses: the send is unavailable.
+    expect(code(g3Recipient(goodInput({ plan, recipientIsCustom: true, customRecipientConfirmed: imported })))).toBe('recipient_unconfirmed')
+
+    // Once confirmed, the same address is ordinary and the book alone settles it.
+    const known = bookConfirms({ kind: 'known', entry })
+    expect(known).toBe(true)
+    expect(code(g3Recipient(goodInput({ plan, recipientIsCustom: true, customRecipientConfirmed: known })))).toBe('ok')
   })
   it('a look-alike of a saved address is refused, and no confirmation lifts it', () => {
     const plan = treadPlan({ recipient: OTHER })
