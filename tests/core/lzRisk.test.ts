@@ -24,6 +24,14 @@ import {
   type CheckState,
   type RiskInput,
 } from '@/protocols/lz-risk/risk'
+import {
+  ADAPTER_MIN_LOCKED_BPS,
+  ADAPTER_MIN_OUTBOUND_NONCE,
+  lockedBps,
+  REVIEWED_ADAPTERS,
+  reviewedAdapter,
+  type AdapterStanding,
+} from '@/protocols/lz-risk/adapters'
 import { DEAD_DVN_ID, dvnInfo, hasDvnList, judgeDvns } from '@/protocols/lz-risk/dvns'
 import dvnTable from '@/protocols/lz-risk/dvns.json'
 
@@ -397,5 +405,71 @@ describe('what LayerZero says about a DVN', () => {
     expect(dvnInfo('arbitrum', healthy[0])).toBeDefined()
     expect(dvnInfo('arbitrum', healthy[0].toUpperCase().replace('0X', '0x'))).toBeDefined()
     expect(judgeDvns('arbitrum', [healthy[0]]).healthy.length).toBe(1)
+  })
+})
+
+// ------------------------------------------------------ the OFTAdapter rule ----
+
+/**
+ * An OFTAdapter is a lockbox the real token knows nothing about, so no on-chain fact can vouch for
+ * it and guard 17's peer-back is the adapter confirming itself. Only the committed list reaches
+ * OK; the two indirect signals decide amber vs red and never more than that.
+ */
+describe('an adapter is trusted by the committed list, or not at all', () => {
+  const standing = (over: Partial<AdapterStanding> = {}): AdapterStanding => ({
+    listed: false,
+    lockedBps: ADAPTER_MIN_LOCKED_BPS,
+    outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE,
+    ...over,
+  })
+
+  it('a fresh fake adapter — nothing locked, no history — is BLOCKED', () => {
+    const r = assessRisk(clean({ adapter: standing({ lockedBps: 0, outboundNonce: 0n }) }))
+    expect(r.tier).toBe('BLOCKED')
+    expect(r.overridable).toBe(false)
+    // Not a cap: a test amount into a lockbox that may not be one is still a loss.
+    expect(r.testLimitOnly).toBe(false)
+  })
+
+  it('healthy signals but no listing is amber, capped, and not overridable by a word', () => {
+    const r = assessRisk(clean({ adapter: standing() }))
+    expect(r.tier).toBe('UNVERIFIED')
+    expect(r.testLimitOnly).toBe(true)
+    expect(r.overridable).toBe(false)
+    // The wording must not read as "checked".
+    expect(r.reasons.some((x) => /not on the reviewed list/.test(x.text) && /not proof/.test(x.text))).toBe(true)
+  })
+
+  it('a listed adapter is an ordinary route', () => {
+    expect(assessRisk(clean({ adapter: standing({ listed: true }) })).tier).toBe('OK')
+    // ...and listing outranks weak signals, because the list is the evidence, not the signals.
+    expect(assessRisk(clean({ adapter: standing({ listed: true, lockedBps: 0, outboundNonce: 0n }) })).tier).toBe('OK')
+  })
+
+  it('a plain OFT is unaffected: there is no lockbox to vouch for', () => {
+    expect(assessRisk(clean()).tier).toBe('OK')
+  })
+
+  it('a read that did not answer is not a pass', () => {
+    for (const over of [{ lockedBps: undefined }, { outboundNonce: undefined }]) {
+      expect(assessRisk(clean({ adapter: standing(over) })).tier).toBe('BLOCKED')
+    }
+  })
+
+  it('each floor is enforced on its own', () => {
+    expect(assessRisk(clean({ adapter: standing({ lockedBps: ADAPTER_MIN_LOCKED_BPS - 1 }) })).tier).toBe('BLOCKED')
+    expect(assessRisk(clean({ adapter: standing({ outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE - 1n }) })).tier).toBe('BLOCKED')
+  })
+
+  it('lockedBps is a share of supply, and an unreadable supply is unknown rather than zero', () => {
+    expect(lockedBps(5n, 1000n)).toBe(50) // 0.5%
+    expect(lockedBps(0n, 1000n)).toBe(0)
+    expect(lockedBps(1n, 0n)).toBeUndefined()
+  })
+
+  it('the list matches on chain + adapter + token, all three', () => {
+    // The file ships empty, so nothing is listed — which is exactly the shipped default.
+    expect(REVIEWED_ADAPTERS).toHaveLength(0)
+    expect(reviewedAdapter('ethereum', '0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222')).toBeUndefined()
   })
 })

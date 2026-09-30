@@ -23,12 +23,16 @@ import type { ReadClient } from '../../core/client'
 import { sameAddress } from '../../core/encoding'
 import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
+import { lockedBps, reviewedAdapter, type AdapterStanding } from './adapters'
 import { dvnInfo, judgeDvns } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
 import { THIN_GAS_RATIO } from './v1'
 
 /** EndpointV2's channel and library manager, plus the OApp receive entry point. */
+/** `totalSupply` is not in core/abi.ts's erc20Abi, and this is the only place that needs it. */
+const supplyAbi = parseAbi(['function totalSupply() view returns (uint256)'])
+
 const v2Abi = parseAbi([
   'struct Origin { uint32 srcEid; bytes32 sender; uint64 nonce; }',
   'struct UlnConfig { uint64 confirmations; uint8 requiredDVNCount; uint8 optionalDVNCount; uint8 optionalDVNThreshold; address[] requiredDVNs; address[] optionalDVNs; }',
@@ -408,6 +412,50 @@ async function checkRecentChanges(c: V2RiskContext): Promise<Outcome> {
 }
 
 /** Runs all eight checks in parallel and returns the input the fold takes. */
+/**
+ * §Adapter The source adapter's standing, or undefined when the source is a plain OFT.
+ *
+ * Both numbers come from contracts the adapter's deployer does not write: the balance and supply
+ * are read from the REAL token, and the nonces from the EndpointV2 that probeOft has just confirmed
+ * is LayerZero's. A read that fails stays `undefined`, which adapters.adapterSignsOk() treats as a
+ * failure rather than a pass.
+ */
+async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | undefined> {
+  // Only an adapter that takes an ALLOWANCE. `approvalRequired === false` means it never calls
+  // transferFrom, so no allowance is ever granted to it (guard 11 forbids one) and the
+  // impersonation this rule is about has nothing to spend. It also holds no reserve by design, so
+  // measuring its locked share would refuse a working bridge for a number that cannot apply:
+  // USDT0 on HyperEVM locks 0% of supply across 23k deliveries, and is not an approve risk at all.
+  if (c.info.kind !== 'OFTAdapter' || !c.info.approvalRequired) return undefined
+  const listed = !!reviewedAdapter(c.srcChain, c.info.oft, c.info.token)
+
+  const [held, supply] = await Promise.all([
+    attempt(c.srcClient.readContract({ address: c.info.token, abi: erc20Abi, functionName: 'balanceOf', args: [c.info.oft] }), undefined, 'adapter balance'),
+    attempt(c.srcClient.readContract({ address: c.info.token, abi: supplyAbi, functionName: 'totalSupply' }), undefined, 'token supply'),
+  ])
+
+  // Summed over every peer this adapter has, not just the selected route: a legitimate adapter can
+  // have a brand-new route with no history while being heavily used elsewhere.
+  const nonces = await Promise.all(
+    c.info.routes.map((r) =>
+      attempt(
+        c.srcClient.readContract({ address: c.info.endpoint, abi: v2Abi, functionName: 'outboundNonce', args: [c.info.oft, r.eid, r.peer] }),
+        undefined,
+        'outbound nonce',
+      ),
+    ),
+  )
+  // One unreadable route makes the sum unknown rather than smaller — a partial sum could fail the
+  // floor for a reason that has nothing to do with the adapter.
+  const outboundNonce = nonces.every((n) => n.ok) ? nonces.reduce((t, n) => t + BigInt(n.ok ? n.value : 0n), 0n) : undefined
+
+  return {
+    listed,
+    lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined,
+    outboundNonce,
+  }
+}
+
 export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
   const runners: [CheckId, Promise<Outcome>][] = [
     ['peers', checkPeers(c)],
@@ -434,8 +482,10 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
     checks[id] = outcome.state
     if (outcome.extra) extra = { ...extra, ...outcome.extra }
   }
+  const adapter = await adapterStanding(c)
   return {
     checks,
+    ...(adapter ? { adapter } : {}),
     unverifiedStandard: false,
     deprecatedVerifier: false,
     unknownInfra: false,
