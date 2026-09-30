@@ -12,6 +12,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { erc20Abi } from '@/core/abi'
+import { riskTickScope, tickCovers } from '@/core/riskTick'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
 import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
@@ -73,7 +74,8 @@ export function CcipApp({
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
-  const [risksAccepted, setRisksAccepted] = useState(false)
+  // The scope the one tick was given for (core/riskTick.ts); it counts only while that is still what is on screen.
+  const [tickedFor, setTickedFor] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
@@ -206,10 +208,23 @@ export function CcipApp({
     customRpc: stored.customRpc,
   })
   const planData = plan.data
-  // The tick covers what was on screen when it was ticked: token, route, amount, recipient.
+  // The tick covers what was on screen when it was ticked: chain, token, route, amount, recipient
+  // and wallet. Any of them changing is a different scope.
+  const tickScope = riskTickScope({
+    chain: src.key,
+    contract: planData?.token,
+    destination: planData?.dst.chain,
+    amount: planData?.amount,
+    recipient: planData?.recipient,
+    sender: wallet,
+  })
+  const risksAccepted = tickCovers(tickedFor, tickScope)
+  const setRisksAccepted = (v: boolean) => setTickedFor(v ? tickScope : null)
+  // Derived state already ignores a stale tick; this also forgets it, so coming back to an earlier
+  // amount does not revive a tick given before the warnings on screen were last looked at.
   useEffect(() => {
-    setRisksAccepted(false)
-  }, [planData?.token, planData?.dst.chain, planData?.amount, planData?.recipient])
+    if (tickedFor !== null && tickedFor !== tickScope) setTickedFor(null)
+  }, [tickedFor, tickScope])
 
   // A fee the user accepted was a specific number; the moment it changes they have not read it.
   const planValue = plan.data?.value
