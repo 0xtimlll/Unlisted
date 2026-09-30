@@ -12,6 +12,7 @@ import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
+import { sameAddress } from '@/core/encoding'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
 import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
@@ -206,14 +207,21 @@ export function BridgeV1({
   const sendWrite = useWriteContract()
 
   const onApprove = () => {
-    if (!approveIntent) return
     setTxError('')
+    // Re-derive at click time and re-check the spender, exactly as the other three tabs do
+    // (BridgeApp, NttApp, CcipApp). `approveIntent` above is a render value; this is the one that
+    // reaches the wallet, so this is where it has to be true.
+    if (!planData) return
+    const intent = v1ApprovePlan(planData, info.approvalRequired, allowance.data)
+    if (!intent) return
+    if (!sameAddress(intent.spender, info.oft) || !sameAddress(intent.token, info.token)) return
+    if (intent.amount !== planData.amounts.amountLD) return
     approveWrite.writeContract(
       {
-        address: approveIntent.token,
+        address: intent.token,
         abi: erc20Abi,
         functionName: 'approve',
-        args: [approveIntent.spender, approveIntent.amount],
+        args: [intent.spender, intent.amount],
         chainId: src.chainId,
       },
       {
