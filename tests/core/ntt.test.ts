@@ -17,9 +17,12 @@ import { verifyNttManager, type NttVerification, verifyNttManagerQuorum } from '
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
 import type { ReadClient } from '@/core/client'
 
-const MANAGER = getAddress('0x7926d63feb9b950908b297cc995b6853bca21847')
-const DST_MANAGER = getAddress('0xbc51f76178a56811fdfe95d3897e6ac2b11dbb62')
-const TOKEN = getAddress('0x88909d489678dd17aa6d9609f89b0419bf78fd9a')
+// Synthetic on purpose. These used to be the real L3 addresses, which silently coupled the tests
+// to mainnet: once locking-hubs.json gained the real L3 hub, the "unlisted hub" case started
+// passing because the fixture WAS listed. A test about the rule must not depend on the roster.
+const MANAGER = getAddress('0xaaaaaaa000000000000000000000000000000001')
+const DST_MANAGER = getAddress('0xbbbbbbb000000000000000000000000000000002')
+const TOKEN = getAddress('0xccccccc000000000000000000000000000000003')
 const DST_TOKEN = getAddress('0x1111111111111111111111111111111111111111')
 const TRANSCEIVER = getAddress('0x6c55f346c20ca2b0c62e30790907f0a41c978ccc')
 const WALLET = getAddress('0xb264e4c4a5f1b0e9ac7b2b7b8b7b8b7b8b7be0a9')

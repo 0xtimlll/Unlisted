@@ -14,30 +14,11 @@
 import { getAddress, isAddress, type Address } from 'viem'
 import type { ChainKey } from '../../core/chains.ts'
 import { sanitizeText } from '../../core/text.ts'
-import { WORMHOLESCAN_API } from './chains.ts'
+import { COINGECKO_PLATFORM, WORMHOLESCAN_API } from './chains.ts'
 
-export { WORMHOLESCAN_API }
+export { COINGECKO_PLATFORM, WORMHOLESCAN_API }
 export const TOKEN_LIST_URL = `${WORMHOLESCAN_API}/api/v1/native-token-transfer/token-list?withLinks=false`
 
-/**
- * CoinGecko asset-platform ids, which is how the list keys its `platforms` map. A wrong entry here
- * can only ever fail to find a token (the address must still match exactly), never match the wrong
- * one — so this mapping cannot turn into an approval for something else.
- */
-export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
-  ethereum: 'ethereum',
-  bsc: 'binance-smart-chain',
-  polygon: 'polygon-pos',
-  avalanche: 'avalanche',
-  arbitrum: 'arbitrum-one',
-  optimism: 'optimistic-ethereum',
-  base: 'base',
-  linea: 'linea',
-  scroll: 'scroll',
-  hyperevm: 'hyperevm',
-  robinhood: 'robinhood',
-  solana: 'solana',
-}
 
 export type NttToken = {
   symbol: string

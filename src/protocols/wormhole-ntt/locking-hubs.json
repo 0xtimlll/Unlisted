@@ -1,5 +1,78 @@
 {
-  "generated": "",
+  "generated": "2026-09-30",
   "source": "scripts/update-ntt-hubs.ts",
-  "hubs": []
+  "hubs": [
+    {
+      "chain": "base",
+      "manager": "0x0A4BE3Db775Da63ceA7713f78A338D9656E69D5D",
+      "token": "0xf587B7116879a529353Cc71eE959cD69FD5CAE48",
+      "symbol": "CGETH.HASHKEY",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "base",
+      "manager": "0x429410525068b694160d686Eacf72Ce12B665991",
+      "token": "0x8d2757EA27AaBf172DA4CCa4e5474c76016e3dC5",
+      "symbol": "CLBTC",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "bsc",
+      "manager": "0x352c0Dc3DFa358F205dBc8ca40A64fb0265c5461",
+      "token": "0x10D4183389e99233db3cc981c43443Ebd28Ebd5e",
+      "symbol": "dgai",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "ethereum",
+      "manager": "0xFB9Cbb83FF576F0530f1BE277dDbD4064bd2717b",
+      "token": "0x90685e300A4c4532EFCeFE91202DfE1Dfd572F47",
+      "symbol": "Cross The Ages",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "ethereum",
+      "manager": "0x7926D63FEb9b950908b297cC995B6853bCA21847",
+      "token": "0x88909D489678dD17aA6D9609F89B0419Bf78FD9a",
+      "symbol": "L3",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "ethereum",
+      "manager": "0xBfdc5171Cf63acE266aF9cA06DAD6301Ef6455d3",
+      "token": "0xcE246eEa10988C495B4A90a905Ee9237a0f91543",
+      "symbol": "VCX",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "ethereum",
+      "manager": "0x608298b58952474DE9760fbF91b164738229520C",
+      "token": "0x81f8f0bb1cB2A06649E51913A151F0E7Ef6FA321",
+      "symbol": "VITA",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "ethereum",
+      "manager": "0xb948a93827d68a82F6513Ad178964Da487fe2BD9",
+      "token": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "symbol": "wstETH",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    },
+    {
+      "chain": "ethereum",
+      "manager": "0xa4489105efa4b029485d6bd3A4f52131baAE4B1B",
+      "token": "0xEaE00D6F9B16Deb1BD584c7965e4c7d762f178a1",
+      "symbol": "XBG",
+      "addedAt": "2026-09-30",
+      "source": "wormholescan token-list + on-chain getMode/token/chainId"
+    }
+  ]
 }
