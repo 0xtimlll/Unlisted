@@ -7,6 +7,8 @@
  * does not — a `bytes` recipient, adapter params, a stuck-payload check on the destination — lives
  * here, and the V2 screen is left exactly as it was.
  */
+import { shownFailures } from '@/core/severity'
+import { RiskWarnings } from './components/RiskWarnings'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
@@ -112,6 +114,7 @@ export function BridgeV1({
   )
   const [riskOverride, setRiskOverride] = useState('')
   const [adapterRiskAccepted, setAdapterRiskAccepted] = useState(false)
+  const [risksAccepted, setRisksAccepted] = useState(false)
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
   // The contract decided at probe time; a route change never re-opens that question.
@@ -175,6 +178,10 @@ export function BridgeV1({
   useEffect(() => {
     setAdapterRiskAccepted(false)
   }, [info.oft, dstKey, planData?.amounts.amountLD])
+  // The one tick covers what was on screen when it was ticked, recipient included.
+  useEffect(() => {
+    setRisksAccepted(false)
+  }, [info.oft, dstKey, planData?.amounts.amountLD, planData?.recipient])
 
   const last6Ok = !recipientCustom || (recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6)))
 
@@ -207,8 +214,12 @@ export function BridgeV1({
     testLimitLD: limitLD,
     riskOverride,
     adapterRiskAccepted,
+    risksAccepted,
   }
   const report = runV1Guards(guardInput)
+  // Reads in flight are "checking", not problems to accept.
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
 
   const approveWrite = useWriteContract()
   const sendWrite = useWriteContract()
@@ -495,12 +506,20 @@ export function BridgeV1({
         <V1Checks results={report.results} />
 
         {txError ? <Alert kind="error">{txError}</Alert> : null}
+        <RiskWarnings
+          blocks={shownBlocks}
+          warnings={shownWarnings}
+          label={(c) => GUARD_LABEL(d, c)}
+          accepted={risksAccepted}
+          onAccepted={setRisksAccepted}
+        />
         {chainMismatch ? (
           <Button variant="cta" disabled={switching} onClick={() => switchChain({ chainId: src.chainId })}>
             {fmt(d.ui.cta_switch, { chain: src.name })}
           </Button>
         ) : approveIntent ? (
-          <Button variant="cta" disabled={approveWrite.isPending} onClick={onApprove}>
+          // The approve grants an allowance, so it waits for the same tick the send does.
+          <Button variant="cta" disabled={approveWrite.isPending || !report.warningsCleared} onClick={onApprove}>
             {approveWrite.isPending ? (
               <>
                 <Spinner /> {d.ui.cta_checking}

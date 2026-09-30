@@ -101,6 +101,8 @@ export type CcipGuardReport = {
   blocks: CcipGuardResult[]
   /** Failures the single tick covers, strongest first (core/severity.ts). */
   riskWarnings: CcipGuardResult[]
+  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
+  warningsCleared: boolean
   results: CcipGuardResult[]
   canSend: boolean
   /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */

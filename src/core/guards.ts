@@ -174,6 +174,8 @@ export type GuardReport = {
   blocks: GuardResult[]
   /** Failures the single tick covers, strongest first (core/severity.ts). */
   riskWarnings: GuardResult[]
+  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
+  warningsCleared: boolean
   results: GuardResult[]
   /** Soft flags (§6.16). Shown, never block. */
   warnings: SuspiciousFlag[]

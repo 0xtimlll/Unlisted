@@ -43,6 +43,8 @@ import { useProbeV1 } from './v1Hooks'
 import { ProbeV1Error } from '@/protocols/lz-v1/detect'
 import { useV2RouteRisk } from './riskHooks'
 import { RiskPanel } from './components/RiskPanel'
+import { RiskWarnings } from './components/RiskWarnings'
+import { shownFailures } from '@/core/severity'
 import { markRouteVerified, rememberedTestLimit, rememberTestLimit, testLimitLD } from '@/protocols/lz-risk'
 
 const EMPTY_DEST: DestinationState = {
@@ -111,6 +113,7 @@ export function BridgeApp({
   const [pdaAccepted, setPdaAccepted] = useState(false)
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   const [adapterRiskAccepted, setAdapterRiskAccepted] = useState(false)
+  const [risksAccepted, setRisksAccepted] = useState(false)
   // §4 The test-amount limit is remembered per token (there is no default — see testLimit.ts); the
   // confirmation word is per transfer, because it is an answer about this one.
   const [testLimit, setTestLimit] = useState('')
@@ -148,6 +151,7 @@ export function BridgeApp({
     setPdaAccepted(false)
     setHighFeeAccepted(false)
     setAdapterRiskAccepted(false)
+    setRisksAccepted(false)
     setTestLimit('')
     setRiskOverride('')
     setSent(null)
@@ -452,6 +456,11 @@ export function BridgeApp({
   useEffect(() => {
     setAdapterRiskAccepted(false)
   }, [acceptedFor, dest.dstEid, planData?.amounts.amountLD])
+  // The one tick covers what was on screen when it was ticked. The token, the route, the amount and
+  // the recipient are all part of that, so any of them changing takes the acceptance with it.
+  useEffect(() => {
+    setRisksAccepted(false)
+  }, [acceptedFor, dest.dstEid, planData?.amounts.amountLD, planData?.recipient])
 
   const baseInput: GuardInput = useMemo(
     () => ({
@@ -528,6 +537,7 @@ export function BridgeApp({
     testLimitLD: limitLD,
     riskOverride,
     adapterRiskAccepted,
+    risksAccepted,
   }
   const report = runGuards(fullInput)
 
@@ -614,6 +624,10 @@ export function BridgeApp({
   const chainMismatch = !svmSource && wallet !== undefined && walletChainId !== undefined && evmSrc !== undefined && walletChainId !== evmSrc.chainId
   // Explain the real blocker first; a read still in flight is only shown when nothing else is wrong.
   const firstFailing = report.results.find((r) => !r.ok && !isPending(r)) ?? report.results.find((r) => !r.ok)
+  // Reads in flight are "checking", not problems: they resolve on their own and there is nothing
+  // in them to accept. Only shown once a plan exists, so an empty form is not a wall of red.
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
   const cta: CtaState = !sender
     ? { kind: 'connect' }
     : chainMismatch
@@ -630,7 +644,7 @@ export function BridgeApp({
                 ? planError
                   ? { kind: 'send', enabled: false, reason: describeError(d, planError) }
                   : { kind: 'quote' }
-                : approveIntent
+                : approveIntent && report.warningsCleared
                   ? { kind: 'approve', intent: approveIntent }
                   : !report.canSend && report.results.every((r) => r.ok || isPending(r))
                     ? { kind: 'checking' }
@@ -739,6 +753,13 @@ export function BridgeApp({
       ) : null}
 
       <div className="pt-1">
+        <RiskWarnings
+          blocks={shownBlocks}
+          warnings={shownWarnings}
+          label={(c) => d.guard[c as keyof typeof d.guard] ?? c}
+          accepted={risksAccepted}
+          onAccepted={setRisksAccepted}
+        />
         <Cta state={cta} info={info} busy={busy} busyLabel={busyLabel} onClick={onCta} error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')} />
       </div>
     </>

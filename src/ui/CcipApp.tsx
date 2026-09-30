@@ -6,6 +6,8 @@
  * the pool, never from the token, never from anything typed here. The pool is only used to learn
  * where the token can go and what the rate limits are.
  */
+import { shownFailures } from '@/core/severity'
+import { RiskWarnings } from './components/RiskWarnings'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
@@ -71,6 +73,7 @@ export function CcipApp({
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
+  const [risksAccepted, setRisksAccepted] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
@@ -186,6 +189,7 @@ export function CcipApp({
   // §Address book. CCIP bridges EVM to EVM; derived rather than hard-coded, as in the NTT tab.
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
+
   const recipientConfirmed =
     recipientCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6))
 
@@ -202,6 +206,10 @@ export function CcipApp({
     customRpc: stored.customRpc,
   })
   const planData = plan.data
+  // The tick covers what was on screen when it was ticked: token, route, amount, recipient.
+  useEffect(() => {
+    setRisksAccepted(false)
+  }, [planData?.token, planData?.dst.chain, planData?.amount, planData?.recipient])
 
   // A fee the user accepted was a specific number; the moment it changes they have not read it.
   const planValue = plan.data?.value
@@ -223,6 +231,7 @@ export function CcipApp({
     recipientIsCustom: recipientCustom,
     customRecipientConfirmed: recipientConfirmed,
     recipientLookalike: bookRefuses(bookVerdict),
+    risksAccepted,
     tokenBalance: tokenBalance.data,
     nativeBalance: nativeBalance.data?.value,
     allowance: allowance.data,
@@ -308,6 +317,9 @@ export function CcipApp({
   const chainMismatch = wallet !== undefined && walletChainId !== undefined && evmSrc !== undefined && walletChainId !== evmSrc.chainId
   const busy = switching || approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading) || sendWrite.isPending
   const firstFailing = report.results.find((r) => !r.ok && !isCcipPending(r)) ?? report.results.find((r) => !r.ok)
+  // Reads in flight are "checking", not problems to accept.
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
   const ctaLabel = !wallet
     ? d.ui.cta_connect
     : chainMismatch
@@ -321,7 +333,9 @@ export function CcipApp({
             : approveIntent && meta.data
               ? fmt(d.step3.approveBtn, { amount: formatAmount(approveIntent.amount, meta.data.decimals), symbol: meta.data.symbol })
               : d.ui.cta_send
-  const ctaEnabled = !busy && (!wallet || chainMismatch || !!approveIntent || report.canSend)
+  // The approve grants an allowance, so it waits for the same tick the send does: an allowance
+  // given to a contract whose risk has not been accepted is the exploitable half of this app.
+  const ctaEnabled = !busy && (!wallet || chainMismatch || (!!approveIntent && report.warningsCleared) || report.canSend)
   const onCta = () => {
     if (!wallet) return openConnectModal?.()
     if (chainMismatch && evmSrc) return switchChain({ chainId: evmSrc.chainId })
@@ -499,6 +513,13 @@ export function CcipApp({
         <Button variant="cta" disabled={!ctaEnabled} onClick={onCta}>
           {busy ? <Spinner /> : ctaLabel}
         </Button>
+        <RiskWarnings
+          blocks={shownBlocks}
+          warnings={shownWarnings}
+          label={(c) => d.ccipGuard[c as keyof typeof d.ccipGuard] ?? c}
+          accepted={risksAccepted}
+          onAccepted={setRisksAccepted}
+        />
         {!report.canSend && firstFailing && !firstFailing.ok ? <div className="text-center text-xs text-muted">{d.ccipGuard[firstFailing.code]}</div> : null}
       </div>
     </>
