@@ -33,7 +33,7 @@ function cleanRisk(over: Parameters<typeof assessRisk>[0] | undefined = undefine
   return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
 }
 
-/** The verdict a route gets when a hard check could not be made: capped, and not overridable. */
+/** The verdict a route gets when a hard check could not be made: UNVERIFIED, a warning at the send screen. */
 
 function blockedRisk(): RouteRisk {
   const checks = {} as Record<CheckId, CheckState>

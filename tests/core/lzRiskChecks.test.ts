@@ -98,7 +98,7 @@ function plan(over: Partial<V1SendPlan> = {}): V1SendPlan {
 }
 
 describe('an RPC that does not answer', () => {
-  it('turns every check grey and the verdict into a capped one — never a row of ticks', async () => {
+  it('turns every check grey and the verdict into UNVERIFIED — never a row of ticks', async () => {
     const { input } = await assessV1Route({ info: info(), plan: plan(), srcClient: deadClient(), dstClient: deadClient() })
     for (const id of CHECK_IDS) {
       // `skipped` would be a claim that the check does not apply, which nothing here established.

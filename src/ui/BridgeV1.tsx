@@ -482,9 +482,6 @@ export function BridgeV1({
           risk={risk.data?.risk}
           loading={risk.isFetching}
           error={risk.error ? shortError(risk.error) : ''}
-          decimals={info.decimals}
-          symbol={info.symbol}
-          amountLD={planData?.amounts.amountLD}
         />
 
         <V1Checks results={report.results} />

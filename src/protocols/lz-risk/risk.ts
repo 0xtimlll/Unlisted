@@ -7,8 +7,10 @@
  *   1. **A check that did not run is not a check that passed.** `unchecked` is its own state, with
  *      the reason it did not run, and it is counted as neither.
  *   2. **A verdict is never better than its weakest hard check.** If one of the five hard checks
- *      could not be made, the route is held at UNVERIFIED — a test amount only. No checkbox lifts
- *      that; only a test transfer that is confirmed delivered does.
+ *      could not be made, the route is held at UNVERIFIED, whatever the others say. The tier is
+ *      honest, and it is only a tier: it decides how loudly guard 22 speaks (core/severity.ts
+ *      weighs `risk_blocked` as a possible loss), and the single tick is what sends the transfer,
+ *      any amount (CLAUDE.md rule 2). Nothing here caps an amount or refuses a send.
  *   3. **No colour without reasons.** Any verdict other than OK carries at least one concrete
  *      reason, and OK carries none. Asserted, not merely intended.
  *
@@ -47,7 +49,7 @@ export function isHard(id: CheckId): boolean {
 export type CheckState =
   /** Ran, and the answer was good. `note` is shown next to it when there is something to say. */
   | { status: 'pass'; note?: string }
-  /** Ran, and the answer was bad. A hard check in this state blocks the send outright. */
+  /** Ran, and the answer was bad. A hard check in this state puts the route at BLOCKED, the loudest tier. */
   | { status: 'fail'; reason: string }
   /**
    * Does not apply to this route — a destination that is not an adapter has no liquidity to check,
@@ -111,7 +113,7 @@ export type RiskInput = {
    *
    * Distinct from a blocked path: nothing is stuck in the endpoint, so the route works — a transfer
    * sent now simply queues behind these, because v1 and V2 both deliver in nonce order. That is a
-   * delay, not a loss, so it caps the amount rather than refusing the send.
+   * delay, not a loss, so it holds the tier at UNVERIFIED rather than at BLOCKED.
    */
   delayed: { packets: number; oldestMinutes: number } | undefined
   /** The destination simulation succeeded but with little gas headroom. */
@@ -127,9 +129,9 @@ export type RiskInput = {
    * times. A single endpoint that lies can pass all of them at once, which is exactly the fake-route
    * attack the indicator exists to catch.
    *
-   * So this is BLOCKED, not a cap: an uncorroborated link is not a small route, it is an unknown
-   * one, and a test amount into an unknown contract is still a loss. Nothing lifts it except
-   * another operator answering — see the note on `blocking` below.
+   * So this is BLOCKED, not UNVERIFIED: an uncorroborated link is not a small route, it is an
+   * unknown one, and a small amount into an unknown contract is still a loss. Nothing raises the
+   * tier except another operator answering. (The tier is a warning, not a refusal — see the header.)
    */
   linkCrossChecked: boolean
   /**
@@ -151,7 +153,7 @@ export type RouteRisk = {
   /** Never empty unless `tier` is OK. */
   reasons: Reason[]
   checks: Record<CheckId, CheckState>
-  /** Hard checks that could not be run. Non-empty means the amount is capped, whatever else holds. */
+  /** Hard checks that could not be run. Non-empty holds the tier at UNVERIFIED, whatever else passed. */
   hardUnchecked: CheckId[]
   /**
    * §Adapter The source is an OFTAdapter that is not on the reviewed list AND whose indirect
@@ -159,9 +161,9 @@ export type RouteRisk = {
    * case, where the signals are fine and only the listing is missing.
    *
    * It is NOT a block: a new token's adapter looks exactly like this on its first day, and refusing
-   * it outright would make the app unusable for anything young. The route is capped to a test
-   * amount, which needs nothing extra, and the full amount needs one explicit acknowledgement —
-   * which is what `overridable` is for. The panel prints the warning in red.
+   * it outright would make the app unusable for anything young. The panel prints the warning in
+   * red, guard 22 carries it as `adapter_unproven` (weighed as a possible loss), and the single tick
+   * covers it like every other warning. The advice to send a test amount first stays advice.
    */
   adapterUnproven: boolean
 }
@@ -173,12 +175,12 @@ export type RouteRisk = {
  * that acts on them and this is where a reader comes to find out what a verdict means.
  *
  *   under 30 minutes   traffic in flight. Messages take minutes to verify; a queue that young says
- *                      nothing and caps nothing.
- *   30 to 60 minutes   slow. The amount is capped at a test, and the confirmation word lifts it —
- *                      the route is working, ours is simply behind a few that are still moving.
+ *                      nothing.
+ *   30 to 60 minutes   slow. The route is held at UNVERIFIED with a reason that says the route is
+ *                      working and ours is simply behind a few that are still moving.
  *   over 60 minutes    packets that have sat for an hour are not moving. Verification may have
  *                      stopped on this route, and in that case a transfer sent now joins the queue
- *                      rather than passing it. No typed word lifts that; only a test that arrives.
+ *                      rather than passing it. Same tier, a plainer sentence; the person decides.
  */
 export const INFLIGHT_GRACE_MINUTES = 30
 export const STOPPED_VERIFICATION_MINUTES = 60
@@ -208,9 +210,10 @@ function worse(a: Tier, b: Tier): Tier {
 /**
  * §4: fold the checks and flags into one verdict.
  *
- * Read the order: hard failures first (nothing after them can improve the answer), then the caps,
- * then the warnings. A cap and a warning can both apply; the cap wins because it is the stricter
- * statement about the same route.
+ * Read the order: hard failures first (nothing after them can improve the answer), then what holds
+ * the tier at UNVERIFIED, then what holds it at CAUTION. Several can apply; the worst tier wins
+ * because it is the stricter statement about the same route. The tier is a sentence for guard 22,
+ * never a cap on the amount (see the header).
  */
 export function assessRisk(i: RiskInput): RouteRisk {
   const reasons: Reason[] = []
@@ -254,7 +257,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
 
   let tier: Tier = 'OK'
 
-  // ---- the caps: at most UNVERIFIED -----------------------------------------
+  // ---- what holds the tier at UNVERIFIED ---------------------------------------
   const hardUnchecked = hardUncheckedOf(i)
   if (hardUnchecked.length > 0) {
     for (const id of hardUnchecked) {
@@ -263,14 +266,13 @@ export function assessRisk(i: RiskInput): RouteRisk {
     }
     tier = worse(tier, 'UNVERIFIED')
   }
-  // §Adapter Two cases, and they differ in what lifts the cap rather than in how much may go.
+  // §Adapter Two cases, and they differ in how loudly the panel speaks, not in what may go.
   //
-  //   signals fine, not listed   the app has partial evidence and wants the rest of it: only a
-  //                              test transfer that actually arrives lifts the cap. A word does not.
+  //   signals fine, not listed   the app has partial evidence: amber, with the reason spelled out.
   //   signals weak or unreadable the app has nothing. It says so in red and hands the decision over
   //                              — a new token's adapter is indistinguishable from a fake on day
-  //                              one, so this cannot be a refusal. A test amount needs nothing; the
-  //                              full amount needs one acknowledgement.
+  //                              one, so this cannot be a refusal. Guard 22 carries it as a
+  //                              warning; the single tick covers it.
   let adapterUnproven = false
   if (i.adapter && !i.adapter.listed) {
     if (adapterSignsOk(i.adapter)) {
@@ -286,7 +288,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
     }
   }
   if (i.unverifiedStandard) {
-    reasons.push({ text: 'this contract’s standard has never been verified against a live deployment, so only a test amount goes out on it' })
+    reasons.push({ text: 'this contract’s standard has never been verified against a live deployment by this app — a test amount first is advisable' })
     tier = worse(tier, 'UNVERIFIED')
   }
   if (i.delayed) {
@@ -299,8 +301,8 @@ export function assessRisk(i: RiskInput): RouteRisk {
       check: 'path',
     })
     tier = worse(tier, 'UNVERIFIED')
-    // An hour of no movement is not "slow", it is evidence that nothing is moving. A word cannot
-    // stand in for the delivery that has not happened; only a test that arrives can.
+    // An hour of no movement is not "slow", it is evidence that nothing is moving; the sentence
+    // above says so, and the decision is the person's (CLAUDE.md rule 2).
   }
   const h = i.history
   if (h.kind === 'never') {
@@ -330,8 +332,8 @@ export function assessRisk(i: RiskInput): RouteRisk {
   // A verifier nobody has published is worth saying, and the route's own history decides how
   // loudly: something that has actually been delivered through that verifier is evidence the
   // infrastructure works, which is more than a name in a list would have told us. Nothing arriving
-  // in a window we did search is the case with no such evidence, and only that caps the amount. A
-  // window we could not search says neither, so it does not cap — §4's first rule.
+  // in a window we did search is the case with no such evidence, and only that holds the tier at
+  // UNVERIFIED. A window we could not search says neither, so it does not — §4's first rule.
   if (i.unknownInfra) {
     const delivered = h.kind === 'delivered'
     const searchedAndFoundNothing = h.kind === 'never' || h.kind === 'none_in_window'
@@ -366,9 +368,6 @@ export function assessRisk(i: RiskInput): RouteRisk {
   }
   // A soft check that outright failed cannot leave the verdict at OK either.
   if (reasons.length > 0) tier = worse(tier, 'CAUTION')
-
-  // ---- a delivered test lifts the cap, and nothing else does -------------------
-
 
   // Rule 3, enforced rather than trusted: a colour with nothing to say is a colour we do not show.
   if (tier !== 'OK' && reasons.length === 0) {

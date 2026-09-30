@@ -799,9 +799,6 @@ export function BridgeApp({
                 notCovered={!riskCovered}
                 loading={risk.isFetching}
                 error={risk.error ? shortError(risk.error) : ''}
-                decimals={info?.decimals ?? 18}
-                symbol={info?.symbol ?? ''}
-                amountLD={planData?.amounts.amountLD}
               />
               <Checks
                 report={report}

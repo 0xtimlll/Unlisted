@@ -44,8 +44,9 @@ export type V1Standard = { wire: V1Wire; kind: V1Kind }
  * `bytes` is implemented and unit-tested, but no live `OFT` / `ProxyOFT` was found to test it on:
  * every v1 sender still moving is a `bytes32` standard or Stargate (see docs/TODO.md for how it was
  * searched for). That is not a reason to drop the standard — it is a reason not to pretend the code
- * has been proven. A route on an unverified standard is held at UNVERIFIED by the risk indicator, so
- * only a test amount goes out on it, whatever every other check says.
+ * has been proven. A route on an unverified standard is held at UNVERIFIED by the risk indicator,
+ * whatever every other check says: a warning the single tick covers, with a reason that advises a
+ * test amount first (CLAUDE.md rule 2 — the app warns, the person decides).
  *
  * Removing an entry here is a claim that a real contract of that shape is covered by
  * tests/integration/lzv1.live.test.ts. Nothing else may remove it.

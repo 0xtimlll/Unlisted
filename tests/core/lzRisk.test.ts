@@ -3,8 +3,9 @@
  *
  * This is the file that decides whether a colour on screen means anything, so it is written as a
  * set of claims about the rule rather than a walk through the code: a check that did not run never
- * counts as passed, a hard check that did not run caps the amount and no typed word lifts that, and
- * a verdict never appears without the reasons behind it.
+ * counts as passed, a hard check that did not run holds the tier at UNVERIFIED whatever else passed
+ * (the tier is a warning at the send screen, never a cap — CLAUDE.md rule 2), and a verdict never
+ * appears without the reasons behind it.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -77,11 +78,11 @@ describe('the shape of the rule', () => {
     expect(corroborated.hardUnchecked.length).toBe(HARD_CHECKS.length)
   })
 
-  it('an uncorroborated contract is BLOCKED, not merely capped', () => {
+  it('an uncorroborated contract is BLOCKED, not merely UNVERIFIED', () => {
     // Everything passed — but only one operator ever answered, so "everything" is one story.
     const r = assessRisk(clean({ linkCrossChecked: false }))
     expect(r.tier).toBe('BLOCKED')
-    // Not a cap: §4 gives a blocked route no allowance at all, test amount included.
+    // BLOCKED is the loudest tier, not a refusal: guard 22 says it as a warning the single tick covers.
     expect(r.reasons.some((x) => /independent RPC operator/.test(x.text))).toBe(true)
     // The same route with a second operator behind it is the OK it looked like.
     expect(assessRisk(clean()).tier).toBe('OK')
@@ -156,7 +157,7 @@ describe('BLOCKED is facts only, and takes nothing at all', () => {
     const r = assessRisk(withCheck(clean(), id, { status: 'fail', reason: 'the peer does not point back' }))
     expect(r.tier).toBe('BLOCKED')
     expect(r.reasons.some((x) => x.check === id)).toBe(true)
-    // Not even a test amount.
+    // The tier is a warning at the send screen, not a cap (CLAUDE.md rule 2).
   })
 
   it('a deprecated verifier blocks, whether it is a DVN or a v1 oracle', () => {
@@ -176,16 +177,16 @@ describe('BLOCKED is facts only, and takes nothing at all', () => {
   })
 })
 
-describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
-  it.each(HARD_CHECKS)('a hard check that could not run (%s) caps the amount and no word lifts it', (id) => {
+describe('what holds the tier at UNVERIFIED', () => {
+  it.each(HARD_CHECKS)('a hard check that could not run (%s) holds the tier at UNVERIFIED', (id) => {
     const r = assessRisk(withCheck(clean(), id, { status: 'unchecked', reason: 'destination RPC did not answer' }))
     expect(r.tier).toBe('UNVERIFIED')
     // The reason is shown, with why it could not be checked.
     expect(r.reasons.some((x) => x.check === id && /not checked: destination RPC did not answer/.test(x.text))).toBe(true)
-    // Below the limit: fine. Above it: refused, and the confirmation word changes nothing.
+    // Guard 22 says this as risk_unverified, a warning the single tick covers.
   })
 
-  it('an unverified standard caps the amount, whatever else passed', () => {
+  it('an unverified standard holds the tier at UNVERIFIED, whatever else passed', () => {
     const r = assessRisk(clean({ unverifiedStandard: true }))
     expect(r.tier).toBe('UNVERIFIED')
     expect(r.reasons.some((x) => /never been verified against a live deployment/.test(x.text))).toBe(true)
@@ -199,7 +200,7 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     expect(r.reasons.some((x) => /deliveries have gone through it/.test(x.text))).toBe(true)
   })
 
-  it('an unpublished verifier caps the amount only when nothing has arrived in a window we searched', () => {
+  it('an unpublished verifier holds the tier at UNVERIFIED only when nothing has arrived in a window we searched', () => {
     for (const history of [{ kind: 'never' } as const, { kind: 'none_in_window', days: 12 } as const]) {
       const r = assessRisk(clean({ unknownInfra: true, history }))
       expect(r.tier, JSON.stringify(history)).toBe('UNVERIFIED')
@@ -219,7 +220,7 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     expect(r.reasons).toEqual([])
   })
 
-  it('a queue younger than an hour caps the amount, and the word lifts it', () => {
+  it('a queue younger than an hour holds the tier at UNVERIFIED with the milder sentence', () => {
     const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: STOPPED_VERIFICATION_MINUTES - 1 } }))
     expect(r.tier).toBe('UNVERIFIED')
     expect(r.reasons.some((x) => /3 packet\(s\).*not been delivered.*queues behind/.test(x.text))).toBe(true)
@@ -227,7 +228,7 @@ describe('UNVERIFIED caps the amount, and what may lift the cap', () => {
     expect(r.checks.path.status).toBe('pass')
   })
 
-  it('a queue older than an hour is not something a word can lift', () => {
+  it('a queue older than an hour gets the plainer sentence: verification may have stopped', () => {
     // An hour of no movement is not "slow" — it is evidence that nothing is moving, and the only
     // thing that answers it is a test transfer that arrives.
     const r = assessRisk(clean({ delayed: { packets: 3, oldestMinutes: STOPPED_VERIFICATION_MINUTES + 1 } }))
@@ -369,7 +370,7 @@ describe('an adapter is trusted by the committed list, or not at all', () => {
     expect(r.adapterUnproven).toBe(false)
   })
 
-  it('healthy signals but no listing is amber, capped, and not overridable by a word', () => {
+  it('healthy signals but no listing is amber — never green', () => {
     const r = assessRisk(clean({ adapter: standing() }))
     expect(r.tier).toBe('UNVERIFIED')
     // The wording must not read as "checked".

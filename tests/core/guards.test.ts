@@ -449,7 +449,7 @@ describe('17. destination peer points back', () => {
   it('unknown → blocks (still loading)', () => {
     expect(code(g17PeerBack(goodInput({ peerBack: undefined })))).toBe('peer_back_unknown')
   })
-  it('mismatch → hard block, no override', () => {
+  it('mismatch → peer_back_mismatch, and the acceptance flag does not turn it into ok', () => {
     const r = g17PeerBack(goodInput({ peerBack: { status: 'mismatch', theirPeer: `0x${'0'.repeat(64)}` }, peerBackUnavailableAccepted: true }))
     expect(code(r)).toBe('peer_back_mismatch')
   })
