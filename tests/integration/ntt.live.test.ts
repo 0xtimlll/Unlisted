@@ -54,7 +54,7 @@ describe('NTT against mainnet', () => {
     expect(withDst).toMatchObject({ kind: 'manager', manager: HUB_MANAGER, via: 'peer' })
   })
 
-  it('verifies the hub, anchored by the token on the spoke', async () => {
+  it('verifies the hub — from the committed list, not from the far side', async () => {
     const list = await fetchNttTokenList()
     const r = await verifyNttManager({ srcChain: 'ethereum', dstChain: 'bsc', manager: HUB_MANAGER, srcClient: eth(), dstClient: bsc(), tokenList: list })
     expect(r.ok).toBe(true)
@@ -62,8 +62,12 @@ describe('NTT against mainnet', () => {
     expect(r.verified.token).toBe(HUB_TOKEN)
     expect(r.verified.mode).toBe('locking')
     expect(r.verified.dst.manager).toBe(SPOKE_MANAGER)
-    // The hub mints nothing, so the anchor has to come from the other side.
-    expect(r.verified.anchor).toEqual({ side: 'destination', kind: 'minter' })
+    // The hub mints nothing, so no token can vouch for it. It used to be accepted on the spoke's
+    // anchor, which we reach only through this hub's own getPeer() — the hole that let a fake
+    // manager supply both halves. Now the committed list is what speaks for it, and the far-side
+    // anchor survives only as context.
+    expect(r.verified.anchor).toEqual({ side: 'listed', kind: 'committed' })
+    expect(r.verified.alsoOnDestination).toBe(true)
   })
 
   it('refuses an address that is not this token’s manager', async () => {

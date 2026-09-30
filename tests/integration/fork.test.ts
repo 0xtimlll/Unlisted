@@ -39,7 +39,7 @@ const oftSentEvent = parseAbi([
 function cleanRisk(): RouteRisk {
   const checks = {} as Record<CheckId, CheckState>
   for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
 }
 
 async function fullCheck(f: Fork, info: OftInfo, plan: EvmSendPlan, allowance: bigint | undefined, svm?: Partial<GuardInput>) {
