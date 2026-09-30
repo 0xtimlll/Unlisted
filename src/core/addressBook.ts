@@ -39,6 +39,18 @@ export type AddressBookEntry = {
   createdAt: number
   /** Set after a transfer to this address succeeds; absent until then. */
   lastUsedAt?: number
+  /**
+   * Came in through `previewImport` and has not been used since.
+   *
+   * An entry the user typed earned its place by having its tail confirmed. An imported one did
+   * not: the file could have come from anywhere, and a row in it can carry an attacker's address
+   * under a label the user trusts. So an imported entry is NOT a known address — it is a
+   * suggestion, and it has to be confirmed once, at the moment it is first used to send.
+   *
+   * `confirmImported` clears the flag after that transfer, and from then on it is an ordinary
+   * entry. The flag is absent rather than false on entries that never needed it.
+   */
+  imported?: boolean
 }
 
 export type AddressBook = { version: number; entries: AddressBookEntry[] }
@@ -124,15 +136,38 @@ export function findLookalike(book: AddressBook, family: AddressFamily, address:
 
 /** What the send form needs to know about a recipient, in one value. */
 export type BookVerdict =
+  /** In the book and vouched for: no tail needed. */
   | { kind: 'known'; entry: AddressBookEntry }
+  /** In the book, but it arrived by import and has never been confirmed. Tail required. */
+  | { kind: 'imported'; entry: AddressBookEntry }
   | { kind: 'lookalike'; entry: AddressBookEntry }
   | { kind: 'new' }
 
 export function lookUp(book: AddressBook, family: AddressFamily, address: string): BookVerdict {
   const exact = findEntry(book, family, address)
-  if (exact) return { kind: 'known', entry: exact }
+  if (exact) return exact.imported ? { kind: 'imported', entry: exact } : { kind: 'known', entry: exact }
   const alike = findLookalike(book, family, address)
   return alike ? { kind: 'lookalike', entry: alike } : { kind: 'new' }
+}
+
+/**
+ * Does the book alone settle the tail confirmation?
+ *
+ * Only `known` does. `imported` deliberately does not: that entry was suggested by a file, not
+ * vouched for by this user, and the whole point of the flag is that it still owes one confirmation.
+ */
+export function bookConfirms(v: BookVerdict | undefined): boolean {
+  return v?.kind === 'known'
+}
+
+/** Does the book refuse this recipient outright? Guard 3 turns this into a blocked send. */
+export function bookRefuses(v: BookVerdict | undefined): boolean {
+  return v?.kind === 'lookalike'
+}
+
+/** The entry a completed transfer should stamp — already trusted, or trusted as of this send. */
+export function entryToStamp(v: BookVerdict | undefined): AddressBookEntry | undefined {
+  return v?.kind === 'known' || v?.kind === 'imported' ? v.entry : undefined
 }
 
 // ------------------------------------------------------------------ mutations ----
@@ -191,6 +226,25 @@ export function removeEntry(book: AddressBook, id: string): AddressBook {
   return { ...book, entries: book.entries.filter((e) => e.id !== id) }
 }
 
+/**
+ * Clears `imported` after the user has confirmed the tail and sent to it once. From here on the
+ * entry is indistinguishable from one they typed themselves, because it has now earned the same
+ * thing: a human read its last six characters against the source.
+ */
+export function confirmImported(book: AddressBook, id: string): AddressBook {
+  return {
+    ...book,
+    entries: book.entries.map((e) => {
+      if (e.id !== id || !e.imported) return e
+      // Removed rather than set to false: absent is the shape every entry the user typed has, so
+      // the two cannot drift apart. Copying first keeps any future field intact.
+      const confirmed = { ...e }
+      delete confirmed.imported
+      return confirmed
+    }),
+  }
+}
+
 /** Records that a transfer to this entry succeeded. Absent entry: the book is returned unchanged. */
 export function touchEntry(book: AddressBook, id: string, now: number): AddressBook {
   return { ...book, entries: book.entries.map((e) => (e.id === id ? { ...e, lastUsedAt: now } : e)) }
@@ -229,7 +283,17 @@ export function parseEntry(raw: unknown, now: number): AddressBookEntry | undefi
   const id = typeof r['id'] === 'string' && r['id'].trim() !== '' ? sanitizeText(r['id'], 64) : newId()
   const createdAt = isFiniteNumber(r['createdAt']) ? r['createdAt'] : now
   const lastUsedAt = isFiniteNumber(r['lastUsedAt']) ? r['lastUsedAt'] : undefined
-  return { id: id || newId(), label, address, family, createdAt, ...(lastUsedAt !== undefined ? { lastUsedAt } : {}) }
+  return {
+    id: id || newId(),
+    label,
+    address,
+    family,
+    createdAt,
+    ...(lastUsedAt !== undefined ? { lastUsedAt } : {}),
+    // Survives a reload: an entry awaiting its first confirmation must not become trusted just
+    // because the page was refreshed. A file that sets it itself only ever adds caution.
+    ...(r['imported'] === true ? { imported: true as const } : {}),
+  }
 }
 
 /** Gives a fresh id to anything whose id is already taken, so one id always means one entry. */
@@ -317,7 +381,9 @@ export function previewImport(raw: unknown, book: AddressBook, now: number = Dat
     add.push(e)
   }
   // Ids that clash with the book's own, or with each other, are reissued before anything is shown.
-  return { add: dedupeIds(add, new Set(book.entries.map((e) => e.id))), duplicates, invalid }
+  // Everything an import brings in is marked: it has not been confirmed by this user yet.
+  const marked = dedupeIds(add, new Set(book.entries.map((e) => e.id))).map((e) => ({ ...e, imported: true as const }))
+  return { add: marked, duplicates, invalid }
 }
 
 /** Applies a preview the user accepted. */

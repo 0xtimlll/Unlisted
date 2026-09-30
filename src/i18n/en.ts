@@ -555,6 +555,9 @@ export const en = {
     pickNone: 'No saved addresses for this network',
     fromBook: 'From address book: {label}',
     newAddress: 'New address — it is not in your address book',
+    importedFirstUse:
+      'Imported address ("{label}") — confirm it the first time you use it. It came from a file, so nobody has checked it against its source yet.',
+    importedBadge: 'imported, not yet confirmed',
     lookalike: 'Looks like "{label}", but this is a DIFFERENT address. Possible address substitution.',
     lookalikeDetail: 'Saved as "{label}": {saved}',
     lookalikeBlocked: 'Sending is blocked. Check where you copied this address from and replace it.',

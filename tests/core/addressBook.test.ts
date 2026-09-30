@@ -9,6 +9,7 @@ import {
   AddressBookError,
   addressEdges,
   applyImport,
+  confirmImported,
   ADDRESS_BOOK_VERSION,
   entriesFor,
   EMPTY_BOOK,
@@ -236,5 +237,66 @@ describe('ids identify exactly one entry', () => {
     ] })
     expect(r.ok).toBe(true)
     if (r.ok) expect(new Set(r.book.entries.map((e) => e.id)).size).toBe(2)
+  })
+})
+
+describe('an imported entry is a suggestion until its first use confirms it', () => {
+  const A2 = '0x1111111111111111111111111111111111111111'
+  const file = (entries: unknown[]) => ({ version: 1, entries })
+
+  const withImported = (): AddressBook => {
+    const p = previewImport(file([{ label: 'Exchange', address: A2, family: 'evm' }]), { ...EMPTY_BOOK, entries: [] })
+    return applyImport({ ...EMPTY_BOOK, entries: [] }, p!)
+  }
+
+  it('import marks what it brings in', () => {
+    const b = withImported()
+    expect(b.entries).toHaveLength(1)
+    expect(b.entries[0]!.imported).toBe(true)
+  })
+
+  it('an unconfirmed imported address is NOT "known" — the tail is still required', () => {
+    const b = withImported()
+    const v = lookUp(b, 'evm', A2)
+    expect(v.kind).toBe('imported')
+    // The distinction that matters: it must not be the verdict that waives confirmation.
+    expect(v.kind).not.toBe('known')
+  })
+
+  it('after confirmation it becomes an ordinary entry, and stays one', () => {
+    const b = withImported()
+    const id = b.entries[0]!.id
+    const after = confirmImported(b, id)
+    expect(after.entries[0]!.imported).toBeUndefined()
+    expect(lookUp(after, 'evm', A2).kind).toBe('known')
+    // Next use asks for nothing again.
+    expect(lookUp(confirmImported(after, id), 'evm', A2).kind).toBe('known')
+  })
+
+  it('an entry the user typed is never marked, and needs no confirming', () => {
+    const b = addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Mine', address: A, family: 'evm' }, NOW)
+    expect(b.entries[0]!.imported).toBeUndefined()
+    expect(lookUp(b, 'evm', A).kind).toBe('known')
+  })
+
+  it('the flag survives a reload — a refresh must not launder an unconfirmed address', () => {
+    const b = withImported()
+    const back = parseBook(JSON.parse(exportBook(b)))
+    expect(back.ok).toBe(true)
+    if (back.ok) expect(lookUp(back.book, 'evm', A2).kind).toBe('imported')
+  })
+
+  it('an imported look-alike is still refused outright, not merely unconfirmed', () => {
+    const saved = '0x1234000000000000000000000000000000005678'
+    const twin = '0x1234ffffffffffffffffffffffffffffffff5678'
+    const b = addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Real', address: saved, family: 'evm' }, NOW)
+    const p = previewImport(file([{ label: 'Fake', address: twin, family: 'evm' }]), b)
+    // The import itself is allowed — the book may hold two addresses sharing their ends...
+    expect(p!.add).toHaveLength(1)
+    // ...but once it is in, it is an entry of its own, so it looks up as itself.
+    expect(lookUp(applyImport(b, p!), 'evm', twin).kind).toBe('imported')
+    // And a twin that is NOT in the book is still blocked.
+    const other = '0x1234aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa5678'
+    expect(lookUp(b, 'evm', other).kind).toBe('lookalike')
   })
 })

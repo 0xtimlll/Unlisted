@@ -6,6 +6,9 @@
  *
  *   known      the address is an entry. It was checked once, by hand, against its source, so the
  *              tail is not asked for again.
+ *   imported   in the book, but it arrived in a file rather than through the add form. Nobody has
+ *              confirmed it yet, and an imported row can carry an attacker's address under a label
+ *              the user trusts — so it is treated as new until its first send confirms it.
  *   new        not in the book. The tail must be confirmed, exactly as before the book existed.
  *   lookalike  not in the book, but shares its first four and last four characters with an entry.
  *              That is the signature of an address swap, and it is a refusal with no override.
@@ -14,12 +17,17 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import {
+  bookConfirms,
+  bookRefuses,
   entriesFor,
+  entryToStamp,
   lookUp,
-  type AddressBookEntry,
   type AddressFamily,
   type BookVerdict,
 } from '@/core/addressBook'
+
+// The rule itself lives in core/addressBook.ts; re-exported so the tabs keep one import.
+export { bookConfirms, bookRefuses, entryToStamp }
 import { fmt, useDict } from '@/i18n'
 import { useAddressBook } from '../addressBookContext'
 import { AddressBookDialog } from './AddressBookDialog'
@@ -33,21 +41,6 @@ export function useBookVerdict(family: AddressFamily | undefined, address: strin
   const ab = useAddressBook()
   if (!family || !address) return undefined
   return lookUp(ab.book, family, address)
-}
-
-/** The entry a successful transfer should stamp, or undefined when the recipient is not in the book. */
-export function entryOfVerdict(v: BookVerdict | undefined): AddressBookEntry | undefined {
-  return v?.kind === 'known' ? v.entry : undefined
-}
-
-/** True when the book alone settles the confirmation — a known address needs no tail. */
-export function bookConfirms(v: BookVerdict | undefined): boolean {
-  return v?.kind === 'known'
-}
-
-/** True when the book refuses this recipient outright. Guard 3 turns this into a blocked send. */
-export function bookRefuses(v: BookVerdict | undefined): boolean {
-  return v?.kind === 'lookalike'
 }
 
 /** Picker: fills the recipient field from the book, filtered to the route's family. */
@@ -92,6 +85,13 @@ export function BookVerdictNote({ verdict }: { verdict: BookVerdict | undefined 
       </div>
     )
   }
+  if (verdict.kind === 'imported') {
+    return (
+      <div className="rounded-xl border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
+        ⚠ {fmt(d.addressBook.importedFirstUse, { label: verdict.entry.label })}
+      </div>
+    )
+  }
   if (verdict.kind === 'lookalike') {
     return (
       <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
@@ -129,16 +129,21 @@ export function RecipientBookAfterSend({
   const [saving, setSaving] = useState(false)
   const stamped = useRef<string | undefined>(undefined)
 
-  const knownId = verdict?.kind === 'known' ? verdict.entry.id : undefined
+  // The transfer went through, so guard 3 was satisfied — which for an imported entry means its
+  // tail was confirmed just now. Stamp it and drop the flag in one write.
+  const entry = entryToStamp(verdict)
+  const wasImported = verdict?.kind === 'imported'
+  const stampId = entry?.id
   useEffect(() => {
-    if (!knownId || stamped.current === knownId) return
-    stamped.current = knownId
-    ab.touch(knownId)
-  }, [knownId, ab])
+    if (!stampId || stamped.current === stampId) return
+    stamped.current = stampId
+    if (wasImported) ab.confirmImported(stampId)
+    else ab.touch(stampId)
+  }, [stampId, wasImported, ab])
 
   if (!family || !address) return null
-  if (verdict?.kind === 'known') {
-    return <div className="mt-3 text-xs text-muted">✓ {fmt(d.addressBook.fromBook, { label: verdict.entry.label })}</div>
+  if (entry) {
+    return <div className="mt-3 text-xs text-muted">✓ {fmt(d.addressBook.fromBook, { label: entry.label })}</div>
   }
   return (
     <div className="mt-3">

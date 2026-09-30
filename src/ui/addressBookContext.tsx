@@ -14,6 +14,7 @@ import {
   addEntry,
   applyImport,
   AddressBookError,
+  confirmImported,
   EMPTY_BOOK,
   removeEntry,
   renameEntry,
@@ -39,6 +40,11 @@ export type AddressBookApi = {
   remove: (id: string) => void
   /** Records a successful transfer to this entry. Never called for an address not in the book. */
   touch: (id: string) => void
+  /**
+   * Clears `imported` once the user has confirmed an imported entry's tail and sent to it.
+   * Only ever called after a transfer the guards already let through.
+   */
+  confirmImported: (id: string) => void
   applyPreview: (p: ImportPreview) => void
 }
 
@@ -90,12 +96,15 @@ export function AddressBookProvider({ children }: { children: ReactNode }) {
   )
 
   const remove = useCallback((id: string) => commit(removeEntry(book, id)), [book, commit])
+  // One write: the stamp and the confirmation happen at the same moment, and committing them
+  // separately would leave a window where the entry is used but still marked unconfirmed.
   const touch = useCallback((id: string) => commit(touchEntry(book, id, Date.now())), [book, commit])
+  const confirm = useCallback((id: string) => commit(confirmImported(touchEntry(book, id, Date.now()), id)), [book, commit])
   const applyPreview = useCallback((p: ImportPreview) => commit(applyImport(book, p)), [book, commit])
 
   const api = useMemo<AddressBookApi>(
-    () => ({ book, status, corruptRaw, unsaved, add, rename, remove, touch, applyPreview }),
-    [book, status, corruptRaw, unsaved, add, rename, remove, touch, applyPreview],
+    () => ({ book, status, corruptRaw, unsaved, add, rename, remove, touch, confirmImported: confirm, applyPreview }),
+    [book, status, corruptRaw, unsaved, add, rename, remove, touch, confirm, applyPreview],
   )
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>
 }
