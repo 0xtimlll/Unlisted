@@ -204,3 +204,37 @@ describe('import / export', () => {
     expect(p!.invalid).toBe(5)
   })
 })
+
+describe('ids identify exactly one entry', () => {
+  const A2 = '0x1111111111111111111111111111111111111111'
+
+  it('an imported file that repeats an id gets fresh ones', () => {
+    const p = previewImport(
+      { version: 1, entries: [
+        { id: 'same', label: 'one', address: A, family: 'evm' },
+        { id: 'same', label: 'two', address: A2, family: 'evm' },
+      ] },
+      { ...EMPTY_BOOK, entries: [] },
+    )
+    expect(p!.add).toHaveLength(2)
+    expect(p!.add[0]!.id).not.toBe(p!.add[1]!.id)
+  })
+
+  it('an import cannot collide with an id the book already uses', () => {
+    const book = addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Mine', address: A, family: 'evm' }, NOW, 'kept')
+    const p = previewImport({ version: 1, entries: [{ id: 'kept', label: 'Theirs', address: A2, family: 'evm' }] }, book)
+    expect(p!.add[0]!.id).not.toBe('kept')
+    // Removing the imported one must not touch the entry that was already there.
+    const after = removeEntry(applyImport(book, p!), p!.add[0]!.id)
+    expect(after.entries.map((e) => e.label)).toEqual(['Mine'])
+  })
+
+  it('a stored book with repeated ids is repaired on read', () => {
+    const r = parseBook({ version: 1, entries: [
+      { id: 'dup', label: 'a', address: A, family: 'evm' },
+      { id: 'dup', label: 'b', address: A2, family: 'evm' },
+    ] })
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(new Set(r.book.entries.map((e) => e.id)).size).toBe(2)
+  })
+})
