@@ -17,6 +17,10 @@
  * they are ready, because it only ever looks at check states.
  */
 
+// The only import here, and it is data plus two predicates over it: the committed adapter list and
+// its thresholds. Everything else in this file stays a pure fold over facts handed to it.
+import { adapterSignsOk, ADAPTER_MIN_LOCKED_BPS, ADAPTER_MIN_OUTBOUND_NONCE, type AdapterStanding } from './adapters'
+
 /** The eight checks of §4, in the order the panel lists them. */
 export const CHECK_IDS = [
   'peers',
@@ -130,6 +134,14 @@ export type RiskInput = {
    * another operator answering — see the note on `blocking` below.
    */
   linkCrossChecked: boolean
+  /**
+   * §Adapter The source-side OFTAdapter's standing, when the source IS an adapter. Absent for a
+   * plain OFT, which is the token and needs no lockbox to vouch for.
+   *
+   * See adapters.ts: an adapter has no on-chain fact that can establish it, so only the committed
+   * list reaches OK. The indirect signals decide amber vs red and nothing more.
+   */
+  adapter?: AdapterStanding | undefined
 }
 
 export type RouteRisk = {
@@ -177,6 +189,16 @@ export const FRESH_DELIVERY_DAYS = 7
 
 const RANK: Record<Tier, number> = { BLOCKED: 0, UNVERIFIED: 1, CAUTION: 2, OK: 3 }
 
+/** Why an unreviewed adapter was refused outright — which floor it missed, or which read failed. */
+function adapterRedReason(a: AdapterStanding): string {
+  const parts: string[] = []
+  if (a.lockedBps === undefined) parts.push('the share of supply it locks could not be read')
+  else if (a.lockedBps < ADAPTER_MIN_LOCKED_BPS) parts.push(`it locks ${a.lockedBps / 100}% of supply, under the ${ADAPTER_MIN_LOCKED_BPS / 100}% floor`)
+  if (a.outboundNonce === undefined) parts.push('its delivery history could not be read')
+  else if (a.outboundNonce < ADAPTER_MIN_OUTBOUND_NONCE) parts.push(`the endpoint records ${a.outboundNonce} sends through it, under ${ADAPTER_MIN_OUTBOUND_NONCE}`)
+  return `this adapter is not on the reviewed list, and ${parts.join('; ')}`
+}
+
 /** The worse of two tiers. */
 function worse(a: Tier, b: Tier): Tier {
   return RANK[a] <= RANK[b] ? a : b
@@ -202,6 +224,12 @@ export function assessRisk(i: RiskInput): RouteRisk {
     blocking.push({ text: 'a party that verifies this route is one LayerZero has deprecated', check: 'config' })
   }
   if (i.configMismatch) blocking.push({ text: 'the send config on the source does not match the receive config on the destination', check: 'config' })
+  // An adapter nobody has reviewed AND whose indirect signals are weak or unreadable. Nothing here
+  // can establish it, so there is no small allowance either — a test amount into a lockbox that may
+  // not be a lockbox is still a loss.
+  if (i.adapter && !i.adapter.listed && !adapterSignsOk(i.adapter)) {
+    blocking.push({ text: adapterRedReason(i.adapter), check: 'adapter_liquidity' })
+  }
   // No independent operator stood behind the contract↔token link, so none of the checks below
   // mean more than the single endpoint that answered them.
   if (!i.linkCrossChecked) {
@@ -242,6 +270,17 @@ export function assessRisk(i: RiskInput): RouteRisk {
     }
     tier = worse(tier, 'UNVERIFIED')
     // Rule 2: nothing the user can type substitutes for a check that did not happen.
+    overridable = false
+  }
+  // A reviewed adapter is simply an adapter; an unreviewed one with healthy signals is capped.
+  // The wording is deliberate: "the signs are fine" is not "this was checked".
+  if (i.adapter && !i.adapter.listed) {
+    reasons.push({
+      text: 'this adapter is not on the reviewed list; its indirect signs are fine, but that is not proof — a lockbox is not vouched for by the token it holds',
+      check: 'adapter_liquidity',
+    })
+    tier = worse(tier, 'UNVERIFIED')
+    // Only a test transfer that actually arrives lifts this. No typed word stands in for evidence.
     overridable = false
   }
   if (i.unverifiedStandard) {

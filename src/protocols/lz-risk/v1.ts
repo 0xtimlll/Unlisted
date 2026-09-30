@@ -28,6 +28,7 @@ import { endpointV1Abi, isUnverifiedStandard, lzAppAbi, oftV1Abi, PT_SEND, type 
 import { lzV1 } from '../lz-v1/chains'
 import type { OftV1Info } from '../lz-v1/detect'
 import type { V1SendPlan } from '../lz-v1/plan'
+import { lockedBps, reviewedAdapter, type AdapterStanding } from './adapters'
 import { dvnInfo } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
@@ -36,6 +37,9 @@ import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, ty
 export const THIN_GAS_RATIO = 1.2
 
 /** NonblockingLzApp + Pausable + the receive event, all read-only here. */
+/** Same one-off as V2: totalSupply is not in core/abi.ts's erc20Abi. */
+const supplyAbiV1 = parseAbi(['function totalSupply() view returns (uint256)'])
+
 const v1DstAbi = parseAbi([
   'function nonblockingLzReceive(uint16 _srcChainId, bytes _srcAddress, uint64 _nonce, bytes _payload)',
   'function paused() view returns (bool)',
@@ -419,6 +423,37 @@ async function checkRecentChanges(c: V1RiskContext): Promise<Outcome> {
     : { state: { status: 'pass', note: `last reconfigured ${Math.floor(age.value)} day(s) ago` } }
 }
 
+/**
+ * §Adapter The v1 adapter's standing. Same rule and same thresholds as V2 (adapters.ts): an
+ * adapter is a lockbox the token knows nothing about, so only the committed list reaches OK.
+ *
+ * v1 differs only in where the two numbers come from — `getOutboundNonce(dstChainId, oft)` on
+ * Endpoint V1, which detect.ts has already confirmed is this chain's committed endpoint
+ * (`foreign_endpoint`), so the history is honest for the same reason it is on V2.
+ */
+async function adapterStandingV1(c: V1RiskContext): Promise<AdapterStanding | undefined> {
+  if (!c.info.approvalRequired || sameAddress(c.info.token, c.info.oft)) return undefined
+  const listed = !!reviewedAdapter(c.info.chain, c.info.oft, c.info.token)
+
+  const [held, supply] = await Promise.all([
+    attempt(c.srcClient.readContract({ address: c.info.token, abi: erc20Abi, functionName: 'balanceOf', args: [c.info.oft] }), undefined, 'adapter balance'),
+    attempt(c.srcClient.readContract({ address: c.info.token, abi: supplyAbiV1, functionName: 'totalSupply' }), undefined, 'token supply'),
+  ])
+
+  const nonces = await Promise.all(
+    c.info.routes.map((r) =>
+      attempt(
+        c.srcClient.readContract({ address: c.info.endpoint, abi: endpointV1Abi, functionName: 'getOutboundNonce', args: [r.v1ChainId, c.info.oft] }),
+        undefined,
+        'outbound nonce',
+      ),
+    ),
+  )
+  const outboundNonce = nonces.every((n) => n.ok) ? nonces.reduce((t, n) => t + BigInt(n.ok ? n.value : 0n), 0n) : undefined
+
+  return { listed, lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined, outboundNonce }
+}
+
 export type V1Assessment = { input: RiskInput; dstGasEstimate: bigint | undefined }
 
 /**
@@ -461,9 +496,11 @@ export async function assessV1Route(c: V1RiskContext): Promise<V1Assessment> {
     }
   }
 
+  const adapter = await adapterStandingV1(c)
   return {
     input: {
       checks,
+      ...(adapter ? { adapter } : {}),
       unverifiedStandard: isUnverifiedStandard(c.info.standard),
       deprecatedVerifier: false,
       unknownInfra: false,

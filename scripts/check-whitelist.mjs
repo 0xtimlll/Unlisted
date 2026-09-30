@@ -156,6 +156,9 @@ for (const file of walk(SRC)) {
       'quoteSend', 'quoteOFT', 'token', 'approvalRequired', 'sharedDecimals', 'decimalConversionRate',
       'oftVersion', 'peers', 'endpoint', 'owner', 'enforcedOptions',
       'decimals', 'symbol', 'name', 'balanceOf', 'allowance',
+      // §Adapter totalSupply: the denominator of the locked-share signal in lz-risk/adapters.ts.
+      // A plain ERC-20 view, read from the real token, never from the contract under examination.
+      'totalSupply',
       // Analysis (stage: tasks 1-4). All view-only.
       'oAppVersion',     // IOAppCore: "is this a LayerZero app at all?"
       'getSendLibrary',  // IMessageLibManager: which send library serves (oapp, dstEid)
