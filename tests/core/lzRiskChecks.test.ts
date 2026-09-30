@@ -110,10 +110,11 @@ describe('an RPC that does not answer', () => {
     const risk = assessRisk({ ...input, linkCrossChecked: true })
     expect(risk.tier).toBe('UNVERIFIED')
     expect(risk.hardUnchecked.sort()).toEqual([...HARD_CHECKS].sort())
-    // And it cannot be typed away.
-    // And when the dead provider was also the only one asked, there is nothing to cap: the
-    // contract itself is uncorroborated, which is a block rather than a small allowance.
-    expect(assessRisk({ ...input, linkCrossChecked: false }).tier).toBe('BLOCKED')
+    // And when the dead provider was also the only one asked, the contract itself is
+    // uncorroborated on top: still UNVERIFIED, with one more reason — a nuance, never a block.
+    const alone = assessRisk({ ...input, linkCrossChecked: false })
+    expect(alone.tier).toBe('UNVERIFIED')
+    expect(alone.reasons.some((x) => /independent RPC operator/.test(x.text))).toBe(true)
     // Every grey row says why, and those reasons are what the panel prints.
     expect(risk.reasons.length).toBeGreaterThanOrEqual(HARD_CHECKS.length)
     for (const r of risk.reasons.filter((x) => x.check && HARD_CHECKS.includes(x.check))) {

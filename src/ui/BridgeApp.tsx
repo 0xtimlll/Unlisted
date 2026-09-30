@@ -2,11 +2,11 @@
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Hash } from 'viem'
-import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
-import { erc20Abi, oftAbi } from '@/core/abi'
-import { riskTickScope } from '@/core/riskTick'
-import { useRiskTick } from './useRiskTick'
-import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
+import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
+import { oftAbi } from '@/core/abi'
+import { assessIndicator } from '@/core/indicator'
+import { useApproveFlow } from './useApproveFlow'
+import { AmountError, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
 import { analyzeSvmPrefill } from '@/core/analysis/svm'
@@ -44,8 +44,8 @@ import { BridgeV1 } from './BridgeV1'
 import { useProbeV1 } from './v1Hooks'
 import { ProbeV1Error } from '@/protocols/lz-v1/detect'
 import { useV2RouteRisk } from './riskHooks'
-import { RiskPanel } from './components/RiskPanel'
-import { RiskWarnings } from './components/RiskWarnings'
+import { RiskChecks, RiskNotAssessed } from './components/RiskPanel'
+import { RouteIndicator } from './components/RouteIndicator'
 import { shownFailures, waitsOnlyForApprove } from '@/core/severity'
 
 const EMPTY_DEST: DestinationState = {
@@ -109,10 +109,6 @@ export function BridgeApp({
   const [analysisInput, setAnalysisInput] = useState<AnalysisInput | null>(null)
   const [decodeTarget, setDecodeTarget] = useState<string | null>(null)
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
-  const [noGasAccepted, setNoGasAccepted] = useState(false)
-  const [peerBackAccepted, setPeerBackAccepted] = useState(false)
-  const [pdaAccepted, setPdaAccepted] = useState(false)
-  const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored, 'lz-oft')
@@ -141,12 +137,6 @@ export function BridgeApp({
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
-    setNoGasAccepted(false)
-    setPeerBackAccepted(false)
-    setPdaAccepted(false)
-    setHighFeeAccepted(false)
-    // The one tick is not reset here: it is held per scope (ui/useRiskTick.ts), and emptying the
-    // destination above makes the scope null, which no tick covers.
     setSent(null)
     setTxError('')
   }, [])
@@ -428,33 +418,6 @@ export function BridgeApp({
   // ---- guards -------------------------------------------------------------------
   const approveIntent = info && planData ? approvePlan(info, planData, allowance.data) : null
 
-  /**
-   * Guard 21's warning, in the units the user reads. `plan.value` rather than the raw quote,
-   * because `value` is what actually leaves the wallet once the fee buffer is applied.
-   */
-  const feeNotice = useMemo(
-    () =>
-      planData
-        ? { fee: `${formatAmount(planData.value, src.vm === 'svm' ? 9 : 18, { maxFraction: 6 })} ${src.nativeSymbol}`, chain: src.name }
-        : undefined,
-    [planData, src],
-  )
-  // A new quote is a new number: an acceptance must never outlive the fee it was given for.
-  useEffect(() => {
-    setHighFeeAccepted(false)
-  }, [planData?.value])
-  // The one tick covers what was on screen when it was ticked: the chain, the token, the route, the
-  // amount, the recipient and the wallet — and the warnings shown then (ui/useRiskTick.ts). Any of
-  // them changing is a different scope, and the tick does not apply to it.
-  const tickScope = riskTickScope({
-    chain: src.key,
-    contract: info?.vm === 'evm' ? info.oft : info?.oftStore,
-    destination: dest.dstEid,
-    amount: planData?.amounts.amountLD,
-    recipient: planData?.recipient,
-    sender,
-  })
-
   const baseInput: GuardInput = useMemo(
     () => ({
       walletAddress: svmSource ? undefined : wallet,
@@ -472,17 +435,13 @@ export function BridgeApp({
       gasCostWei: undefined,
       simulation: undefined,
       selfCheck: undefined,
-      noExecutorGasAccepted: noGasAccepted,
       flags: [...flags, ...svmFlags],
       peerBack,
-      peerBackUnavailableAccepted: peerBackAccepted,
       svmRecipientClass: svmRecipient.data?.class,
-      svmRecipientPdaAccepted: pdaAccepted,
-      highFeeAccepted,
       svmDestinationKnown: dstVm !== 'svm' || !!svmDest.data,
       svmDestinationRecognised: dstVm !== 'svm' || !svmDestUnknown,
     }),
-    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, noGasAccepted, flags, svmFlags, peerBack, peerBackAccepted, svmRecipient.data?.class, pdaAccepted, highFeeAccepted, dstVm, svmDest.data, svmDestUnknown, bookVerdict],
+    [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, flags, svmFlags, peerBack, svmRecipient.data?.class, dstVm, svmDest.data, svmDestUnknown, bookVerdict],
   )
   const pre = runGuards(baseInput)
   const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
@@ -507,37 +466,46 @@ export function BridgeApp({
    * says so in grey rather than showing nothing — an absent verdict must not read as a passed one.
    */
   const riskCovered = info?.vm === 'evm' && dstVm === 'evm'
-  // Two passes on purpose. The warnings do not depend on the tick, so the first pass finds what
-  // is on screen; the tick is judged against that (its scope AND that list); the second pass is
-  // the verdict with the tick applied. `fullInput` is what the click re-runs, so it carries it.
-  const draft = runGuards({
-    ...baseInput,
-    gasCostWei: check.data?.gasCostWei,
-    simulation,
-    selfCheck: check.data?.selfCheck,
-    risk: risk.data?.risk,
-  })
-  const tick = useRiskTick(tickScope, planData ? shownFailures(draft.riskWarnings) : [])
+  const riskError = risk.error ? shortError(risk.error) : undefined
+  // `fullInput` is what the click re-runs, so it carries everything the render judged.
   const fullInput: GuardInput = {
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
     simulation,
     selfCheck: check.data?.selfCheck,
     risk: risk.data?.risk,
-    risksAccepted: tick.accepted,
+    riskError,
   }
   const report = runGuards(fullInput)
 
+  // The route indicator: one colour from everything above. It decides nothing (core/indicator.ts).
+  const indicator = assessIndicator({
+    hasDestination: dest.dstEid !== undefined,
+    hasPlan: !!planData,
+    results: report.results,
+    label: (c) => d.guard[c as keyof typeof d.guard] ?? c,
+    flags: report.warnings,
+    flagLabel: (f) => d.card[`flag_${f}` as keyof typeof d.card] ?? f,
+    risk: risk.data?.risk,
+    riskCovered,
+    riskPending: risk.isFetching,
+    riskError,
+    dvnWeak: dvn.data?.weak ?? false,
+    dvnWeakText: d.indicator.dvnWeak,
+  })
+
   // ---- approve (EVM only: Solana OFTs pull tokens through the program directly) ---
-  const approveWrite = useWriteContract()
-  const approveReceipt = useWaitForTransactionReceipt({ hash: approveWrite.data, chainId: evmSrc?.chainId })
-  useEffect(() => {
-    if (approveReceipt.isSuccess) {
-      void allowance.refetch()
-      approveWrite.reset()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approveReceipt.isSuccess])
+  // The flow signs approve(spender, amount) for exactly the intent the guards checked, waits for
+  // the receipt and reads the allowance back; the button becomes Send by itself (ui/useApproveFlow.ts).
+  const approveFlow = useApproveFlow({
+    chainId: evmSrc?.chainId,
+    owner: wallet,
+    token: info?.vm === 'evm' ? info.token : undefined,
+    spender: approveIntent?.spender,
+    amount: approveIntent?.amount,
+    allowance: allowance.data,
+    refetchAllowance: async () => (await allowance.refetch()).data,
+  })
 
   const onApprove = () => {
     setTxError('')
@@ -545,16 +513,9 @@ export function BridgeApp({
     if (!info || info.vm !== 'evm' || !evmSrc || !evmPlan.data || !info.approvalRequired) return
     const intent = approvePlan(info, evmPlan.data, allowance.data)
     if (!intent || intent.spender.toLowerCase() !== info.oft.toLowerCase() || intent.amount !== evmPlan.data.amounts.amountLD) return
-    approveWrite.writeContract(
-      {
-        address: info.token,
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [intent.spender, intent.amount],
-        chainId: evmSrc.chainId,
-      },
-      { onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)) },
-    )
+    // No allowance for a transfer that cannot happen: the approve is a step of THIS transfer.
+    if (!waitsOnlyForApprove(runGuards(fullInput).blocks)) return
+    void approveFlow.start()
   }
 
   // ---- send ---------------------------------------------------------------------
@@ -609,12 +570,9 @@ export function BridgeApp({
 
   // ---- CTA state: the next thing the user has to do ------------------------------
   const chainMismatch = !svmSource && wallet !== undefined && walletChainId !== undefined && evmSrc !== undefined && walletChainId !== evmSrc.chainId
-  // Explain the real blocker first; a read still in flight is only shown when nothing else is wrong.
-  const firstFailing = report.results.find((r) => !r.ok && !isPending(r)) ?? report.results.find((r) => !r.ok)
-  // Reads in flight are "checking", not problems: they resolve on their own and there is nothing
-  // in them to accept. Only shown once a plan exists, so an empty form is not a wall of red.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
-  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
+  // The line under the button names the impossibility, if there is one: the first block that is
+  // neither a read in flight nor the approve step. Notes never appear here — they are the indicator's.
+  const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
   const cta: CtaState = !sender
     ? { kind: 'connect' }
     : chainMismatch
@@ -631,19 +589,16 @@ export function BridgeApp({
                 ? planError
                   ? { kind: 'send', enabled: false, reason: describeError(d, planError) }
                   : { kind: 'quote' }
-                : approveIntent && waitsOnlyForApprove(report.blocks)
-                  ? // The approve is the next step whenever nothing but the allowance stands in the
-                    // way. It still waits for the tick (approveReady): an allowance to a contract whose
-                    // warnings were not accepted is the exploitable half of this app.
-                    { kind: 'approve', intent: approveIntent, enabled: report.approveReady, ...(report.approveReady ? {} : { reason: d.step3.approveAfterTick }) }
+                : approveIntent
+                  ? // The approve is the next step whenever the allowance is short. It is enabled only
+                    // when nothing else makes the transfer impossible: no allowance for a transfer
+                    // that cannot happen.
+                    { kind: 'approve', intent: approveIntent, enabled: waitsOnlyForApprove(report.blocks), ...(impossible ? { reason: d.guard[impossible.code] } : {}) }
                   : !report.canSend && report.results.every((r) => r.ok || isPending(r))
                     ? { kind: 'checking' }
-                    : { kind: 'send', enabled: report.canSend, ...(firstFailing && !firstFailing.ok ? { reason: d.guard[firstFailing.code] } : {}) }
+                    : { kind: 'send', enabled: report.canSend, ...(impossible ? { reason: d.guard[impossible.code] } : {}) }
 
-  const approving = approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading)
-  const sending = sendWrite.isPending || svmSend.isPending
-  const busy = switching || approving || sending
-  const busyLabel = approving ? d.step3.approving : sending ? d.step3.sending_ : ''
+  const sending = switching || sendWrite.isPending || svmSend.isPending
   const onCta = () => {
     switch (cta.kind) {
       case 'connect':
@@ -724,7 +679,6 @@ export function BridgeApp({
               // an address for one VM must never linger into the other.
               const nextVm = next.dstEid !== undefined ? byEid(next.dstEid)?.vm : undefined
               setDest(nextVm !== dstVm ? { ...next, recipientCustom: false, recipientInput: '', confirmLast6: '' } : next)
-              setPdaAccepted(false)
             }}
             dstVm={dstVm}
             recipientError={recipientError}
@@ -738,15 +692,14 @@ export function BridgeApp({
       ) : null}
 
       <div className="pt-1">
-        <RiskWarnings
-          blocks={shownBlocks}
-          warnings={shownWarnings}
-          label={(c) => d.guard[c as keyof typeof d.guard] ?? c}
-          accepted={tick.accepted}
-          onAccepted={tick.setAccepted}
-          added={tick.added}
+        <Cta
+          state={cta}
+          info={info}
+          sending={sending}
+          approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
+          onClick={onCta}
+          error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')}
         />
-        <Cta state={cta} info={info} busy={busy} busyLabel={busyLabel} onClick={onCta} error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')} />
       </div>
     </>
   )
@@ -797,29 +750,14 @@ export function BridgeApp({
               <PanelSection title={d.ui.section_quote}>
                 <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat />
               </PanelSection>
-              <RiskPanel
-                risk={risk.data?.risk}
-                awaitingDestination={dest.dstEid === undefined}
-                notCovered={!riskCovered}
-                loading={risk.isFetching}
-                error={risk.error ? shortError(risk.error) : ''}
-              />
-              <Checks
-                report={report}
-                noGasAccepted={noGasAccepted}
-                onNoGasAccepted={setNoGasAccepted}
-                peerBackAccepted={peerBackAccepted}
-                onPeerBackAccepted={setPeerBackAccepted}
-                pdaAccepted={pdaAccepted}
-                onPdaAccepted={setPdaAccepted}
-                highFeeAccepted={highFeeAccepted}
-                onHighFeeAccepted={setHighFeeAccepted}
-                feeNotice={feeNotice}
-                show={!!planData}
-                defaultOpen
-              />
-              <SimulationNote check={evmData} />
-              <DvnNote config={dvn.data} />
+              <PanelSection title={d.risk.title}>
+                <RouteIndicator indicator={indicator} noneText={dest.dstEid === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
+                  {riskCovered ? <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} /> : <RiskNotAssessed />}
+                  <Checks report={report} show={!!planData} />
+                  <SimulationNote check={evmData} />
+                  <DvnNote config={dvn.data} />
+                </RouteIndicator>
+              </PanelSection>
             </>
           ) : primary ? null : (
             <p className="text-sm text-muted">{d.ui.previewEmpty}</p>
@@ -851,38 +789,33 @@ export function BridgeApp({
   )
 }
 
-/** §Task 4, informational: how many parties attest to messages on this route. Never blocks. */
+/** §Task 4, informational: how many parties attest to messages on this route. A line in the details. */
 function DvnNote({ config }: { config: DvnConfig | undefined }) {
   const d = useDict()
   if (!config) return null
   const optional = config.optionalThreshold > 0 ? fmt(d.analysis.dvnOptional, { n: config.optionalThreshold, total: config.optionalDVNs.length }) : ''
-  return (
-    <div className="text-xs text-muted">
-      {fmt(d.analysis.dvn, { required: config.requiredDVNs.length, optional, confirmations: config.confirmations.toString() })}
-      {config.weak ? <div className="mt-1 text-warn">⚠ {d.analysis.dvnWeak}</div> : null}
-    </div>
-  )
+  return <div className="text-xs text-muted">{fmt(d.analysis.dvn, { required: config.requiredDVNs.length, optional, confirmations: config.confirmations.toString() })}</div>
 }
 
 /** §Task 4: the human sentence behind a failed simulation, with the raw line underneath. */
 function SimulationNote({ check }: { check: CheckResult | undefined }) {
   const d = useDict()
   if (!check) return null
-  if (check.rpcUnavailable) return <Alert kind="warn">{d.revert.rpcUnavailable}</Alert>
+  if (check.rpcUnavailable) return <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p>
   const r = check.revert
   if (!r) return check.batched ? <p className="text-xs text-muted">{d.revert.batched}</p> : null
   const meaning = revertMeaning(r) ?? 'generic'
   return (
-    <Alert kind="error">
+    <div className="text-xs text-warn">
       <div className="font-semibold">{d.revert[meaning]}</div>
-      <div className="mono mt-1 text-xs opacity-80">{formatRevert(r)}</div>
-      {r.kind === 'error' && r.source === 'contract' ? <div className="mt-1 text-xs opacity-80">{d.revert.fromContractAbi}</div> : null}
+      <div className="mono mt-1 opacity-80">{formatRevert(r)}</div>
+      {r.kind === 'error' && r.source === 'contract' ? <div className="mt-1 opacity-80">{d.revert.fromContractAbi}</div> : null}
       {r.kind === 'unknown' ? (
-        <a href={r.lookupUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs underline">
+        <a href={r.lookupUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block underline">
           {d.analysis.lookupSelector}
         </a>
       ) : null}
-    </Alert>
+    </div>
   )
 }
 

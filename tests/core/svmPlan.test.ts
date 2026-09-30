@@ -143,10 +143,8 @@ describe('guards with a Solana-source plan', () => {
     gasCostWei: svmTxFee(plan.computeUnitLimit, plan.computeUnitPrice),
     simulation: { ok: true },
     selfCheck: { ok: true },
-    noExecutorGasAccepted: false,
     flags: [],
     peerBack: { status: 'ok' },
-    peerBackUnavailableAccepted: false,
     ...over,
   })
 

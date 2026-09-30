@@ -305,27 +305,20 @@ describe('CCIP fee ceiling (guard 14)', () => {
 
   it('passes silently while the fee is ordinary', () => {
     const r = runCcipGuards(guardInput())
-    expect(r.needsHighFeeConfirmation).toBe(false)
     expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
   })
 
-  it('blocks a fee above the chain ceiling until it is read', () => {
+  it('notes a fee above the chain ceiling for the indicator, and holds nothing', () => {
     const r = runCcipGuards(guardInput({ plan: planFixture(high) }))
-    expect(r.needsHighFeeConfirmation).toBe(true)
-    expect(r.canSend).toBe(false)
-    expect(r.results.find((x) => x.id === 14)).toMatchObject({ ok: false, code: 'fee_above_ceiling_unconfirmed' })
-  })
-
-  it('lets the same fee through once the user accepts it', () => {
-    const r = runCcipGuards(guardInput({ plan: planFixture(high), highFeeAccepted: true }))
-    expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
+    expect(r.results.find((x) => x.id === 14)).toMatchObject({ ok: false, code: 'fee_above_ceiling' })
+    expect(r.notes.some((n) => !n.ok && n.code === 'fee_above_ceiling')).toBe(true)
     expect(r.canSend).toBe(true)
   })
 
-  it('still blocks a fee the balance could cover — the ceiling is not the balance', () => {
+  it('still notes a fee the balance could cover — the ceiling is not the balance', () => {
     const r = runCcipGuards(guardInput({ plan: planFixture(high) }))
     expect(r.results.find((x) => x.id === 8)?.ok).toBe(true)
-    expect(r.canSend).toBe(false)
+    expect(r.results.find((x) => x.id === 14)?.ok).toBe(false)
   })
 })
 

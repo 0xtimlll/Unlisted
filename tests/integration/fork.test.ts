@@ -64,7 +64,7 @@ async function fullCheck(f: Fork, info: OftInfo, plan: EvmSendPlan, allowance: b
     walletAddress: USER, walletChainId: f.chain.chainId, srcChainId: f.chain.chainId, info, plan,
     recipientIsCustom: false, customRecipientConfirmed: false,
     tokenBalance, nativeBalance, allowance, gasCostWei,
-    simulation, selfCheck: sc, noExecutorGasAccepted: true, flags: [], peerBack: { status: 'ok' }, peerBackUnavailableAccepted: false,
+    simulation, selfCheck: sc, flags: [], peerBack: { status: 'ok' },
     // §4 guard 22 is handed a clean verdict: these tests execute real approve/send transactions on a
     // fork, and the route checks they would otherwise need are covered by their own tests. Without
     // this the fork's `canSend` would be false for a reason that has nothing to do with the fork.

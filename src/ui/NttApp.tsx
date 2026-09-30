@@ -6,14 +6,12 @@
  * spender, so the four-part gate is what stands between the user and handing an allowance to a
  * look-alike contract. The gate's verdict is the first thing on the right.
  */
-import { isStepCode, isWarningCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
-import { RiskWarnings } from './components/RiskWarnings'
+import { isNoteCode, isStepCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
-import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
-import { erc20Abi } from '@/core/abi'
-import { riskTickScope } from '@/core/riskTick'
-import { useRiskTick } from './useRiskTick'
+import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
+import { assessIndicator } from '@/core/indicator'
+import { useApproveFlow } from './useApproveFlow'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
 import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
@@ -35,6 +33,8 @@ import { Panel, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
 import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
 import { RiskNotAssessed } from './components/RiskPanel'
+import { RouteIndicator } from './components/RouteIndicator'
+import { Cta, type CtaState } from './components/Review'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { useAnalysis } from './useAnalysis'
 import { nttDestinations, useNttCheck, useNttDiscovery, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
@@ -75,7 +75,6 @@ export function NttApp({
   const [confirmLast6, setConfirmLast6] = useState('')
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
-  const [highFeeAccepted, setHighFeeAccepted] = useState(false)
 
   // Follow the wallet's chain when it is one we support.
   useEffect(() => {
@@ -202,23 +201,6 @@ export function NttApp({
 
   const plan = useNttPlan({ verification: verification.data, sender: wallet, recipient, amountRaw, customRpc: stored.customRpc })
   const planData = plan.data
-  // The tick covers what was on screen when it was ticked: chain, manager and token, route, amount,
-  // recipient and wallet — and the warnings shown then (ui/useRiskTick.ts). Any of them changing
-  // is a different scope.
-  const tickScope = riskTickScope({
-    chain: src.key,
-    contract: planData ? `${planData.manager}:${planData.token}` : undefined,
-    destination: planData?.dst.chain,
-    amount: planData?.amount,
-    recipient: planData?.recipientDisplay,
-    sender: wallet,
-  })
-
-  // A fee the user accepted was a specific number; the moment it changes they have not read it.
-  const planValue = plan.data?.value
-  useEffect(() => {
-    setHighFeeAccepted(false)
-  }, [planValue])
 
   const tokenBalance = useTokenBalance(evmSrc, verified?.token, wallet)
   const nativeBalance = useNativeBalance(evmSrc, wallet)
@@ -242,37 +224,48 @@ export function NttApp({
     ...(approveIntent ? { approveIntent } : {}),
     simulation: undefined,
     selfCheck: undefined,
-    highFeeAccepted,
   }
   const pre = runNttGuards(baseInput)
-  // 14 is excluded like the others: the fee confirmation must not gate the simulation, or the
-  // user would be asked to accept a number before anything could tell them whether it works.
+  // 14 (the fee ceiling) is a note, and the notes must not gate the simulation.
   const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok)
   const check = useNttCheck(planData, preOk, stored.customRpc)
-  // Two passes on purpose: the warnings do not depend on the tick, so the first pass finds what is
-  // on screen, the tick is judged against that list (and its scope), and the second pass is the
-  // verdict with the tick applied. `guardInput` is what the click re-runs, so it carries it.
-  const draftInput: NttGuardInput = {
+  // `guardInput` is what the click re-runs, so it carries everything the render judged.
+  const guardInput: NttGuardInput = {
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
     simulation: check.data?.simulation,
     selfCheck: check.data?.selfCheck,
   }
-  const draft = runNttGuards(draftInput)
-  const tick = useRiskTick(tickScope, planData ? shownFailures(draft.riskWarnings) : [])
-  const guardInput: NttGuardInput = { ...draftInput, risksAccepted: tick.accepted }
   const report = runNttGuards(guardInput)
+  // The line under the button names the impossibility, if there is one. Notes are the indicator's.
+  const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
+  const nttLabel = (c: string) => d.nttGuard[c as keyof typeof d.nttGuard] ?? c
+
+  // The route indicator: the tab's own checks, coloured (core/indicator.ts). NTT with a source-side
+  // anchor and a passing simulation is green; no anchor is red; the eight LayerZero checks do not apply.
+  const indicator = assessIndicator({
+    hasDestination: !!dstChain,
+    hasPlan: !!planData,
+    results: report.results,
+    label: nttLabel,
+    flags: verification.data?.ok && verification.data.crossChecked === false ? ['not_cross_checked'] : [],
+    flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
+    riskCovered: false,
+    riskPending: false,
+  })
 
   // ---- writes -------------------------------------------------------------------
-  const approveWrite = useWriteContract()
-  const approveReceipt = useWaitForTransactionReceipt({ hash: approveWrite.data, chainId: evmSrc?.chainId })
-  useEffect(() => {
-    if (approveReceipt.isSuccess) {
-      void allowance.refetch()
-      approveWrite.reset()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [approveReceipt.isSuccess])
+  // The flow signs approve(manager, amount) for exactly the intent the guards checked, waits for
+  // the receipt and reads the allowance back; the button becomes Send by itself.
+  const approveFlow = useApproveFlow({
+    chainId: evmSrc?.chainId,
+    owner: wallet,
+    token: verified?.token,
+    spender: approveIntent?.spender,
+    amount: approveIntent?.amount,
+    allowance: allowance.data,
+    refetchAllowance: async () => (await allowance.refetch()).data,
+  })
 
   const onApprove = () => {
     setTxError('')
@@ -280,10 +273,9 @@ export function NttApp({
     const intent = nttApprovePlan(verification.data, planData, allowance.data)
     if (!intent || !verified || !evmSrc) return
     if (intent.spender !== verified.manager || intent.token !== verified.token) return
-    approveWrite.writeContract(
-      { address: intent.token, abi: erc20Abi, functionName: 'approve', args: [intent.spender, intent.amount], chainId: evmSrc.chainId },
-      { onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)) },
-    )
+    // No allowance for a transfer that cannot happen: the approve is a step of THIS transfer.
+    if (!waitsOnlyForApprove(runNttGuards(guardInput).blocks)) return
+    void approveFlow.start()
   }
 
   const sendWrite = useWriteContract()
@@ -326,34 +318,47 @@ export function NttApp({
 
   // ---- CTA ----------------------------------------------------------------------
   const chainMismatch = wallet !== undefined && walletChainId !== undefined && evmSrc !== undefined && walletChainId !== evmSrc.chainId
-  const busy = switching || approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading) || sendWrite.isPending
-  const firstFailing = report.results.find((r) => !r.ok && !isNttPending(r)) ?? report.results.find((r) => !r.ok)
-  // Reads in flight are "checking", not problems to accept.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
-  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
-  const ctaLabel = !wallet
-    ? d.ui.cta_connect
+  // Connect wallet → Switch to <chain> → Approve <amount> <token> → Send; one impossibility under it.
+  const cta: CtaState = !wallet
+    ? { kind: 'connect' }
     : chainMismatch
-      ? fmt(d.ui.cta_switch, { chain: src.name })
+      ? { kind: 'switch', chain: src }
       : !manager
-        ? d.ntt.cta_find
+        ? { kind: 'hold', label: d.ntt.cta_find }
         : !dstChain
-          ? d.ui.cta_destination
+          ? { kind: 'destination' }
           : !verified
-            ? d.ntt.cta_verifying
-            : amountInput.trim() === ''
-              ? d.ui.cta_amount
-              : approveIntent
-                ? fmt(d.step3.approveBtn, { amount: formatAmount(approveIntent.amount, verified.tokenDecimals), symbol: verified.tokenSymbol })
-                : d.ui.cta_send
-  // The approve grants an allowance, so it waits for the same tick the send does: an allowance
-  // given to a contract whose risk has not been accepted is the exploitable half of this app.
-  const ctaEnabled = !busy && (!wallet || chainMismatch || (!!approveIntent && !!verified && report.approveReady) || report.canSend)
+            ? { kind: 'hold', label: d.ntt.cta_verifying, spinner: verification.isFetching }
+            : amountInput.trim() === '' || amountError
+              ? { kind: 'amount' }
+              : !recipient
+                ? { kind: 'recipient' }
+                : !planData
+                  ? plan.error
+                    ? { kind: 'send', enabled: false, reason: shortError(plan.error) }
+                    : { kind: 'quote' }
+                  : approveIntent
+                    ? { kind: 'approve', intent: approveIntent, enabled: waitsOnlyForApprove(report.blocks), ...(impossible ? { reason: nttLabel(impossible.code) } : {}) }
+                    : !report.canSend && report.results.every((r) => r.ok || isNttPending(r))
+                      ? { kind: 'checking' }
+                      : { kind: 'send', enabled: report.canSend, ...(impossible ? { reason: nttLabel(impossible.code) } : {}) }
   const onCta = () => {
-    if (!wallet) return openConnectModal?.()
-    if (chainMismatch && evmSrc) return switchChain({ chainId: evmSrc.chainId })
-    if (approveIntent) return onApprove()
-    onSend()
+    switch (cta.kind) {
+      case 'connect':
+        openConnectModal?.()
+        return
+      case 'switch':
+        if (evmSrc) switchChain({ chainId: evmSrc.chainId })
+        return
+      case 'approve':
+        onApprove()
+        return
+      case 'send':
+        onSend()
+        return
+      default:
+        return
+    }
   }
 
   // ---- render ---------------------------------------------------------------------
@@ -523,24 +528,15 @@ export function NttApp({
         ) : null}
       </Box>
 
-      <div className="space-y-2 pt-1">
-        {txError ? <Alert kind="error">{txError}</Alert> : null}
-        <Button variant="cta" disabled={!ctaEnabled} onClick={onCta}>
-          {busy ? <Spinner /> : ctaLabel}
-        </Button>
-        <RiskWarnings
-          blocks={shownBlocks}
-          warnings={shownWarnings}
-          label={(c) => d.nttGuard[c as keyof typeof d.nttGuard] ?? c}
-          accepted={tick.accepted}
-          onAccepted={tick.setAccepted}
-          added={tick.added}
+      <div className="pt-1">
+        <Cta
+          state={cta}
+          info={verified ? { decimals: verified.tokenDecimals, symbol: verified.tokenSymbol } : undefined}
+          sending={switching || sendWrite.isPending}
+          approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
+          onClick={onCta}
+          error={txError}
         />
-        {approveIntent && !report.approveReady && waitsOnlyForApprove(report.blocks) ? (
-          <div className="text-center text-xs text-muted">{d.step3.approveAfterTick}</div>
-        ) : !report.canSend && firstFailing && !firstFailing.ok && !(approveIntent && isStepCode(firstFailing.code)) ? (
-          <div className="text-center text-xs text-muted">{d.nttGuard[firstFailing.code]}</div>
-        ) : null}
       </div>
     </>
   )
@@ -583,43 +579,36 @@ export function NttApp({
                 </Row>
               </div>
             </div>
-            {report.needsHighFeeConfirmation ? (
-              <div className="space-y-2">
-                <Alert kind="warn">{fmt(d.ntt.warnHighFee, { fee: `${formatAmount(planData.value, 18, { maxFraction: 6 })} ${src.nativeSymbol}`, chain: src.name })}</Alert>
-                <label className="flex items-start gap-2 text-xs text-ink">
-                  <input type="checkbox" className="mt-0.5" checked={highFeeAccepted} onChange={(e) => setHighFeeAccepted(e.target.checked)} />
-                  {d.ntt.confirmHighFee}
-                </label>
-              </div>
-            ) : null}
-            {/* §4 The route indicator has no NTT runner yet, and an absent verdict must be visible
-                rather than implied: this tab's own guards are what hold the transfer. */}
-            <RiskNotAssessed why={d.risk.notCoveredNtt} />
             <div>
-              <ul className="grid gap-x-3 gap-y-0.5 text-xs">
-                {report.results.map((r) => (
-                  // Four tones: passed, in flight, the approve step (neutral), a warning (amber), a block (red).
-                  <li
-                    key={r.id}
-                    className={r.ok ? 'text-ok' : isNttPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger'}
-                  >
-                    {r.ok ? '✓' : isNttPending(r) ? '○' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗'}{' '}
-                    {r.ok ? d.nttGuard[`ok_${r.id}` as keyof typeof d.nttGuard] ?? '' : d.nttGuard[r.code]}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            {check.data?.revert ? (
-              <Alert kind="error">
-                <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
-                <div className="mono mt-1 text-xs opacity-80">{formatRevert(check.data.revert)}</div>
-                {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? (
-                  <div className="mt-1 text-xs opacity-80">{d.revert.fromContractAbi}</div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
+              <RouteIndicator indicator={indicator} noneText={dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination}>
+                {/* §4 The eight LayerZero checks have no NTT runner; this tab's own guards are the whole rule. */}
+                <RiskNotAssessed why={d.risk.notCoveredNtt} />
+                <ul className="grid gap-x-3 gap-y-0.5 text-xs">
+                  {report.results.map((r) => (
+                    // Four tones: passed, in flight, the approve step (neutral), a note (amber), a block (red).
+                    <li
+                      key={r.id}
+                      className={r.ok ? 'text-ok' : isNttPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'}
+                    >
+                      {r.ok ? '✓' : isNttPending(r) ? '○' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗'}{' '}
+                      {r.ok ? d.nttGuard[`ok_${r.id}` as keyof typeof d.nttGuard] ?? '' : d.nttGuard[r.code]}
+                    </li>
+                  ))}
+                </ul>
+                {check.data?.revert ? (
+                  <div className="text-xs text-warn">
+                    <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
+                    <div className="mono mt-1 opacity-80">{formatRevert(check.data.revert)}</div>
+                    {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? (
+                      <div className="mt-1 opacity-80">{d.revert.fromContractAbi}</div>
+                    ) : null}
+                  </div>
+                ) : check.data?.rpcUnavailable ? (
+                  <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p>
                 ) : null}
-              </Alert>
-            ) : check.data?.rpcUnavailable ? (
-              <Alert kind="warn">{d.revert.rpcUnavailable}</Alert>
-            ) : null}
+              </RouteIndicator>
+            </div>
           </>
         ) : null}
       </div>
@@ -666,11 +655,7 @@ function VerificationCard({ verification, loading, hasTarget }: { verification: 
           <AddressView value={v.token} href={byKey(v.chain).explorerAddrUrl + v.token} short />
         </Row>
         <Row label={d.ntt.anchor}>
-          {v.anchor === null
-            ? d.ntt.anchorNone
-            : v.anchor.side === 'source'
-              ? fmt(d.ntt.anchorValue, { side: byKey(v.chain).name, kind: v.anchor.kind })
-              : d.ntt.anchorListed}
+          {v.anchor === null ? d.ntt.anchorNone : fmt(d.ntt.anchorValue, { side: byKey(v.chain).name, kind: v.anchor.kind })}
           {/* The far-side anchor is context, never a reason — see verify.ts. */}
           {v.alsoOnDestination ? <div className="mt-1 text-xs text-muted">{fmt(d.ntt.anchorAlsoDst, { chain: byKey(v.dst.chain).name })}</div> : null}
         </Row>

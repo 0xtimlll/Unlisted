@@ -22,14 +22,7 @@ import {
   type CheckState,
   type RiskInput,
 } from '@/protocols/lz-risk/risk'
-import {
-  ADAPTER_MIN_LOCKED_BPS,
-  ADAPTER_MIN_OUTBOUND_NONCE,
-  lockedBps,
-  REVIEWED_ADAPTERS,
-  reviewedAdapter,
-  type AdapterStanding,
-} from '@/protocols/lz-risk/adapters'
+import { ADAPTER_MIN_LOCKED_BPS, ADAPTER_MIN_OUTBOUND_NONCE, lockedBps, type AdapterStanding } from '@/protocols/lz-risk/adapters'
 import { DEAD_DVN_ID, dvnInfo, hasDvnList, judgeDvns } from '@/protocols/lz-risk/dvns'
 import dvnTable from '@/protocols/lz-risk/dvns.json'
 
@@ -69,30 +62,21 @@ describe('the shape of the rule', () => {
   })
 
   it('starts from nothing known, which is not the same as nothing wrong', () => {
-    // Nothing known includes "nobody corroborated the contract", which blocks outright.
+    // Nothing known: nobody corroborated the contract and the five hard checks did not run. Held
+    // at UNVERIFIED with the reasons spelled out — a nuance, not a fact against the route.
     const r = assessRisk(emptyRiskInput('not run yet'))
-    expect(r.tier).toBe('BLOCKED')
-    // With the link corroborated, the five unrun hard checks are what is left, and they cap.
-    const corroborated = assessRisk({ ...emptyRiskInput('not run yet'), linkCrossChecked: true })
-    expect(corroborated.tier).toBe('UNVERIFIED')
-    expect(corroborated.hardUnchecked.length).toBe(HARD_CHECKS.length)
+    expect(r.tier).toBe('UNVERIFIED')
+    expect(r.hardUnchecked.length).toBe(HARD_CHECKS.length)
+    expect(r.reasons.some((x) => /independent RPC operator/.test(x.text))).toBe(true)
   })
 
-  it('an uncorroborated contract is BLOCKED, not merely UNVERIFIED', () => {
+  it('an uncorroborated contract is UNVERIFIED — yellow, with the reason — never OK and never BLOCKED', () => {
     // Everything passed — but only one operator ever answered, so "everything" is one story.
     const r = assessRisk(clean({ linkCrossChecked: false }))
-    expect(r.tier).toBe('BLOCKED')
-    // BLOCKED is the loudest tier, not a refusal: guard 22 says it as a warning the single tick covers.
+    expect(r.tier).toBe('UNVERIFIED')
     expect(r.reasons.some((x) => /independent RPC operator/.test(x.text))).toBe(true)
     // The same route with a second operator behind it is the OK it looked like.
     expect(assessRisk(clean()).tier).toBe('OK')
-  })
-
-  it('no word and no past test transfer lifts an uncorroborated contract', () => {
-    for (const over of [{ testVerified: true }, { testVerified: true, delayed: undefined }]) {
-      const r = assessRisk(clean({ linkCrossChecked: false, ...over }))
-      expect(r.tier).toBe('BLOCKED')
-    }
   })
 
   it('never returns a verdict without reasons, or OK with them', () => {
@@ -345,95 +329,56 @@ describe('what LayerZero says about a DVN', () => {
 // ------------------------------------------------------ the OFTAdapter rule ----
 
 /**
- * An OFTAdapter is a lockbox the real token knows nothing about, so no on-chain fact can vouch for
- * it and guard 17's peer-back is the adapter confirming itself. Only the committed list reaches
- * OK; the two indirect signals decide amber vs red and never more than that.
+ * An OFTAdapter is a lockbox the real token knows nothing about, so guard 17's peer-back is the
+ * adapter confirming itself. What the deployer cannot write is the share of the real token's supply
+ * the adapter holds and the sends the real endpoint has recorded for it: both floors cleared is an
+ * ordinary route, either missed is a fresh adapter, said in yellow. No list is consulted.
  */
-describe('an adapter is trusted by the committed list, or not at all', () => {
+describe('an adapter is judged by what it locks and what it has delivered', () => {
   const standing = (over: Partial<AdapterStanding> = {}): AdapterStanding => ({
-    listed: false,
     lockedBps: ADAPTER_MIN_LOCKED_BPS,
     outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE,
     ...over,
   })
 
-  it('a fresh adapter is red but NOT refused — a new token looks exactly like this', () => {
+  it('signals at their floors is an ordinary route — green', () => {
+    expect(assessRisk(clean({ adapter: standing() })).tier).toBe('OK')
+  })
+
+  it('a fresh adapter is UNVERIFIED but NOT blocked — a new token looks exactly like this', () => {
     const r = assessRisk(clean({ adapter: standing({ lockedBps: 0, outboundNonce: 0n }) }))
-    expect(r.tier).not.toBe('BLOCKED')
-    expect(r.adapterUnproven).toBe(true)
-    // The full amount is reachable, but only through an explicit acknowledgement.
-  })
-
-
-  it('amber is NOT liftable by the tick — there the app wants the evidence, not a click', () => {
-    const r = assessRisk(clean({ adapter: standing() }))
-    expect(r.adapterUnproven).toBe(false)
-  })
-
-  it('healthy signals but no listing is amber — never green', () => {
-    const r = assessRisk(clean({ adapter: standing() }))
     expect(r.tier).toBe('UNVERIFIED')
-    // The wording must not read as "checked".
-    expect(r.reasons.some((x) => /not on the reviewed list/.test(x.text) && /not proof/.test(x.text))).toBe(true)
-  })
-
-  it('a listed adapter is an ordinary route', () => {
-    expect(assessRisk(clean({ adapter: standing({ listed: true }) })).tier).toBe('OK')
-    // ...and listing outranks weak signals, because the list is the evidence, not the signals.
-    expect(assessRisk(clean({ adapter: standing({ listed: true, lockedBps: 0, outboundNonce: 0n }) })).tier).toBe('OK')
+    expect(r.reasons.some((x) => /fresh adapter/.test(x.text) && /0% of supply/.test(x.text) && /0 sends/.test(x.text))).toBe(true)
   })
 
   it('a plain OFT is unaffected: there is no lockbox to vouch for', () => {
     expect(assessRisk(clean()).tier).toBe('OK')
   })
 
-  it('a read that did not answer is not a pass — it lands in red, not amber', () => {
-    for (const over of [{ lockedBps: undefined }, { outboundNonce: undefined }]) {
-      expect(assessRisk(clean({ adapter: standing(over) })).adapterUnproven).toBe(true)
+  it('a read that did not answer is not a pass — it is fresh, with the read named', () => {
+    for (const [over, words] of [
+      [{ lockedBps: undefined }, /share of supply .* could not be read/],
+      [{ outboundNonce: undefined }, /history could not be read/],
+    ] as const) {
+      const r = assessRisk(clean({ adapter: standing(over) }))
+      expect(r.tier).toBe('UNVERIFIED')
+      expect(r.reasons.some((x) => words.test(x.text))).toBe(true)
     }
   })
 
   it('each floor is enforced on its own', () => {
-    expect(assessRisk(clean({ adapter: standing({ lockedBps: ADAPTER_MIN_LOCKED_BPS - 1 }) })).adapterUnproven).toBe(true)
-    expect(assessRisk(clean({ adapter: standing({ outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE - 1n }) })).adapterUnproven).toBe(true)
+    expect(assessRisk(clean({ adapter: standing({ lockedBps: ADAPTER_MIN_LOCKED_BPS - 1 }) })).tier).toBe('UNVERIFIED')
+    expect(assessRisk(clean({ adapter: standing({ outboundNonce: ADAPTER_MIN_OUTBOUND_NONCE - 1n }) })).tier).toBe('UNVERIFIED')
   })
 
-  it('a listed adapter is never red, whatever the signals say', () => {
-    expect(assessRisk(clean({ adapter: standing({ listed: true, lockedBps: 0, outboundNonce: 0n }) })).adapterUnproven).toBe(false)
+  it('the standing travels with the verdict, for the details panel', () => {
+    expect(assessRisk(clean({ adapter: standing() })).adapter).toEqual(standing())
+    expect(assessRisk(clean()).adapter).toBeNull()
   })
 
   it('lockedBps is a share of supply, and an unreadable supply is unknown rather than zero', () => {
     expect(lockedBps(5n, 1000n)).toBe(50) // 0.5%
     expect(lockedBps(0n, 1000n)).toBe(0)
     expect(lockedBps(1n, 0n)).toBeUndefined()
-  })
-
-  it('the list matches on chain + adapter + token, all three', () => {
-    const entry = REVIEWED_ADAPTERS[0]
-    expect(entry, 'adapters.json has no rows to test the matcher with').toBeDefined()
-    // The exact triple matches...
-    expect(reviewedAdapter(entry!.chain, entry!.adapter, entry!.token)?.symbol).toBe(entry!.symbol)
-    // ...and each leg on its own does not.
-    expect(reviewedAdapter(entry!.chain, entry!.adapter, '0x2222222222222222222222222222222222222222')).toBeUndefined()
-    expect(reviewedAdapter(entry!.chain, '0x1111111111111111111111111111111111111111', entry!.token)).toBeUndefined()
-    // CT, added 2026-09-30 after an on-chain check of token(), peers(30102) and the BNB peer's peers(30101).
-    expect(reviewedAdapter('ethereum', '0x121873Fe37BE77372b69D7a8A642618b8305E71a', '0x0A092E544DA31150b439a1aAA1A3a2214a867F46')?.symbol).toBe('CT')
-    expect(reviewedAdapter('bsc', entry!.adapter, entry!.token)).toBeUndefined()
-    // Case must not matter: an address is not case-sensitive.
-    expect(reviewedAdapter(entry!.chain, entry!.adapter.toLowerCase(), entry!.token.toLowerCase())?.symbol).toBe(entry!.symbol)
-  })
-
-  it('every committed row is well formed and names a distinct adapter+token pair', () => {
-    const seen = new Set<string>()
-    for (const a of REVIEWED_ADAPTERS) {
-      expect(a.adapter).toMatch(/^0x[0-9a-fA-F]{40}$/)
-      expect(a.token).toMatch(/^0x[0-9a-fA-F]{40}$/)
-      // A lockbox that holds itself would be a plain OFT, not an adapter.
-      expect(a.adapter.toLowerCase()).not.toBe(a.token.toLowerCase())
-      expect(a.note.length, `${a.symbol} needs a note saying why it was accepted`).toBeGreaterThan(40)
-      const key = `${a.chain}:${a.adapter.toLowerCase()}:${a.token.toLowerCase()}`
-      expect(seen.has(key), `duplicate row for ${key}`).toBe(false)
-      seen.add(key)
-    }
   })
 })

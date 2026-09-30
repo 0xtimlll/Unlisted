@@ -106,11 +106,10 @@ describe('guard 19/20 on a Solana destination', () => {
     const p = { ...svmPlan(), recipientVm: 'evm' as const, recipient: addressToBytes32(WALLET), recipientDisplay: WALLET }
     expect(codeOf(19, goodInput({ info, plan: p, svmRecipientClass: 'wallet' }))).toBe('recipient_vm_mismatch')
   })
-  it('19: token account → blocked; PDA → blocked until accepted; missing → ok (soft warning elsewhere)', () => {
+  it('19: token account → a red note; PDA → a yellow note; missing → ok (soft warning elsewhere)', () => {
     expect(codeOf(19, base())).toBe('ok')
     expect(codeOf(19, { ...base(), svmRecipientClass: 'token_account' })).toBe('recipient_token_account')
-    expect(codeOf(19, { ...base(), svmRecipientClass: 'program_owned' })).toBe('recipient_pda_unconfirmed')
-    expect(codeOf(19, { ...base(), svmRecipientClass: 'program_owned', svmRecipientPdaAccepted: true })).toBe('ok')
+    expect(codeOf(19, { ...base(), svmRecipientClass: 'program_owned' })).toBe('recipient_pda')
     expect(codeOf(19, { ...base(), svmRecipientClass: 'missing' })).toBe('ok')
     expect(codeOf(19, { ...base(), svmRecipientClass: undefined })).toBe('recipient_class_unknown')
   })
@@ -140,14 +139,12 @@ describe('guard 19/20 on a Solana destination', () => {
     expect(codeOf(20, base())).toBe('ok')
     expect(codeOf(20, goodInput())).toBe('ok')
   })
-  it('15: with no CU anywhere a Solana send gets no_executor_options_svm whatever the checkbox says (a warning, see severity.ts); EVM keeps its own checkbox', () => {
+  it('15: with no CU anywhere a Solana send gets no_executor_options_svm (a note, see severity.ts); EVM gets no_executor_gas', () => {
     const noEnforced = treadOftInfo({ routes: info.routes, enforced: {} })
     const i = { ...base(), info: noEnforced }
     expect(codeOf(15, i)).toBe('no_executor_options_svm')
-    expect(codeOf(15, { ...i, noExecutorGasAccepted: true })).toBe('no_executor_options_svm')
     const evm = goodInput({ info: treadOftInfo({ enforced: {} }) })
-    expect(codeOf(15, evm)).toBe('no_executor_gas_unconfirmed')
-    expect(codeOf(15, { ...evm, noExecutorGasAccepted: true })).toBe('ok')
+    expect(codeOf(15, evm)).toBe('no_executor_gas')
     // enforced CU on the EVM side satisfies 15 for the Solana route
     const withEnforced = treadOftInfo({ routes: info.routes, enforced: { [SOLANA_EID]: '0x00030100210100000000000000000000000000030d40000000000000000000000000002625a0' } })
     expect(codeOf(15, { ...base(), info: withEnforced })).toBe('ok')

@@ -9,7 +9,7 @@
  *
  * Pure functions over a snapshot. Text lives in i18n; these return codes.
  */
-import { renameWarnings, verdictOf } from '../../core/severity'
+import { verdictOf } from '../../core/severity'
 import { isAddressEqual, type Address, type Hex } from 'viem'
 import { aboveFeeCeiling, byKey } from '../../core/chains'
 import type { SuspiciousFlag } from '../../core/types'
@@ -61,13 +61,14 @@ export type V1GuardCode =
   | 'dangerous_adapter_params'
   | 'trusted_remote_back_unknown'
   | 'trusted_remote_back_mismatch'
-  | 'trusted_remote_back_unavailable_unconfirmed'
+  | 'trusted_remote_back_unavailable'
   | 'recipient_vm_mismatch'
   | 'stored_payload_blocked'
   | 'stored_payload_unknown'
-  | 'stored_payload_unavailable_unconfirmed'
-  | 'fee_above_ceiling_unconfirmed'
+  | 'stored_payload_unavailable'
+  | 'fee_above_ceiling'
   | 'risk_unknown'
+  | 'risk_unavailable'
   | 'risk_blocked'
   | 'risk_unverified'
 
@@ -121,36 +122,23 @@ export type V1GuardInput = {
   selfCheck: V1SelfCheckResult | undefined
   flags: readonly SuspiciousFlag[]
   peerBack: V1PeerBack | undefined
-  peerBackUnavailableAccepted: boolean
   storedPayload: StoredPayloadState | undefined
-  storedPayloadUnavailableAccepted: boolean
-  highFeeAccepted?: boolean
   /**
    * §4 The route's risk verdict. Absent means the checks have not finished, which guard 22 treats
-   * as pending — a verdict nobody computed is not permission.
+   * as pending — unless `riskError` says the runner failed, which is a note, not a hold.
    */
   risk?: RouteRisk | undefined
-  /**
-   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
-   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
-   * token, the route, the amount or the recipient changes.
-   */
-  risksAccepted?: boolean | undefined
+  riskError?: string | undefined
 }
 
 export type V1GuardReport = {
-  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  /** Failures that hold the button, plus reads still in flight (core/severity.ts). */
   blocks: V1GuardResult[]
-  /** Failures the single tick covers, strongest first (core/severity.ts). */
-  riskWarnings: V1GuardResult[]
-  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
-  warningsCleared: boolean
-  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
-  approveReady: boolean
+  /** Failures that colour the route indicator and hold nothing. */
+  notes: V1GuardResult[]
   results: V1GuardResult[]
   warnings: SuspiciousFlag[]
   canSend: boolean
-  needsHighFeeConfirmation: boolean
 }
 
 const ok = (id: number): V1GuardResult => ({ id, ok: true })
@@ -257,7 +245,9 @@ export function v1g8Native(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(8, 'plan_missing')
   if (i.nativeBalance === undefined) return fail(8, 'native_balance_unknown')
   if (i.plan.value > i.nativeBalance) return fail(8, 'insufficient_native', `${i.plan.value} > ${i.nativeBalance}`)
-  if (i.gasCostWei === undefined) return fail(8, 'native_balance_unknown')
+  // A simulation that reverted or could not run produces no estimate, ever: waiting for one would
+  // hold the button forever behind a note. The fee fits; the gas is what the wallet will price.
+  if (i.gasCostWei === undefined) return i.simulation && i.simulation.status !== 'ok' ? ok(8) : fail(8, 'native_balance_unknown')
   const need = i.plan.value + i.gasCostWei
   if (need > i.nativeBalance) return fail(8, 'insufficient_native', `${need} > ${i.nativeBalance}`)
   return ok(8)
@@ -353,9 +343,7 @@ export function v1g17TrustedRemoteBack(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(17, 'plan_missing')
   if (!i.peerBack) return fail(17, 'trusted_remote_back_unknown')
   if (i.peerBack.status === 'mismatch') return fail(17, 'trusted_remote_back_mismatch', i.peerBack.theirRemote)
-  if (i.peerBack.status === 'unavailable' && !i.peerBackUnavailableAccepted) {
-    return fail(17, 'trusted_remote_back_unavailable_unconfirmed', i.peerBack.reason)
-  }
+  if (i.peerBack.status === 'unavailable') return fail(17, 'trusted_remote_back_unavailable', i.peerBack.reason)
   return ok(17)
 }
 
@@ -381,9 +369,7 @@ export function v1g20StoredPayload(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(20, 'plan_missing')
   if (!i.storedPayload) return fail(20, 'stored_payload_unknown')
   if (i.storedPayload.status === 'blocked') return fail(20, 'stored_payload_blocked')
-  if (i.storedPayload.status === 'unavailable' && !i.storedPayloadUnavailableAccepted) {
-    return fail(20, 'stored_payload_unavailable_unconfirmed', i.storedPayload.reason)
-  }
+  if (i.storedPayload.status === 'unavailable') return fail(20, 'stored_payload_unavailable', i.storedPayload.reason)
   return ok(20)
 }
 
@@ -392,26 +378,21 @@ export function v1FeeAboveCeiling(plan: V1SendPlan | undefined): boolean {
   return !!plan && aboveFeeCeiling(plan.chain, plan.value)
 }
 
-// 21. the fee is within the chain's ceiling, or the number has been read and accepted
+// 21. the fee is within the chain's ceiling — otherwise a note for the indicator, never a refusal
 export function v1g21FeeCeiling(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(21, 'plan_missing')
   if (!v1FeeAboveCeiling(i.plan)) return ok(21)
-  if (!i.highFeeAccepted) return fail(21, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
-  return ok(21)
+  return fail(21, 'fee_above_ceiling', `${i.plan.value}`)
 }
 
 /**
- * §4, guard 22: the route's verdict decides how much may go.
- *
- * The v1 side of the same rule the V2 tab applies. It matters more here: the `bytes` standard has
- * never been exercised against a live contract, so the indicator holds every route on it at
- * UNVERIFIED and this guard is what turns that into a limit on the amount rather than a note.
+ * §4, guard 22: the route's verdict, carried as a note. The v1 side of the same rule the V2 tab
+ * applies: the indicator reads the verdict's own reasons (core/indicator.ts), and nothing here
+ * holds the button.
  */
 export function v1g22Risk(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(22, 'plan_missing')
-  if (!i.risk) return fail(22, 'risk_unknown')
-  // The verdict is a warning now, not a permission: core/severity.ts weighs both codes as a
-  // possible loss, and the single tick is what lets the transfer through.
+  if (!i.risk) return i.riskError ? fail(22, 'risk_unavailable', i.riskError) : fail(22, 'risk_unknown')
   const code = riskWarningCode(i.risk)
   return code ? fail(22, code) : ok(22)
 }
@@ -442,12 +423,7 @@ export function runV1Guards(i: V1GuardInput): V1GuardReport {
     v1g21FeeCeiling(i),
     v1g22Risk(i),
   ]
-  return {
-    results,
-    warnings: g16.warnings,
-    ...renameWarnings(verdictOf(results, i.risksAccepted === true)),
-    needsHighFeeConfirmation: v1FeeAboveCeiling(i.plan),
-  }
+  return { results, warnings: g16.warnings, ...verdictOf(results) }
 }
 
 /** The calldata's own adapter params, for the review screen. */

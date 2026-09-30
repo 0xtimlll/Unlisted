@@ -27,9 +27,7 @@ import { goodInput as oftGoodInput, treadOftInfo, treadPlan, ENDPOINT_HYPER, TRE
 export type AnyReport = {
   results: readonly ({ ok: true } | { ok: false; code: string })[]
   blocks: readonly ({ ok: true } | { ok: false; code: string })[]
-  riskWarnings: readonly ({ ok: true } | { ok: false; code: string })[]
-  warningsCleared: boolean
-  approveReady: boolean
+  notes: readonly ({ ok: true } | { ok: false; code: string })[]
   canSend: boolean
 }
 
@@ -45,6 +43,8 @@ export type Harness = {
   wallet: Address
   /** One override per code, each of which must make exactly that failure appear in `blocks`. */
   blockers: Record<string, () => Record<string, unknown>>
+  /** One override per code, each of which must make exactly that failure appear in `notes`. */
+  noters: Record<string, () => Record<string, unknown>>
 }
 
 export const codesOf = (list: readonly ({ ok: true } | { ok: false; code: string })[]): string[] => list.flatMap((r) => (r.ok ? [] : [r.code]))
@@ -73,13 +73,18 @@ const oftHarness = (): Harness => {
       { label: 'the peer', address: TREAD_ADAPTER },
     ],
     recipientOverride: (address) => ({ plan: treadPlan({ recipient: address }), recipientIsCustom: true, customRecipientConfirmed: true }),
+    noters: {
+      recipient_zero: () => ({ plan: treadPlan({ recipient: ZERO_ADDRESS }), recipientIsCustom: true, customRecipientConfirmed: true }),
+      recipient_lookalike: () => ({ recipientLookalike: true }),
+      peer_back_mismatch: () => ({ peerBack: { status: 'mismatch', theirPeer: `0x${'0'.repeat(64)}` } }),
+      simulation_failed: () => ({ simulation: { ok: false, reason: 'Error("no")' } }),
+      fee_above_ceiling: () => ({ plan: treadPlan({ value: 6n * 10n ** 18n }), nativeBalance: 10n * 10n ** 18n }),
+    },
     blockers: {
       wallet_not_connected: () => ({ walletAddress: undefined }),
       chain_mismatch: () => ({ walletChainId: 1 }),
       peer_missing: () => ({ info: treadOftInfo({ routes: [] }) }),
-      recipient_zero: () => ({ plan: treadPlan({ recipient: ZERO_ADDRESS }), recipientIsCustom: true, customRecipientConfirmed: true }),
       recipient_unconfirmed: () => ({ plan: treadPlan({ recipient: getAddress('0x3333333333333333333333333333333333333333') }) }),
-      recipient_lookalike: () => ({ recipientLookalike: true }),
       insufficient_balance: () => ({ tokenBalance: 0n }),
       insufficient_native: () => ({ nativeBalance: 0n }),
       fee_mismatch: () => ({ plan: treadPlan({ value: 1n }) }),
@@ -177,9 +182,7 @@ async function v1Harness(): Promise<Harness> {
     selfCheck: { ok: true },
     flags: [],
     peerBack: { status: 'ok' },
-    peerBackUnavailableAccepted: false,
     storedPayload: { status: 'clear' },
-    storedPayloadUnavailableAccepted: false,
     risk: riskOf(),
     ...(over as Partial<V1GuardInput>),
   })
@@ -201,13 +204,18 @@ async function v1Harness(): Promise<Harness> {
       recipientIsCustom: true,
       customRecipientConfirmed: true,
     }),
+    noters: {
+      recipient_zero: () => ({ plan: zero, recipientIsCustom: true, customRecipientConfirmed: true }),
+      recipient_lookalike: () => ({ recipientLookalike: true }),
+      trusted_remote_back_mismatch: () => ({ peerBack: { status: 'mismatch', theirRemote: '0x00' } }),
+      simulation_failed: () => ({ simulation: { status: 'reverted', revert: { kind: 'string', message: 'no', meaning: 'generic' } } }),
+      fee_above_ceiling: () => ({ plan: { ...plan, value: 10n ** 18n }, nativeBalance: 10n * 10n ** 18n }),
+    },
     blockers: {
       wallet_not_connected: () => ({ walletAddress: undefined }),
       chain_mismatch: () => ({ walletChainId: 137 }),
       route_missing: () => ({ info: v1Info({ routes: [] }) }),
-      recipient_zero: () => ({ plan: zero, recipientIsCustom: true, customRecipientConfirmed: true }),
       recipient_unconfirmed: () => ({ plan: stranger }),
-      recipient_lookalike: () => ({ recipientLookalike: true }),
       insufficient_balance: () => ({ tokenBalance: 0n }),
       insufficient_native: () => ({ nativeBalance: 0n }),
       fee_mismatch: () => ({ plan: { ...plan, value: 1n } }),
@@ -319,13 +327,18 @@ const nttHarness = (): Harness => ({
     { label: 'destination token', address: NTT.DST_TOKEN },
   ],
   recipientOverride: (address) => ({ plan: nttPlan({ recipient: asBytes32(address), recipientDisplay: address }), recipientIsCustom: true, customRecipientConfirmed: true }),
+  noters: {
+    recipient_zero: () => ({ plan: nttPlan({ recipient: asBytes32(ZERO_ADDRESS) }), recipientIsCustom: true, customRecipientConfirmed: true }),
+    recipient_lookalike: () => ({ recipientLookalike: true }),
+    ntt_anchor_missing: () => ({ verification: nttVerified(null) }),
+    simulation_failed: () => ({ simulation: { ok: false, reason: 'Error("no")' } }),
+    fee_above_ceiling: () => ({ plan: nttPlan({ fee: 4n * 10n ** 17n, value: 5n * 10n ** 17n }) }),
+  },
   blockers: {
     wallet_not_connected: () => ({ walletAddress: undefined }),
     chain_mismatch: () => ({ walletChainId: 56 }),
     manager_unverified: () => ({ verification: { ok: false, code: 'manager_unverified' as never } }),
-    recipient_zero: () => ({ plan: nttPlan({ recipient: asBytes32(ZERO_ADDRESS) }), recipientIsCustom: true, customRecipientConfirmed: true }),
     recipient_unconfirmed: () => ({ plan: nttPlan({ recipient: asBytes32(getAddress('0x3333333333333333333333333333333333333333')) }) }),
-    recipient_lookalike: () => ({ recipientLookalike: true }),
     amount_has_dust: () => ({ plan: nttPlan({ amount: nttPlan().amount + 1n }) }),
     insufficient_balance: () => ({ tokenBalance: 0n }),
     insufficient_native: () => ({ nativeBalance: 0n }),
@@ -404,13 +417,17 @@ const ccipHarness = (): Harness => ({
     { label: 'pool', address: CCIP_POOL },
   ],
   recipientOverride: (address) => ({ plan: ccipTo(address), recipientIsCustom: true, customRecipientConfirmed: true }),
+  noters: {
+    recipient_zero: () => ({ plan: ccipTo(ZERO_ADDRESS), recipientIsCustom: true, customRecipientConfirmed: true }),
+    recipient_lookalike: () => ({ recipientLookalike: true }),
+    simulation_failed: () => ({ simulation: { ok: false, reason: 'Error("no")' } }),
+    fee_above_ceiling: () => ({ plan: ccipPlan({ fee: 5n * 10n ** 17n, value: 5n * 10n ** 17n }) }),
+  },
   blockers: {
     wallet_not_connected: () => ({ walletAddress: undefined }),
     chain_mismatch: () => ({ walletChainId: 8453 }),
     route_unsupported: () => ({ plan: ccipPlan({ router: getAddress('0x3333333333333333333333333333333333333333') }) }),
-    recipient_zero: () => ({ plan: ccipTo(ZERO_ADDRESS), recipientIsCustom: true, customRecipientConfirmed: true }),
     recipient_unconfirmed: () => ({ plan: ccipTo(getAddress('0x3333333333333333333333333333333333333333')) }),
-    recipient_lookalike: () => ({ recipientLookalike: true }),
     amount_rounds_to_zero: () => ({ plan: ccipPlan({ received: 0n }) }),
     insufficient_balance: () => ({ tokenBalance: 0n }),
     insufficient_native: () => ({ nativeBalance: 0n }),

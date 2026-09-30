@@ -1,8 +1,9 @@
 /**
  * The gate, asserted the same way on all four protocols.
  *
- * core/severity.ts says what may be ticked past and what may not; each guard set applies it. These
- * tests are the seam between the two — what a user can and cannot get through — so they run the
+ * core/severity.ts says what holds the button (the transaction is impossible, or the app would be
+ * building something malformed) and what is a note for the indicator; each guard set applies it.
+ * These tests are the seam between the two — what holds and what only colours — so they run the
  * REAL guards over stub snapshots (tests/core/gateFixtures.ts) rather than re-deriving the rule.
  * Nothing here touches the network.
  */
@@ -12,8 +13,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { getAddress, pad, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
 import { addEntry, applyImport, bookConfirms, bookRefuses, EMPTY_BOOK, lookUp, parseBook, previewImport, type AddressBook } from '@/core/addressBook'
-import { guardSeverity, isBlockingCode, isPendingCode, isStepCode, isWarningCode, shownFailures, verdictOf, waitsOnlyForApprove, type FailedGuard } from '@/core/severity'
-import { LOCKING_HUBS } from '@/protocols/wormhole-ntt/lockingHubs'
+import { guardSeverity, isBlockingCode, isNoteCode, isPendingCode, isStepCode, shownFailures, verdictOf, waitsOnlyForApprove, type FailedGuard } from '@/core/severity'
+import { noteLevel } from '@/core/indicator'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
 import { verifyNttManager } from '@/protocols/wormhole-ntt/verify'
 import { runNttGuards } from '@/protocols/wormhole-ntt/guards'
@@ -46,131 +47,131 @@ function emittedCodes(): Set<string> {
 }
 
 /**
- * The warnings that are deliberate. Anything a guard emits that is neither blocking nor pending
- * must be listed here on purpose: severity.ts makes an unknown code a warning so that a new check
- * cannot silently become a refusal, and the price of that default is that a check meant to refuse
- * can silently become a warning instead. This list is where that decision gets made by a person.
+ * The notes that are deliberate. Anything a guard emits that is neither blocking nor pending must
+ * be listed here on purpose: severity.ts makes an unknown code a note so that a new check cannot
+ * silently become a refusal, and the price of that default is that a check meant to refuse can
+ * silently become a note instead. This list is where that decision gets made by a person.
  */
-const DELIBERATE_WARNINGS = new Set([
-  'adapter_params_missing',
+const DELIBERATE_NOTES = new Set([
   'amount_out_of_limits',
-  'fee_above_ceiling_unconfirmed',
+  'fee_above_ceiling',
   'gas_below_min_dst',
   'inbound_capacity_unknown',
   'inbound_limit_unknown',
-  'no_executor_gas_unconfirmed',
+  'no_executor_gas',
   'no_executor_options_svm',
   'ntt_anchor_missing',
   'outbound_limit_unknown',
   'over_inbound_capacity',
   'over_outbound_capacity',
   'peer_back_mismatch',
-  'peer_back_unavailable_unconfirmed',
+  'peer_back_unavailable',
   'received_lt_min',
-  'recipient_pda_unconfirmed',
+  'recipient_is_contract',
+  'recipient_lookalike',
+  'recipient_pda',
+  'recipient_token_account',
+  'recipient_zero',
   'risk_blocked',
+  'risk_unavailable',
   'risk_unverified',
   'simulation_failed',
   'simulation_unavailable',
   'stored_payload_blocked',
-  'stored_payload_unavailable_unconfirmed',
+  'stored_payload_unavailable',
   'trusted_remote_back_mismatch',
-  'trusted_remote_back_unavailable_unconfirmed',
+  'trusted_remote_back_unavailable',
 ])
 
 describe('every code a guard emits has been classified on purpose', () => {
-  it('is either blocking, pending, or a listed warning — never a warning by omission', () => {
+  it('is either blocking, pending, or a listed note — never a note by omission', () => {
     const unclassified = [...emittedCodes()]
-      .filter((c) => !isBlockingCode(c) && !isPendingCode(c) && !DELIBERATE_WARNINGS.has(c))
+      .filter((c) => !isBlockingCode(c) && !isPendingCode(c) && !DELIBERATE_NOTES.has(c))
       .sort()
     expect(unclassified).toEqual([])
   })
 
-  it('does not list a warning that no guard emits, or that has become a block', () => {
+  it('does not list a note that no guard emits, or that has become a block', () => {
     const emitted = emittedCodes()
-    for (const c of DELIBERATE_WARNINGS) {
-      expect(emitted.has(c), `${c} is listed as a warning but no guard emits it`).toBe(true)
-      expect(guardSeverity(c), c).toBe('warn')
+    for (const c of DELIBERATE_NOTES) {
+      expect(emitted.has(c), `${c} is listed as a note but no guard emits it`).toBe(true)
+      expect(guardSeverity(c), c).toBe('note')
     }
   })
 
   /**
-   * The two rules of core/severity.ts, applied to the codes that state them. The file's own header
-   * names "the amount arrives as zero" and "the app would have to build something malformed" as the
-   * reasons to refuse, and these are those cases on the v1 and NTT paths.
+   * The header of severity.ts names the only reasons to hold the button: no wallet or the wrong
+   * chain, no balance, no route, an amount that arrives as zero, a recipient that cannot be
+   * encoded — and the assembly invariants, which are the app being correct about itself.
    */
-  it('refuses what the header of severity.ts says must be refused', () => {
-    const certainLoss = ['delivered_zero', 'oft_fee_exceeds_amount', 'amount_zero', 'amount_rounds_to_zero', 'recipient_zero']
-    const malformed = ['min_gt_delivered', 'min_gt_amount', 'slippage_unsupported', 'queueing_enabled', 'adapter_params_forbidden']
-    for (const c of [...certainLoss, ...malformed]) expect(isBlockingCode(c), c).toBe(true)
+  it('holds exactly what the header of severity.ts says is impossible', () => {
+    const impossible = [
+      'wallet_not_connected', 'chain_mismatch', 'insufficient_balance', 'insufficient_native',
+      'peer_missing', 'route_missing', 'route_unsupported', 'manager_unverified',
+      'amount_zero', 'amount_rounds_to_zero', 'delivered_zero', 'oft_fee_exceeds_amount', 'amount_has_dust',
+      'recipient_invalid', 'recipient_vm_mismatch', 'recipient_unconfirmed',
+    ]
+    const malformed = ['min_gt_delivered', 'min_gt_amount', 'slippage_unsupported', 'queueing_enabled', 'adapter_params_forbidden', 'selfcheck_failed', 'approve_wrong_spender', 'message_not_plain']
+    for (const c of [...impossible, ...malformed]) expect(isBlockingCode(c), c).toBe(true)
+  })
+
+  it('what used to be a block and is now a colour: the zero address, a route contract, a twin, a peer that does not point back', () => {
+    for (const c of ['recipient_zero', 'recipient_is_contract', 'recipient_lookalike', 'peer_back_mismatch', 'trusted_remote_back_mismatch', 'ntt_anchor_missing']) {
+      expect(isNoteCode(c), c).toBe(true)
+      expect(noteLevel(c), c).toBe('red')
+    }
   })
 })
 
-// -------------------------------------------------- 1. the red adapter ----
+// -------------------------------------------------- 1. the fresh adapter ----
 
-describe('1. a red adapter warns, and only a tick opens it — never a block underneath', () => {
-  const RED = { listed: false, lockedBps: 0, outboundNonce: 0n }
-  const AMBER = { listed: false, lockedBps: 500, outboundNonce: 500n }
-  const redRisk = () => riskOf({ adapter: RED })
-
-  it('is a warning by severity.ts, which is what makes a tick legitimate here', () => {
-    expect(redRisk().adapterUnproven).toBe(true)
-    expect(guardSeverity('risk_unverified')).toBe('warn')
-  })
+describe('1. a fresh adapter is a yellow nuance, and the send is possible', () => {
+  const FRESH = { lockedBps: 0, outboundNonce: 0n }
+  const PROVEN = { lockedBps: 500, outboundNonce: 500n }
 
   for (const name of ['OFT V2', 'OFT v1']) {
     describe(name, () => {
       const h = () => all.find((x) => x.name === name)!
 
-      it('holds the button without the tick, with the reason in the warnings and none in the blocks', () => {
-        const rep = h().run({ risk: redRisk() })
-        expect(codesOf(rep.riskWarnings)).toEqual(['risk_unverified'])
+      it('is a note, with the reason, and nothing in the blocks', () => {
+        const risk = riskOf({ adapter: FRESH })
+        expect(risk.tier).toBe('UNVERIFIED')
+        const rep = h().run({ risk })
+        expect(codesOf(rep.notes)).toEqual(['risk_unverified'])
         expect(rep.blocks).toEqual([])
-        expect(rep.warningsCleared).toBe(false)
-        expect(rep.canSend).toBe(false)
+        expect(rep.canSend).toBe(true)
       })
 
-      it('sends with the tick, because a warning is what it is', () => {
-        expect(h().run({ risk: redRisk(), risksAccepted: true }).canSend).toBe(true)
-      })
-
-      it('does not send with the tick when something that IS a block is also present', () => {
+      it('a real block next to it still holds, whatever the indicator says', () => {
         for (const [code, mutate] of Object.entries(h().blockers)) {
-          const rep = h().run({ risk: redRisk(), risksAccepted: true, ...mutate() })
+          const rep = h().run({ risk: riskOf({ adapter: FRESH }), ...mutate() })
           expect(rep.canSend, code).toBe(false)
           expect(codesOf(rep.blocks), code).toContain(code)
         }
       })
 
-      it('a route the app could not check at all is BLOCKED by the fold, and still only a warning', () => {
-        const noSecondOperator = riskOf({ linkCrossChecked: false })
-        expect(noSecondOperator.tier).toBe('BLOCKED')
-        const rep = h().run({ risk: noSecondOperator })
-        expect(codesOf(rep.riskWarnings)).toEqual(['risk_blocked'])
-        expect(rep.canSend).toBe(false)
-        expect(h().run({ risk: noSecondOperator, risksAccepted: true }).canSend).toBe(true)
+      it('a route only one RPC operator answered for is UNVERIFIED — a note, not a hold', () => {
+        const oneOperator = riskOf({ linkCrossChecked: false })
+        expect(oneOperator.tier).toBe('UNVERIFIED')
+        const rep = h().run({ risk: oneOperator })
+        expect(codesOf(rep.notes)).toEqual(['risk_unverified'])
+        expect(rep.canSend).toBe(true)
       })
 
-      it('a reviewed adapter is an ordinary route, whatever its signals say', () => {
-        const listed = riskOf({ adapter: { listed: true, lockedBps: 0, outboundNonce: 0n } })
-        expect(listed.tier).toBe('OK')
-        expect(h().run({ risk: listed }).canSend).toBe(true)
-      })
-
-      it('an unreviewed adapter with healthy signals is amber, not red — and warns just the same', () => {
-        const amber = riskOf({ adapter: AMBER })
-        expect(amber.adapterUnproven).toBe(false)
-        expect(amber.tier).toBe('UNVERIFIED')
-        expect(h().run({ risk: amber }).canSend).toBe(false)
-        expect(h().run({ risk: amber, risksAccepted: true }).canSend).toBe(true)
+      it('an adapter that locks a real share and has real history is an ordinary route', () => {
+        const proven = riskOf({ adapter: PROVEN })
+        expect(proven.tier).toBe('OK')
+        const rep = h().run({ risk: proven })
+        expect(rep.notes).toEqual([])
+        expect(rep.canSend).toBe(true)
       })
     })
   }
 })
 
-// -------------------------------------- 2. NTT without a listed locking hub ----
+// -------------------------------------- 2. NTT with nothing vouching for the manager ----
 
-describe('2. an NTT manager no committed list vouches for', () => {
+describe('2. an NTT manager nothing on the source chain vouches for', () => {
   const ETH_CORE = getAddress(WORMHOLE_CHAINS.ethereum!.coreBridge)
   const DST_MANAGER = NTT.DST_MANAGER
   const m = (a: string) => a.toLowerCase()
@@ -216,21 +217,17 @@ describe('2. an NTT manager no committed list vouches for', () => {
       tokenList,
     })
 
-  it('the fixture manager is not in the committed list — otherwise this file tests nothing', () => {
-    expect(LOCKING_HUBS.some((h) => h.manager.toLowerCase() === m(NTT.MANAGER))).toBe(false)
-  })
-
-  it('verifies, finds no anchor, and lands as a warning that the tick opens', async () => {
+  it('verifies, finds no anchor, and lands as a RED note — the send is still possible', async () => {
     const r = await verify(NTT.MANAGER, NTT.TOKEN)
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.verified.anchor).toBeNull()
 
-    const held = runNttGuards(nttInput({ verification: r }))
-    expect(codesOf(held.riskWarnings)).toEqual(['ntt_anchor_missing'])
-    expect(held.blocks).toEqual([])
-    expect(held.canSend).toBe(false)
-    expect(runNttGuards(nttInput({ verification: r, risksAccepted: true })).canSend).toBe(true)
+    const rep = runNttGuards(nttInput({ verification: r }))
+    expect(codesOf(rep.notes)).toEqual(['ntt_anchor_missing'])
+    expect(noteLevel('ntt_anchor_missing')).toBe('red')
+    expect(rep.blocks).toEqual([])
+    expect(rep.canSend).toBe(true)
   })
 
   it('an outage of the third-party catalogue changes nothing — it may narrow the search, never vouch', async () => {
@@ -244,41 +241,36 @@ describe('2. an NTT manager no committed list vouches for', () => {
     }
   })
 
-  it('the tick never lifts a block that sits beside the missing anchor', async () => {
+  it('a block beside the missing anchor still holds', async () => {
     const r = await verify(NTT.MANAGER, NTT.TOKEN)
     for (const [code, mutate] of Object.entries(all.find((x) => x.name === 'NTT')!.blockers)) {
       if (code === 'manager_unverified') continue // replaces the verification this test is about
-      const rep = runNttGuards(nttInput({ verification: r, risksAccepted: true, ...mutate() } as never))
+      const rep = runNttGuards(nttInput({ verification: r, ...mutate() } as never))
       expect(rep.canSend, code).toBe(false)
       expect(codesOf(rep.blocks), code).toContain(code)
     }
   })
 
-  it('a hub the committed list DOES name needs no warning at all', async () => {
-    const hub = LOCKING_HUBS.find((h) => h.chain === 'ethereum')
-    expect(hub, 'locking-hubs.json has no ethereum entry to test with').toBeDefined()
-    const r = await verify(hub!.manager, hub!.token)
-    expect(r.ok).toBe(true)
-    if (!r.ok) return
-    expect(r.verified.anchor).toEqual({ side: 'listed', kind: 'committed' })
-    expect(runNttGuards(nttInput({ verification: r })).riskWarnings).toEqual([])
+  it('no committed list exists any more: nothing in the source reads one', () => {
+    for (const f of ['src/protocols/wormhole-ntt/verify.ts', 'src/protocols/lz-risk/v2.ts', 'src/protocols/lz-risk/v1.ts', 'src/protocols/lz-risk/risk.ts']) {
+      expect(readFileSync(join(ROOT, f), 'utf8'), f).not.toMatch(/lockingHubs|locking-hubs|adapters\.json|reviewedAdapter|listedLockingHub/)
+    }
   })
 })
 
 // -------------------------------------------------- 3. recipient = a contract ----
 
-describe('3. a recipient that is a contract of this very route is refused', () => {
+describe('3. a recipient that is a contract of this very route is a red note, on every protocol', () => {
   const contractsOf = (h: Harness) => h.contractsInPlay.map((c) => [`${h.name}: ${c.label}`, h, c.address] as const)
 
-  it('on every protocol, for every contract in play, ticked or not', () => {
+  it('for every contract in play: noted red, never held', () => {
     const cases = all.flatMap(contractsOf)
     expect(cases.length).toBeGreaterThanOrEqual(14)
     for (const [label, h, address] of cases) {
-      for (const risksAccepted of [false, true]) {
-        const rep = h.run({ ...h.recipientOverride(address), risksAccepted })
-        expect(codesOf(rep.blocks), `${label} (tick=${risksAccepted})`).toContain('recipient_is_contract')
-        expect(rep.canSend, label).toBe(false)
-      }
+      const rep = h.run(h.recipientOverride(address))
+      expect(codesOf(rep.notes), label).toContain('recipient_is_contract')
+      expect(codesOf(rep.blocks), label).not.toContain('recipient_is_contract')
+      expect(rep.canSend, label).toBe(true)
     }
   })
 
@@ -286,20 +278,22 @@ describe('3. a recipient that is a contract of this very route is refused', () =
     for (const h of all) {
       for (const c of h.contractsInPlay) {
         const lower = h.run(h.recipientOverride(c.address.toLowerCase() as Address))
-        expect(codesOf(lower.blocks), `${h.name}: ${c.label}`).toContain('recipient_is_contract')
+        expect(codesOf(lower.notes), `${h.name}: ${c.label}`).toContain('recipient_is_contract')
       }
     }
   })
 
-  it('the code is a block in the table, not a warning the tick could cover', () => {
-    expect(guardSeverity('recipient_is_contract')).toBe('block')
+  it('the code is a red note in the table', () => {
+    expect(guardSeverity('recipient_is_contract')).toBe('note')
+    expect(noteLevel('recipient_is_contract')).toBe('red')
   })
 
-  it('an address that is none of them, typed and confirmed, is not refused', () => {
+  it('an address that is none of them, typed and confirmed, has nothing said about it', () => {
     const ordinary = getAddress('0x9999999999999999999999999999999999999999')
     for (const h of all) {
       const rep = h.run(h.recipientOverride(ordinary))
       expect(codesOf(rep.blocks), h.name).toEqual([])
+      expect(codesOf(rep.notes), h.name).toEqual([])
       expect(rep.canSend, h.name).toBe(true)
     }
   })
@@ -307,7 +301,7 @@ describe('3. a recipient that is a contract of this very route is refused', () =
 
 // ----------------------------------------- 4. the look-alike of a saved address ----
 
-describe('4. a twin of a saved address is refused, and nothing lifts it', () => {
+describe('4. a twin of a saved address is a red note; the book itself never launders one', () => {
   const saved = '0x1234000000000000000000000000000000005678'
   const twin = getAddress('0x1234ffffffffffffffffffffffffffffffff5678')
   const book = (): AddressBook => addEntry({ ...EMPTY_BOOK, entries: [] }, { label: 'Exchange', address: saved, family: 'evm' }, 1_700_000_000_000, 'e1')
@@ -319,20 +313,18 @@ describe('4. a twin of a saved address is refused, and nothing lifts it', () => 
     expect(bookConfirms(v)).toBe(false)
   })
 
-  it('on every protocol: refused with the tail confirmed, and refused with the tick', () => {
+  it('on every protocol: noted red with the tail confirmed, and the send is possible', () => {
     const refuse = bookRefuses(lookUp(book(), 'evm', twin))
     for (const h of all) {
-      for (const risksAccepted of [false, true]) {
-        // recipientOverride sets custom + confirmed: the tail check is satisfied and it still fails.
-        const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: refuse, risksAccepted })
-        expect(codesOf(rep.blocks), `${h.name} (tick=${risksAccepted})`).toContain('recipient_lookalike')
-        expect(rep.canSend, h.name).toBe(false)
-      }
+      const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: refuse })
+      expect(codesOf(rep.notes), h.name).toContain('recipient_lookalike')
+      expect(rep.canSend, h.name).toBe(true)
     }
   })
 
-  it('the code is a block in the table', () => {
-    expect(guardSeverity('recipient_lookalike')).toBe('block')
+  it('the code is a red note in the table', () => {
+    expect(guardSeverity('recipient_lookalike')).toBe('note')
+    expect(noteLevel('recipient_lookalike')).toBe('red')
   })
 
   it('the saved address itself is not a twin of itself, and needs no second confirmation', () => {
@@ -342,18 +334,13 @@ describe('4. a twin of a saved address is refused, and nothing lifts it', () => 
     expect(bookConfirms(v)).toBe(true)
   })
 
-  it('an imported copy of the twin does not launder it: without its own confirmation it is not imported and stays refused', () => {
+  it('an imported copy of the twin does not launder it: without its own confirmation it is not imported and stays a twin', () => {
     const p = previewImport({ version: 1, entries: [{ label: 'Fake', address: twin, family: 'evm' }] }, book())
     const merged = applyImport(book(), p!)
     expect(merged.entries).toHaveLength(1)
     const v = lookUp(merged, 'evm', twin)
     expect(v.kind).toBe('lookalike')
     expect(bookRefuses(v)).toBe(true)
-    for (const h of all) {
-      const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: bookRefuses(v), risksAccepted: true })
-      expect(codesOf(rep.blocks), h.name).toContain('recipient_lookalike')
-      expect(rep.canSend, h.name).toBe(false)
-    }
   })
 
   it('an imported twin the user confirmed row by row is imported, so the tail is still owed', () => {
@@ -364,23 +351,22 @@ describe('4. a twin of a saved address is refused, and nothing lifts it', () => 
     expect(bookConfirms(v)).toBe(false)
     expect(bookRefuses(v)).toBe(false)
     // The screens compute recipientConfirmed = bookConfirms(v) || confirmsTail(...). With neither,
-    // the recipient is unconfirmed on every protocol.
+    // the recipient is not entered yet on every protocol: that is input, and it holds.
     for (const h of all) {
-      const rep = h.run({ ...h.recipientOverride(twin), customRecipientConfirmed: false, recipientLookalike: bookRefuses(v), risksAccepted: true })
+      const rep = h.run({ ...h.recipientOverride(twin), customRecipientConfirmed: false, recipientLookalike: bookRefuses(v) })
       expect(codesOf(rep.blocks), h.name).toContain('recipient_unconfirmed')
       expect(rep.canSend, h.name).toBe(false)
     }
   })
 
-  it('a twin that is in the book without anyone having confirmed the pair is refused on every protocol', () => {
+  it('a twin that is in the book without anyone having confirmed the pair is a twin on every protocol', () => {
     // A hand-edited store, or any path that skipped the question.
     const stored = { version: 1, entries: [{ id: 'e1', label: 'Exchange', address: saved, family: 'evm' }, { id: 'e2', label: 'Fake', address: twin, family: 'evm' }] }
     const v = lookUp(applyImportless(stored), 'evm', twin)
     expect(v.kind).toBe('lookalike')
     for (const h of all) {
-      const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: bookRefuses(v), risksAccepted: true })
-      expect(codesOf(rep.blocks), h.name).toContain('recipient_lookalike')
-      expect(rep.canSend, h.name).toBe(false)
+      const rep = h.run({ ...h.recipientOverride(twin), recipientLookalike: bookRefuses(v) })
+      expect(codesOf(rep.notes), h.name).toContain('recipient_lookalike')
     }
   })
 })
@@ -396,18 +382,17 @@ function applyImportless(raw: unknown): AddressBook {
 
 describe('5. a recipient that is merely a contract is not the guards’ business', () => {
   /**
-   * severity.ts says "a recipient that is merely a contract is a warning: exchange deposits and
-   * multisigs are contracts". The guards are pure functions over an address and cannot tell a
-   * contract from an EOA — no guard reads code — so there is nothing to warn ABOUT. This pins the
-   * half that exists: a contract that is not part of the route is not refused.
+   * The guards are pure functions over an address and cannot tell a contract from an EOA — no
+   * guard reads code — so there is nothing to say. This pins the half that exists: a contract that
+   * is not part of the route is neither held nor noted.
    */
   const SOME_SAFE = getAddress('0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552')
 
-  it('is not a block, and not a warning, on any protocol', () => {
+  it('is not a block, and not a note, on any protocol', () => {
     for (const h of all) {
       const rep = h.run(h.recipientOverride(SOME_SAFE))
       expect(codesOf(rep.blocks), h.name).toEqual([])
-      expect(rep.riskWarnings, h.name).toEqual([])
+      expect(rep.notes, h.name).toEqual([])
       expect(rep.canSend, h.name).toBe(true)
     }
   })
@@ -419,94 +404,82 @@ describe('5. a recipient that is merely a contract is not the guards’ business
   })
 })
 
-// --------------------------------------------------- 7. the assembly invariants ----
+// --------------------------------------------------- 6. blocks are only the impossible ----
 
-describe('7. the tick opens warnings and nothing else', () => {
-  it('every blocker of every protocol produces its own code (the table below tests something)', () => {
-    for (const h of all) {
-      for (const [code, mutate] of Object.entries(h.blockers)) {
-        expect(codesOf(h.run(mutate()).blocks), `${h.name}: ${code}`).toContain(code)
-      }
-    }
-  })
-
-  it('a blocker stays exactly as blocking with the tick on, on all four protocols', () => {
+describe('6. the button is held by the impossible and by nothing else', () => {
+  it('every blocker of every protocol produces its own code in the blocks', () => {
     let n = 0
     for (const h of all) {
       for (const [code, mutate] of Object.entries(h.blockers)) {
-        const off = h.run({ ...mutate(), risksAccepted: false })
-        const on = h.run({ ...mutate(), risksAccepted: true })
-        expect(on.canSend, `${h.name}: ${code}`).toBe(false)
-        // The same failures, in the same order: the tick removed nothing from the blocks.
-        expect(codesOf(on.blocks), `${h.name}: ${code}`).toEqual(codesOf(off.blocks))
+        const rep = h.run(mutate())
+        expect(codesOf(rep.blocks), `${h.name}: ${code}`).toContain(code)
+        expect(rep.canSend, `${h.name}: ${code}`).toBe(false)
         n++
       }
     }
-    expect(n).toBeGreaterThanOrEqual(50)
+    expect(n).toBeGreaterThanOrEqual(40)
   })
 
-  it('every code the table calls blocking or pending keeps the button down under the tick', () => {
+  it('every noter of every protocol produces its own code in the notes, and the send stays possible', () => {
+    let n = 0
+    for (const h of all) {
+      for (const [code, mutate] of Object.entries(h.noters)) {
+        const rep = h.run(mutate())
+        expect(codesOf(rep.notes), `${h.name}: ${code}`).toContain(code)
+        expect(codesOf(rep.blocks), `${h.name}: ${code}`).toEqual([])
+        expect(rep.canSend, `${h.name}: ${code}`).toBe(true)
+        n++
+      }
+    }
+    expect(n).toBeGreaterThanOrEqual(16)
+  })
+
+  it('every code the table calls blocking or pending keeps the button down', () => {
     const codes = [...emittedCodes()].filter((c) => isBlockingCode(c) || isPendingCode(c))
-    expect(codes.length).toBeGreaterThan(40)
+    expect(codes.length).toBeGreaterThan(30)
     for (const code of codes) {
       const failed: FailedGuard = { ok: false, code }
-      expect(verdictOf([failed], true).canSend, code).toBe(false)
-      expect(verdictOf([failed], true).blocks, code).toEqual([failed])
+      expect(verdictOf([failed]).canSend, code).toBe(false)
+      expect(verdictOf([failed]).blocks, code).toEqual([failed])
     }
   })
 
-  it('a warning alone is opened by the tick, and only a warning', () => {
-    for (const code of DELIBERATE_WARNINGS) {
+  it('a note alone never holds; a note beside a block changes nothing', () => {
+    for (const code of DELIBERATE_NOTES) {
       const failed: FailedGuard = { ok: false, code }
-      expect(verdictOf([failed], false).canSend, code).toBe(false)
-      expect(verdictOf([failed], true).canSend, code).toBe(true)
-      // …and mixed with a block it opens nothing.
-      expect(verdictOf([failed, { ok: false, code: 'recipient_zero' }], true).canSend, code).toBe(false)
+      expect(verdictOf([failed]).canSend, code).toBe(true)
+      expect(verdictOf([failed]).notes, code).toEqual([failed])
+      expect(verdictOf([failed, { ok: false, code: 'insufficient_balance' }]).canSend, code).toBe(false)
     }
   })
 
-  it('the transaction does not depend on the tick: no builder or sender ever reads it', () => {
-    const allowed = new Set([
-      'src/core/severity.ts',
-      'src/core/guards.ts',
-      'src/protocols/lz-v1/guards.ts',
-      'src/protocols/wormhole-ntt/guards.ts',
-      'src/protocols/ccip/guards.ts',
-      'src/ui/BridgeApp.tsx',
-      'src/ui/BridgeV1.tsx',
-      'src/ui/NttApp.tsx',
-      'src/ui/CcipApp.tsx',
-      'src/ui/components/RiskWarnings.tsx',
-    ])
+  it('there is no tick anywhere: no guard input and no screen reads one', () => {
     const seen: string[] = []
     const walk = (dir: string) => {
       for (const name of readdirSync(join(ROOT, dir))) {
         const rel = `${dir}/${name}`
         if (statSync(join(ROOT, rel)).isDirectory()) walk(rel)
-        else if (/\.(ts|tsx)$/.test(name) && /risksAccepted/.test(readFileSync(join(ROOT, rel), 'utf8'))) seen.push(rel)
+        else if (/\.(ts|tsx)$/.test(name) && /risksAccepted|warningsCleared|approveReady|useRiskTick|RiskWarnings|highFeeAccepted|noGasAccepted|peerBackAccepted|pdaAccepted|storedPayloadAccepted/.test(readFileSync(join(ROOT, rel), 'utf8'))) seen.push(rel)
       }
     }
     walk('src')
-    const stray = seen.filter((f) => !allowed.has(f))
-    expect(stray, 'a file outside the guards and the screens reads the tick').toEqual([])
+    expect(seen).toEqual([])
   })
 
   it('a plan made for another sender is refused: the refund goes to plan.sender, and the wallet is who signs', () => {
     const other = getAddress('0x9999999999999999999999999999999999999999')
     for (const h of all) {
-      for (const risksAccepted of [false, true]) {
-        const rep = h.run({ walletAddress: other, risksAccepted })
-        // The recipient defaults to "my wallet", so a swapped wallet trips the recipient guard too;
-        // what this pins is that the sender mismatch is reported on its own.
-        expect(codesOf(rep.blocks), `${h.name} (tick=${risksAccepted})`).toContain('chain_mismatch')
-        expect(rep.canSend, h.name).toBe(false)
-      }
+      const rep = h.run({ walletAddress: other })
+      // The recipient defaults to "my wallet", so a swapped wallet trips the recipient guard too;
+      // what this pins is that the sender mismatch is reported on its own.
+      expect(codesOf(rep.blocks), h.name).toContain('chain_mismatch')
+      expect(rep.canSend, h.name).toBe(false)
     }
   })
 
   it('every send handler judges the guards of the render it is called from, not of an earlier one', () => {
-    // A memoised onSend keeps the guardInput of the render it was created in: the tick, the balance
-    // and the simulation would all be stale at the moment of the click.
+    // A memoised onSend keeps the guardInput of the render it was created in: the balance and the
+    // simulation would be stale at the moment of the click.
     for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
       const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
       expect(src, f).not.toMatch(/onSend\s*=\s*useCallback/)
@@ -515,58 +488,82 @@ describe('7. the tick opens warnings and nothing else', () => {
   })
 
   it('the calldata is a function of the plan alone: the same plan encodes to the same bytes', async () => {
-    // The encoders take a plan. There is no parameter through which the tick could reach them, and
-    // the source scan above is what keeps it that way; this pins that the output is stable.
     const { assembleSendArgs, encodeSendCalldata } = await import('@/core/plan')
     const { treadPlan } = await import('./fixtures')
     const plan = treadPlan()
     expect(encodeSendCalldata(assembleSendArgs(plan))).toBe(encodeSendCalldata(assembleSendArgs(plan)))
-    expect(Object.keys(plan)).not.toContain('risksAccepted')
   })
 })
 
-describe('the approve waits for the blocks too, not only for the warnings', () => {
-  it('is ready when the allowance is the only thing missing, and nothing else blocks', () => {
+// ------------------------------------------------ 7. the approve is a step, not a problem ----
+
+describe('7. the approve is the next step: offered when only the allowance is short', () => {
+  const AFTER_APPROVE = { allowance: 2n ** 200n }
+
+  it('needs_approve is a step: it holds canSend, but is never shown as a problem', () => {
+    expect(isStepCode('needs_approve')).toBe(true)
+    expect(guardSeverity('needs_approve')).toBe('block')
     for (const h of all) {
       const rep = h.run(h.blockers['needs_approve']!())
+      expect(rep.canSend, h.name).toBe(false)
       expect(codesOf(rep.blocks), h.name).toEqual(['needs_approve'])
-      expect(rep.approveReady, h.name).toBe(true)
+      expect(shownFailures(rep.blocks, { dropPending: true, dropSteps: true }), h.name).toEqual([])
+      // The button is Approve, enabled.
+      expect(waitsOnlyForApprove(rep.blocks), h.name).toBe(true)
     }
   })
 
-  it('is NOT ready while a refused recipient stands — no allowance for a transfer that cannot happen', () => {
+  it('the approve is NOT offered while the transfer is impossible — no allowance for a transfer that cannot happen', () => {
     for (const h of all) {
-      for (const other of ['recipient_lookalike', 'recipient_zero', 'insufficient_balance', 'chain_mismatch']) {
+      for (const other of ['insufficient_balance', 'chain_mismatch', 'wallet_not_connected']) {
         const rep = h.run({ ...h.blockers['needs_approve']!(), ...h.blockers[other]!() })
-        expect(codesOf(rep.blocks), `${h.name}+${other}`).toContain('needs_approve')
-        expect(rep.approveReady, `${h.name}+${other}`).toBe(false)
-        expect(h.run({ ...h.blockers['needs_approve']!(), ...h.blockers[other]!(), risksAccepted: true }).approveReady, `${h.name}+${other} ticked`).toBe(false)
+        expect(waitsOnlyForApprove(rep.blocks), `${h.name}+${other}`).toBe(false)
       }
     }
   })
 
-  it('still waits for the tick when something warns', () => {
-    for (const name of ['OFT V2', 'OFT v1']) {
-      const h = all.find((x) => x.name === name)!
-      const risk = riskOf({ adapter: { listed: false, lockedBps: 0, outboundNonce: 0n } })
-      const off = h.run({ ...h.blockers['needs_approve']!(), risk })
-      expect(off.approveReady, name).toBe(false)
-      expect(h.run({ ...h.blockers['needs_approve']!(), risk, risksAccepted: true }).approveReady, name).toBe(true)
+  it('a red or yellow route does not stand between the user and the approve', () => {
+    for (const h of all) {
+      for (const [code, mutate] of Object.entries(h.noters)) {
+        const rep = h.run({ ...h.blockers['needs_approve']!(), ...mutate() })
+        expect(waitsOnlyForApprove(rep.blocks), `${h.name}+${code}`).toBe(true)
+      }
     }
   })
 
-  it('the four screens gate the approve on approveReady, not on warningsCleared', () => {
+  it('a fresh adapter with allowance 0: Approve now; Send once the allowance is read back', () => {
+    for (const name of ['OFT V2', 'OFT v1']) {
+      const h = all.find((x) => x.name === name)!
+      const step = { ...h.blockers['needs_approve']!(), risk: riskOf({ adapter: { lockedBps: 247, outboundNonce: 5n } }) }
+      const before = h.run(step)
+      expect(codesOf(before.notes), name).toContain('risk_unverified')
+      expect(codesOf(before.blocks), name).toEqual(['needs_approve'])
+      expect(waitsOnlyForApprove(before.blocks), name).toBe(true)
+      const after = h.run({ ...step, ...AFTER_APPROVE })
+      expect(codesOf(after.blocks), name).toEqual([])
+      expect(after.canSend, name).toBe(true)
+    }
+  })
+
+  it('the screens offer the approve on that rule and put the impossibility in one line under the button', () => {
     for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
       const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
-      expect(src, f).toContain('report.approveReady')
-      expect(src, f).not.toContain('report.warningsCleared')
+      expect(src, f).toContain('shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]')
+      expect(src, f).toMatch(/enabled: waitsOnlyForApprove\(report\.blocks\)/)
+      expect(src, f).toContain('useApproveFlow(')
+      // No red block, no tick, no "test amount only" anywhere on the screen.
+      expect(src, f).not.toMatch(/type="checkbox"[^\n]*(accept|Accept|risk)/)
+    }
+    const dict = readFileSync(join(ROOT, 'src/i18n/en.ts'), 'utf8')
+    for (const gone of ['test amount only', 'cannot be sent', 'Route unverified', 'issue(s) to fix', 'I understand the risks', 'adapterReminder']) {
+      expect(dict, gone).not.toContain(gone)
     }
   })
 })
 
-// ------------------------------------------ 8. a failed simulation warns, with its reason ----
+// ------------------------------------------ 8. a failed simulation is a note, with its reason ----
 
-describe('8. a failed simulation is a warning that says what the node said, on every protocol', () => {
+describe('8. a failed simulation is a yellow note that says what the node said, on every protocol', () => {
   const REASON = 'Error("LzApp: destination chain is not a trusted source")'
   /** The failed simulation in each protocol's own shape, all decoding to REASON. */
   const failed: Record<string, Record<string, unknown>> = {
@@ -576,100 +573,28 @@ describe('8. a failed simulation is a warning that says what the node said, on e
     CCIP: { simulation: { ok: false, reason: REASON } },
   }
 
-  it('is classified as a warning of weight loss, never a block', () => {
-    expect(guardSeverity('simulation_failed')).toBe('warn')
-    expect(guardSeverity('simulation_unavailable')).toBe('warn')
+  it('is classified as a yellow note, never a block', () => {
+    expect(guardSeverity('simulation_failed')).toBe('note')
+    expect(guardSeverity('simulation_unavailable')).toBe('note')
+    expect(noteLevel('simulation_failed')).toBe('yellow')
+    expect(noteLevel('simulation_unavailable')).toBe('yellow')
   })
 
-  it('holds the button without the tick, opens with it, and carries the decoded reason', () => {
+  it('carries the decoded reason, and the send is possible', () => {
     for (const h of all) {
       const over = failed[h.name]
       expect(over, h.name).toBeDefined()
-      const held = h.run({ ...over, risksAccepted: false })
-      expect(codesOf(held.blocks), h.name).not.toContain('simulation_failed')
-      const w = held.riskWarnings.find((r) => !r.ok && r.code === 'simulation_failed') as FailedGuard | undefined
+      const rep = h.run(over!)
+      expect(codesOf(rep.blocks), h.name).not.toContain('simulation_failed')
+      const w = rep.notes.find((r) => !r.ok && r.code === 'simulation_failed') as FailedGuard | undefined
       expect(w, h.name).toBeDefined()
       expect(w!.detail, h.name).toBe(REASON)
-      expect(held.canSend, h.name).toBe(false)
-      const opened = h.run({ ...over, risksAccepted: true })
-      expect(opened.canSend, h.name).toBe(true)
+      expect(rep.canSend, h.name).toBe(true)
     }
   })
 
-  it('the warnings panel prints that reason under the sentence', () => {
-    const src = readFileSync(join(ROOT, 'src/ui/components/RiskWarnings.tsx'), 'utf8')
-    expect(src).toMatch(/DETAILED\.has\(w\.code\) && w\.detail/)
-    expect(src).toMatch(/'simulation_failed'/)
-  })
-})
-
-// ------------------------------------------------ 9. the approve is a step, not a problem ----
-
-describe('9. an adapter with allowance 0: the approve is the next step, not an issue and not a red block', () => {
-  const AFTER_APPROVE = { allowance: 2n ** 200n }
-  // The scenario from the preview: an OFTAdapter that is not on the reviewed list, all eight route
-  // checks passed, and the allowance still at zero.
-  const unlisted = () => riskOf({ adapter: { listed: false, lockedBps: 247, outboundNonce: 5n } })
-
-  it('needs_approve is a step: it holds canSend, but is never shown as a block', () => {
-    expect(isStepCode('needs_approve')).toBe(true)
-    expect(guardSeverity('needs_approve')).toBe('block')
-    for (const h of all) {
-      const rep = h.run(h.blockers['needs_approve']!())
-      expect(rep.canSend, h.name).toBe(false)
-      expect(shownFailures(rep.blocks, { dropPending: true, dropSteps: true }), h.name).toEqual([])
-      expect(waitsOnlyForApprove(rep.blocks), h.name).toBe(true)
-      // Nothing warns here, so the approve is ready at once: the button is Approve.
-      expect(rep.approveReady, h.name).toBe(true)
-    }
-  })
-
-  it('an unlisted adapter with allowance 0: a warning and the tick, no block; Approve after the tick; Send after the approve', () => {
-    for (const name of ['OFT V2', 'OFT v1']) {
-      const h = all.find((x) => x.name === name)!
-      const step = { ...h.blockers['needs_approve']!(), risk: unlisted() }
-      const before = h.run(step)
-      // The adapter is a warning, not an issue to fix...
-      expect(codesOf(before.riskWarnings), name).toContain('risk_unverified')
-      expect(before.riskWarnings.every((w) => !w.ok && isWarningCode(w.code)), name).toBe(true)
-      // ...and the red list is empty, so the tick is on screen (RiskWarnings hides it behind blocks).
-      expect(shownFailures(before.blocks, { dropPending: true, dropSteps: true }), name).toEqual([])
-      expect(waitsOnlyForApprove(before.blocks), name).toBe(true)
-      // Approve waits for the tick and for nothing else.
-      expect(before.approveReady, name).toBe(false)
-      const ticked = h.run({ ...step, risksAccepted: true })
-      expect(ticked.approveReady, name).toBe(true)
-      expect(ticked.canSend, name).toBe(false)
-      // After the approve lands the allowance is read back and the same tick sends any amount.
-      const after = h.run({ ...step, ...AFTER_APPROVE, risksAccepted: true })
-      expect(codesOf(after.blocks), name).toEqual([])
-      expect(after.canSend, name).toBe(true)
-      expect(h.run({ ...step, ...AFTER_APPROVE }).canSend, `${name} without the tick`).toBe(false)
-    }
-  })
-
-  it('a real block next to the approve step is still a red block, and the approve is not offered', () => {
-    for (const h of all) {
-      const rep = h.run({ ...h.blockers['needs_approve']!(), ...h.blockers['recipient_zero']!() })
-      expect(codesOf(shownFailures(rep.blocks, { dropPending: true, dropSteps: true })), h.name).toEqual(['recipient_zero'])
-      expect(waitsOnlyForApprove(rep.blocks), h.name).toBe(false)
-      expect(rep.approveReady, h.name).toBe(false)
-    }
-  })
-
-  it('the screens drop the step from the red list, grade the check rows, and offer the approve on that rule', () => {
-    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
-      const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
-      expect(src, f).toContain('shownFailures(report.blocks, { dropPending: true, dropSteps: true })')
-    }
-    expect(readFileSync(join(ROOT, 'src/ui/BridgeApp.tsx'), 'utf8')).toMatch(/approveIntent && waitsOnlyForApprove\(report\.blocks\)/)
-    for (const f of ['src/ui/components/Review.tsx', 'src/ui/BridgeV1.tsx', 'src/ui/NttApp.tsx', 'src/ui/CcipApp.tsx']) {
-      const src = readFileSync(join(ROOT, f), 'utf8')
-      expect(src, f).toContain('isStepCode(r.code)')
-      expect(src, f).toContain('isWarningCode(r.code)')
-    }
-    // The route panel asks for a destination before it says anything about coverage.
-    expect(readFileSync(join(ROOT, 'src/ui/BridgeApp.tsx'), 'utf8')).toContain('awaitingDestination={dest.dstEid === undefined}')
-    expect(readFileSync(join(ROOT, 'src/ui/components/RiskPanel.tsx'), 'utf8')).toMatch(/if \(p\.awaitingDestination\) return/)
+  it('the indicator prints that reason under the sentence', () => {
+    const src = readFileSync(join(ROOT, 'src/ui/components/RouteIndicator.tsx'), 'utf8')
+    expect(src).toMatch(/r\.detail/)
   })
 })

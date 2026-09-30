@@ -1,9 +1,10 @@
 /**
- * Security invariants (§6). Each numbered guard is a pure function over a
- * snapshot of app state. The Send button is enabled only when every guard
- * returns ok. Text lives in i18n; guards return codes only.
+ * Security invariants (§6). Each numbered guard is a pure function over a snapshot of app state.
+ * Text lives in i18n; guards return codes only. core/severity.ts says which codes hold the Send
+ * button (the transaction is impossible, or the app would be building something malformed) and
+ * which are notes for the route indicator (core/indicator.ts). Nothing here asks for a tick.
  */
-import { renameWarnings, verdictOf } from './severity'
+import { verdictOf } from './severity'
 import { type Address, type Hex } from 'viem'
 import { applyBps } from './amounts'
 import { aboveFeeCeiling, byChainId, byEid } from './chains'
@@ -50,19 +51,20 @@ export type GuardCode =
   | 'simulation_failed'
   | 'selfcheck_missing'
   | 'selfcheck_failed'
-  | 'no_executor_gas_unconfirmed'
+  | 'no_executor_gas'
   | 'peer_back_unknown'
   | 'peer_back_mismatch'
-  | 'peer_back_unavailable_unconfirmed'
+  | 'peer_back_unavailable'
   | 'dangerous_options'
   | 'recipient_vm_mismatch'
   | 'recipient_class_unknown'
   | 'recipient_token_account'
-  | 'recipient_pda_unconfirmed'
+  | 'recipient_pda'
   | 'no_executor_options_svm'
   | 'svm_dest_unknown'
-  | 'fee_above_ceiling_unconfirmed'
+  | 'fee_above_ceiling'
   | 'risk_unknown'
+  | 'risk_unavailable'
   | 'risk_blocked'
   | 'risk_unverified'
 
@@ -124,24 +126,18 @@ export type GuardInput = {
   approveIntent?: ApproveIntent
   simulation: SimulationResult | undefined
   selfCheck: SelfCheckResult | undefined
-  /** User confirmed the "executor may get no gas" warning (§6.15). */
-  noExecutorGasAccepted: boolean
   flags: readonly SuspiciousFlag[]
   /** Result of checkPeerBack() for plan.dstEid, once known. */
   peerBack: PeerBackResult | undefined
-  /** User accepted that the back-link could not be verified (RPC down), see guard 17. */
-  peerBackUnavailableAccepted: boolean
-  /** User read and accepted a fee above the source chain's ceiling (§6.21, guard 21). */
-  highFeeAccepted?: boolean
   /**
-   * §4 The route's risk verdict, once the checks have run. Absent means they have not, and guard 22
-   * treats that as pending rather than permission — a verdict nobody computed is not a verdict.
+   * §4 The route's risk verdict, once the checks have run. Absent means they have not (guard 22
+   * is pending) — unless `riskError` says the runner failed, which is a note, not a hold.
    */
   risk?: RouteRisk | undefined
+  /** The route checks could not be run at all. Said in the indicator; never holds the button. */
+  riskError?: string | undefined
   /** Solana destinations only: what kind of account the recipient is (svm/recipient.ts). */
   svmRecipientClass?: SvmRecipientClass | undefined
-  /** User explicitly accepted sending to a program-owned (PDA) Solana account. */
-  svmRecipientPdaAccepted?: boolean
   /** Solana destinations only: discovery of the Solana side finished (mint, program, PeerConfig known). */
   svmDestinationKnown?: boolean
   /**
@@ -150,32 +146,18 @@ export type GuardInput = {
    * warning (§types.SuspiciousFlag), not a reason to refuse a route the EVM side still quotes.
    */
   svmDestinationRecognised?: boolean
-  /**
-   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
-   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
-   * token, the route, the amount or the recipient changes.
-   */
-  risksAccepted?: boolean | undefined
 }
 
 export type GuardReport = {
-  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  /** Failures that hold the button, plus reads still in flight (core/severity.ts). */
   blocks: GuardResult[]
-  /** Failures the single tick covers, strongest first (core/severity.ts). */
-  riskWarnings: GuardResult[]
-  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
-  warningsCleared: boolean
-  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
-  approveReady: boolean
+  /** Failures that colour the route indicator and hold nothing. */
+  notes: GuardResult[]
   results: GuardResult[]
-  /** Soft flags (§6.16). Shown, never block. */
+  /** Soft flags (§6.16). Shown in the indicator, never block. */
   warnings: SuspiciousFlag[]
-  /** True iff every result is ok. */
+  /** True iff nothing blocks. */
   canSend: boolean
-  /** True iff the "no executor gas" warning applies (regardless of acceptance). */
-  needsNoGasConfirmation: boolean
-  /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
-  needsHighFeeConfirmation: boolean
 }
 
 const ok = (id: number): GuardResult => ({ id, ok: true })
@@ -293,7 +275,9 @@ export function g8Native(i: GuardInput): GuardResult {
   // The fee alone already settles it: say so instead of waiting for a gas estimate that will never
   // arrive (the simulation an unaffordable fee makes fail is what produces the estimate).
   if (i.plan.value > i.nativeBalance) return fail(8, 'insufficient_native', `${i.plan.value} > ${i.nativeBalance}`)
-  if (i.gasCostWei === undefined) return fail(8, 'native_balance_unknown')
+  // A simulation that has already failed produces no estimate, ever: waiting for one would hold
+  // the button forever behind a note. The fee fits; the gas is what the wallet will price.
+  if (i.gasCostWei === undefined) return i.simulation && !i.simulation.ok ? ok(8) : fail(8, 'native_balance_unknown')
   const need = i.plan.value + i.gasCostWei
   if (need > i.nativeBalance) return fail(8, 'insufficient_native', `${need} > ${i.nativeBalance}`)
   return ok(8)
@@ -364,17 +348,15 @@ export function needsNoGasConfirmation(info: SourceInfo | undefined, plan: SendP
   return receiveTotals(enforced).gas + receiveTotals(plan.extraOptions).gas === 0n
 }
 
-// 15. no executor gas -> EVM: requires its own explicit confirmation; Solana: a warning with no
-//     confirmation of its own (`no_executor_options_svm`, weighed `stuck` in core/severity.ts and
-//     covered by the single tick) — said loudly because a stuck message on Solana cannot simply be
-//     retried, but the person decides (CLAUDE.md rule 2).
+// 15. no executor gas -> a note for the indicator: the message may sit undelivered until someone
+//     pays for its execution. Said more loudly for Solana, where a stuck message cannot simply be
+//     retried. The person decides (CLAUDE.md rule 2).
 export function g15ExecutorGas(i: GuardInput): GuardResult {
   if (!i.plan) return fail(15, 'plan_missing')
   if (!i.info) return fail(15, 'oft_missing')
   if (!needsNoGasConfirmation(i.info, i.plan)) return ok(15)
   if (byEid(i.plan.dstEid)?.vm === 'svm') return fail(15, 'no_executor_options_svm')
-  if (!i.noExecutorGasAccepted) return fail(15, 'no_executor_gas_unconfirmed')
-  return ok(15)
+  return fail(15, 'no_executor_gas')
 }
 
 /** inspectEnforcedOptions() risks, as the flags the review screen already knows how to print. */
@@ -411,9 +393,7 @@ export function g17PeerBack(i: GuardInput): GuardResult {
   if (!i.plan) return fail(17, 'plan_missing')
   if (!i.peerBack) return fail(17, 'peer_back_unknown')
   if (i.peerBack.status === 'mismatch') return fail(17, 'peer_back_mismatch', i.peerBack.theirPeer)
-  if (i.peerBack.status === 'unavailable' && !i.peerBackUnavailableAccepted) {
-    return fail(17, 'peer_back_unavailable_unconfirmed', i.peerBack.reason)
-  }
+  if (i.peerBack.status === 'unavailable') return fail(17, 'peer_back_unavailable', i.peerBack.reason)
   return ok(17)
 }
 
@@ -437,7 +417,7 @@ export function g19RecipientVm(i: GuardInput): GuardResult {
     const cls = i.svmRecipientClass
     if (cls === undefined) return fail(19, 'recipient_class_unknown')
     if (cls === 'token_account') return fail(19, 'recipient_token_account')
-    if (cls === 'program_owned' && !i.svmRecipientPdaAccepted) return fail(19, 'recipient_pda_unconfirmed')
+    if (cls === 'program_owned') return fail(19, 'recipient_pda')
   }
   return ok(19)
 }
@@ -462,14 +442,13 @@ export function feeAboveCeiling(plan: SendPlan | undefined): boolean {
   return !!src && aboveFeeCeiling(src.key, plan.value)
 }
 
-// 21. the fee is within the chain's ceiling, or the user has read the number and accepted it.
-//     Nothing off-chain can verify a quote, so this is the only bound on it that is not "the
-//     whole balance" (guard 8). A confirmation, never a refusal: fees are genuinely volatile.
+// 21. the fee is within the chain's ceiling. Nothing off-chain can verify a quote, so this is the
+//     only bound on it that is not "the whole balance" (guard 8). A note, never a refusal: fees
+//     are genuinely volatile, and the number is on screen.
 export function g21FeeCeiling(i: GuardInput): GuardResult {
   if (!i.plan) return fail(21, 'plan_missing')
   if (!feeAboveCeiling(i.plan)) return ok(21)
-  if (!i.highFeeAccepted) return fail(21, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
-  return ok(21)
+  return fail(21, 'fee_above_ceiling', `${i.plan.value}`)
 }
 
 /** True when §4's risk indicator has a runner for this route: both ends EVM. */
@@ -480,12 +459,11 @@ export function riskCovers(i: GuardInput): boolean {
 }
 
 /**
- * §4, guard 22: the route's verdict, said out loud.
+ * §4, guard 22: the route's verdict, carried as a note.
  *
- * It no longer decides how much may go. The indicator computes a tier honestly — green only from
- * facts an attacker cannot write about himself — and the tier then picks how loudly this guard
- * speaks. `BLOCKED` and `UNVERIFIED` are warnings that core/severity.ts weighs as a possible loss;
- * the single tick is what sends the transfer, and it sends any amount.
+ * It decides nothing about the amount and holds nothing. The indicator reads the verdict's own
+ * reasons (core/indicator.ts); this guard only makes the verdict part of the report, so the list
+ * of checks shows it and a screen cannot forget to ask for it.
  *
  * Routes the indicator has no runner for (a Solana source or destination) pass silently: there is
  * no verdict to report, and guards 1-21 are the whole rule there.
@@ -497,9 +475,7 @@ export function g22Risk(i: GuardInput): GuardResult {
   // are the whole rule there, exactly as they were before this guard existed. Stated as a boundary
   // rather than left as an accident: the day a Solana runner lands, this line is what changes.
   if (!riskCovers(i)) return ok(22)
-  if (!i.risk) return fail(22, 'risk_unknown')
-  // The verdict is a warning now, not a permission: core/severity.ts weighs both codes as a
-  // possible loss, and the single tick is what lets the transfer through.
+  if (!i.risk) return i.riskError ? fail(22, 'risk_unavailable', i.riskError) : fail(22, 'risk_unknown')
   const code = riskWarningCode(i.risk)
   return code ? fail(22, code) : ok(22)
 }
@@ -530,13 +506,7 @@ export function runGuards(i: GuardInput): GuardReport {
     g21FeeCeiling(i),
     g22Risk(i),
   ]
-  return {
-    results,
-    warnings: g16.warnings,
-    ...renameWarnings(verdictOf(results, i.risksAccepted === true)),
-    needsNoGasConfirmation: needsNoGasConfirmation(i.info, i.plan),
-    needsHighFeeConfirmation: feeAboveCeiling(i.plan),
-  }
+  return { results, warnings: g16.warnings, ...verdictOf(results) }
 }
 
 /**

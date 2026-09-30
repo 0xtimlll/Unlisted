@@ -160,16 +160,6 @@ export function TokenStep(p: {
               </div>
             </div>
           </div>
-          {p.info.kind === 'OFTAdapter' ? <p className="mt-2 text-xs text-muted">{d.card.adapterReminder}</p> : null}
-          {p.flags.length > 0 ? (
-            <div className="mt-2">
-              <Alert kind="warn">
-                {p.flags.map((f) => (
-                  <div key={f}>⚠ {d.card[`flag_${f}`]}</div>
-                ))}
-              </Alert>
-            </div>
-          ) : null}
         </div>
       ) : null}
     </Box>
