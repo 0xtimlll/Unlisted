@@ -153,6 +153,8 @@ export type V1GuardReport = {
   blocks: V1GuardResult[]
   /** Failures the single tick covers, strongest first (core/severity.ts). */
   riskWarnings: V1GuardResult[]
+  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
+  warningsCleared: boolean
   results: V1GuardResult[]
   warnings: SuspiciousFlag[]
   canSend: boolean

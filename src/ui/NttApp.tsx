@@ -6,6 +6,8 @@
  * spender, so the four-part gate is what stands between the user and handing an allowance to a
  * look-alike contract. The gate's verdict is the first thing on the right.
  */
+import { shownFailures } from '@/core/severity'
+import { RiskWarnings } from './components/RiskWarnings'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
@@ -69,6 +71,7 @@ export function NttApp({
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
+  const [risksAccepted, setRisksAccepted] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
   const [highFeeAccepted, setHighFeeAccepted] = useState(false)
@@ -192,11 +195,16 @@ export function NttApp({
   // rather than written out so a future non-EVM destination cannot inherit the wrong one.
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
+
   const recipientConfirmed =
     recipientCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6))
 
   const plan = useNttPlan({ verification: verification.data, sender: wallet, recipient, amountRaw, customRpc: stored.customRpc })
   const planData = plan.data
+  // The tick covers what was on screen when it was ticked: token, route, amount, recipient.
+  useEffect(() => {
+    setRisksAccepted(false)
+  }, [planData?.manager, planData?.dst.chain, planData?.amount, planData?.recipientDisplay])
 
   // A fee the user accepted was a specific number; the moment it changes they have not read it.
   const planValue = plan.data?.value
@@ -219,6 +227,7 @@ export function NttApp({
     recipientIsCustom: recipientCustom,
     customRecipientConfirmed: recipientConfirmed,
     recipientLookalike: bookRefuses(bookVerdict),
+    risksAccepted,
     tokenBalance: tokenBalance.data,
     nativeBalance: nativeBalance.data?.value,
     allowance: allowance.data,
@@ -305,6 +314,9 @@ export function NttApp({
   const chainMismatch = wallet !== undefined && walletChainId !== undefined && evmSrc !== undefined && walletChainId !== evmSrc.chainId
   const busy = switching || approveWrite.isPending || (!!approveWrite.data && approveReceipt.isLoading) || sendWrite.isPending
   const firstFailing = report.results.find((r) => !r.ok && !isNttPending(r)) ?? report.results.find((r) => !r.ok)
+  // Reads in flight are "checking", not problems to accept.
+  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true }) : []
+  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
   const ctaLabel = !wallet
     ? d.ui.cta_connect
     : chainMismatch
@@ -320,7 +332,9 @@ export function NttApp({
               : approveIntent
                 ? fmt(d.step3.approveBtn, { amount: formatAmount(approveIntent.amount, verified.tokenDecimals), symbol: verified.tokenSymbol })
                 : d.ui.cta_send
-  const ctaEnabled = !busy && (!wallet || chainMismatch || (!!approveIntent && !!verified) || report.canSend)
+  // The approve grants an allowance, so it waits for the same tick the send does: an allowance
+  // given to a contract whose risk has not been accepted is the exploitable half of this app.
+  const ctaEnabled = !busy && (!wallet || chainMismatch || (!!approveIntent && !!verified && report.warningsCleared) || report.canSend)
   const onCta = () => {
     if (!wallet) return openConnectModal?.()
     if (chainMismatch && evmSrc) return switchChain({ chainId: evmSrc.chainId })
@@ -500,6 +514,13 @@ export function NttApp({
         <Button variant="cta" disabled={!ctaEnabled} onClick={onCta}>
           {busy ? <Spinner /> : ctaLabel}
         </Button>
+        <RiskWarnings
+          blocks={shownBlocks}
+          warnings={shownWarnings}
+          label={(c) => d.nttGuard[c as keyof typeof d.nttGuard] ?? c}
+          accepted={risksAccepted}
+          onAccepted={setRisksAccepted}
+        />
         {!report.canSend && firstFailing && !firstFailing.ok ? <div className="text-center text-xs text-muted">{d.nttGuard[firstFailing.code]}</div> : null}
       </div>
     </>

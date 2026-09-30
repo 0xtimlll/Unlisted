@@ -109,6 +109,8 @@ export type NttGuardReport = {
   blocks: NttGuardResult[]
   /** Failures the single tick covers, strongest first (core/severity.ts). */
   riskWarnings: NttGuardResult[]
+  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
+  warningsCleared: boolean
   results: NttGuardResult[]
   canSend: boolean
   /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */

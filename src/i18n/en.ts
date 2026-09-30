@@ -509,6 +509,12 @@ export const en = {
     clear: 'Clear',
     all: 'All',
   },
+  risks: {
+    blockedTitle: 'This transfer cannot be sent:',
+    blockedHint: 'Fix the item above and the send button comes back. These are not risks to accept — the money would be lost, or the transaction would not go through.',
+    testFirst: 'Send a test amount first.',
+    acceptAll: 'I understand the risks, send',
+  },
   addressBook: {
     title: 'Address book',
     close: 'Close',

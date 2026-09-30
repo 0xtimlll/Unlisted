@@ -174,6 +174,13 @@ export type GuardVerdict<R> = {
   blocks: R[]
   /** Failures one tick covers, strongest first. */
   warnings: R[]
+  /**
+   * True when there is nothing to warn about, or the tick is on. Separate from `canSend` because
+   * the APPROVE step needs it on its own: an allowance granted to a contract the user has not yet
+   * accepted the risk of is the exploitable half of this app, and `canSend` cannot be used there —
+   * it is false until the approve lands, which is what the approve is for.
+   */
+  warningsCleared: boolean
   /** True when nothing blocks and either nothing warns or the tick is on. */
   canSend: boolean
 }
@@ -191,7 +198,8 @@ export function verdictOf<R extends AnyGuardResult>(results: readonly R[], risks
     else blocks.push(r)
   }
   const sorted = sortWarnings(warnings as unknown as { code: string }[]) as unknown as R[]
-  return { blocks, warnings: sorted, canSend: blocks.length === 0 && (sorted.length === 0 || risksAccepted) }
+  const warningsCleared = sorted.length === 0 || risksAccepted
+  return { blocks, warnings: sorted, warningsCleared, canSend: blocks.length === 0 && warningsCleared }
 }
 
 /**
@@ -199,6 +207,20 @@ export function verdictOf<R extends AnyGuardResult>(results: readonly R[], risks
  * those are shown and never hold anything. This renames the verdict's field so both can live in
  * one report without either quietly shadowing the other.
  */
-export function renameWarnings<R>(v: GuardVerdict<R>): { blocks: R[]; riskWarnings: R[]; canSend: boolean } {
-  return { blocks: v.blocks, riskWarnings: v.warnings, canSend: v.canSend }
+export function renameWarnings<R>(v: GuardVerdict<R>): { blocks: R[]; riskWarnings: R[]; warningsCleared: boolean; canSend: boolean } {
+  return { blocks: v.blocks, riskWarnings: v.warnings, warningsCleared: v.warningsCleared, canSend: v.canSend }
+}
+
+/** True while a read is still in flight: shown as "checking", never as a problem to accept. */
+export const isPendingCode = (code: string): boolean => guardSeverity(code) === 'pending'
+
+/**
+ * Narrows a report's list to the failures a screen should show, dropping reads still in flight.
+ * A type predicate so the screens keep `code` without a cast.
+ */
+export function shownFailures<R extends { ok: boolean }>(
+  list: readonly R[],
+  opts: { dropPending: boolean } = { dropPending: false },
+): (R & FailedGuard)[] {
+  return list.filter((r): r is R & FailedGuard => !r.ok && !(opts.dropPending && isPendingCode((r as unknown as FailedGuard).code)))
 }
