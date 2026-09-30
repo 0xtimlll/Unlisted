@@ -10,7 +10,14 @@ import { isZeroBytes32, sameAddress } from './encoding'
 import { labelLooksSpoofed as looksSpoofed, sanitizeLabel as sanitize } from './text'
 import type { OftInfo, SuspiciousFlag } from './types'
 
-export type ProbeErrorCode = 'invalid_address' | 'not_contract' | 'not_oft' | 'token_unreadable' | 'rate_mismatch' | 'rpc_mismatch'
+export type ProbeErrorCode =
+  | 'invalid_address'
+  | 'not_contract'
+  | 'not_oft'
+  | 'token_unreadable'
+  | 'rate_mismatch'
+  | 'rpc_mismatch'
+  | 'foreign_endpoint'
 
 export class ProbeError extends Error {
   constructor(
@@ -37,9 +44,15 @@ const ZERO_SLOT = `0x${'0'.repeat(64)}`
  */
 export { labelLooksSpoofed, sanitizeLabel } from './text'
 
+/**
+ * `endpointV2` is the chain's committed EndpointV2 address, and it is REQUIRED rather than
+ * optional on purpose: an omitted check is a check that fails open, and this one decides whether
+ * the §4 risk reads are answered by LayerZero or by the contract under examination.
+ */
 export async function probeOft(
   client: ReadClient,
   address: string,
+  endpointV2: Address,
   eids: readonly number[] = ALL_EIDS,
 ): Promise<ProbeResult> {
   if (!isAddress(address, { strict: false })) throw new ProbeError('invalid_address')
@@ -86,6 +99,13 @@ export async function probeOft(
   const sharedDecimals = Number(must(rShared, 'sharedDecimals'))
   const conversionRate = must(rRate, 'decimalConversionRate')
   const endpoint = getAddress(must(rEndpoint, 'endpoint'))
+  // `endpoint()` is the contract's own claim, and §4 then asks THAT address for this contract's
+  // outbound nonce and send library — so a fake OFT naming a fake endpoint would be marking its
+  // own homework. One EndpointV2 per chain, from the committed registry; anything else is not on
+  // the network this app quotes and sends through. lz-v1/detect.ts has always done this.
+  if (!sameAddress(endpoint, endpointV2)) {
+    throw new ProbeError('foreign_endpoint', `${endpoint} is not this chain's EndpointV2 (${endpointV2})`)
+  }
   const owner = rOwner?.status === 'success' ? getAddress(rOwner.result) : undefined
   void rVersion // informational only
 

@@ -48,10 +48,10 @@ export async function proxyImplementation(client: ReadClient, address: Address):
   }
 }
 
-export async function classifyLzAddress(client: ReadClient, address: string, eids?: readonly number[]): Promise<LzClassification> {
+export async function classifyLzAddress(client: ReadClient, address: string, endpointV2: Address, eids?: readonly number[]): Promise<LzClassification> {
   let probe: ProbeResult
   try {
-    probe = eids ? await probeOft(client, address, eids) : await probeOft(client, address)
+    probe = eids ? await probeOft(client, address, endpointV2, eids) : await probeOft(client, address, endpointV2)
   } catch (e) {
     if (e instanceof ProbeError && e.code === 'not_contract') return { kind: 'not_contract' }
     if (!(e instanceof ProbeError)) throw e

@@ -23,14 +23,14 @@ const rpc = () => new SvmRpc([...byKey('solana').rpcUrls])
 
 describe('ENA: Ethereum -> Solana on the earlier Solana OFT program', () => {
   it('the EVM side has a Solana peer, and it is this store', async () => {
-    const { info } = await probeOft(makeReadClient(evmByKey('ethereum')), ENA_ETHEREUM, [SOLANA_EID])
+    const { info } = await probeOft(makeReadClient(evmByKey('ethereum')), ENA_ETHEREUM, evmByKey('ethereum').endpointV2, [SOLANA_EID])
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)
     expect(sol).toBeDefined()
     expect(sol!.peer).toBe('0xb2bbb09b62e3f8d58cf1bb1b5318477f53f453ae67638eff27987642bbeaff9b')
   }, 60_000)
 
   it('the store is recognised as the earlier OftConfig layout, not rejected', async () => {
-    const { info } = await probeOft(makeReadClient(evmByKey('ethereum')), ENA_ETHEREUM, [SOLANA_EID])
+    const { info } = await probeOft(makeReadClient(evmByKey('ethereum')), ENA_ETHEREUM, evmByKey('ethereum').endpointV2, [SOLANA_EID])
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)!
     const found = await discoverSvmOft(rpc(), sol.peer, ETHEREUM_EID)
 
@@ -51,7 +51,7 @@ describe('ENA: Ethereum -> Solana on the earlier Solana OFT program', () => {
   }, 60_000)
 
   it('the back-link resolves: the Solana peer names the ENA adapter on Ethereum', async () => {
-    const { info } = await probeOft(makeReadClient(evmByKey('ethereum')), ENA_ETHEREUM, [SOLANA_EID])
+    const { info } = await probeOft(makeReadClient(evmByKey('ethereum')), ENA_ETHEREUM, evmByKey('ethereum').endpointV2, [SOLANA_EID])
     const sol = info.routes.find((r) => r.eid === SOLANA_EID)!
     const found = await discoverSvmOft(rpc(), sol.peer, ETHEREUM_EID)
     if (!found.recognised) throw new Error('expected a recognised store')

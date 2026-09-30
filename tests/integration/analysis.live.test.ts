@@ -121,7 +121,7 @@ describe('analysis on real transactions', () => {
     // An address with no PENGU: the simulation must fail, and the failure must be a NAMED error
     // (or, at worst, a selector we admit we do not know) — never an opaque blob.
     const client = makeReadClient(evmByKey('hyperevm'))
-    const { info } = await probeOft(client, PENGU_HYPEREVM, [30101])
+    const { info } = await probeOft(client, PENGU_HYPEREVM, evmByKey('hyperevm').endpointV2, [30101])
     const empty = '0x000000000000000000000000000000000000dEaD' as const
     const plan = await buildSendPlan(client, {
       info,
@@ -165,13 +165,13 @@ describe('analysis on real transactions', () => {
 
   it('classifies the OFT itself, and its endpoint as a non-OFT contract', async () => {
     const client = makeReadClient(evmByKey('hyperevm'))
-    const oft = await classifyLzAddress(client, PENGU_HYPEREVM, [SOLANA_EID])
+    const oft = await classifyLzAddress(client, PENGU_HYPEREVM, evmByKey('hyperevm').endpointV2, [SOLANA_EID])
     expect(oft.kind).toBe('oft')
     if (oft.kind !== 'oft') return
 
-    // The endpoint the OFT itself names: a real contract, but not an OApp and not an OFT.
-    // (Its address differs per chain, so it is read from the contract rather than written down.)
-    const endpoint = await classifyLzAddress(client, oft.probe.info.endpoint, [SOLANA_EID])
+    // The endpoint the OFT names — which probeOft has just confirmed IS the committed EndpointV2
+    // for this chain — is a real contract, but not an OApp and not an OFT.
+    const endpoint = await classifyLzAddress(client, oft.probe.info.endpoint, evmByKey('hyperevm').endpointV2, [SOLANA_EID])
     expect(endpoint.kind).toBe('not_lz')
   })
 })

@@ -160,7 +160,7 @@ describe('a real V2 route', () => {
     if (!isEvm(dstDef)) throw new Error('EVM destinations only here')
     const srcClient = makeReadClient(src)
     const dstClient = makeReadClient(dstDef)
-    const { info } = await probeOft(srcClient, oft)
+    const { info } = await probeOft(srcClient, oft, src.endpointV2)
     const plan = await buildSendPlan(srcClient, {
       info,
       src,

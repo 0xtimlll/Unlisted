@@ -32,7 +32,7 @@ const eth = makeReadClient(evmByKey('ethereum'))
 
 describe('HyperEVM / TREAD OFT', () => {
   it('probes as plain OFT, no approve, 18/6, peer on Ethereum', async () => {
-    const { info, flags } = await probeOft(hyper, TREAD_OFT)
+    const { info, flags } = await probeOft(hyper, TREAD_OFT, evmByKey('hyperevm').endpointV2)
     expect(info.kind).toBe('OFT')
     expect(info.token).toBe(TREAD_OFT)
     expect(info.approvalRequired).toBe(false)
@@ -46,7 +46,7 @@ describe('HyperEVM / TREAD OFT', () => {
   })
 
   it('builds a plan with real quotes and the pure guards agree', async () => {
-    const { info } = await probeOft(hyper, TREAD_OFT)
+    const { info } = await probeOft(hyper, TREAD_OFT, evmByKey('hyperevm').endpointV2)
     const plan = await buildSendPlan(hyper, {
       info, src: evmByKey('hyperevm'), dstEid: 30101, amountInput: '1', sender: USER, recipient: evmRecipient(USER),
     })
@@ -69,7 +69,7 @@ describe('HyperEVM / TREAD OFT', () => {
   })
 
   it('refuses a destination without a peer', async () => {
-    const { info } = await probeOft(hyper, TREAD_OFT)
+    const { info } = await probeOft(hyper, TREAD_OFT, evmByKey('hyperevm').endpointV2)
     await expect(
       buildSendPlan(hyper, { info, src: evmByKey('hyperevm'), dstEid: 30184, amountInput: '1', sender: USER, recipient: evmRecipient(USER) }),
     ).rejects.toMatchObject({ code: 'no_route' } satisfies Partial<PlanError>)
@@ -78,7 +78,7 @@ describe('HyperEVM / TREAD OFT', () => {
 
 describe('HyperEVM / USDT0 adapter', () => {
   it('probes as adapter with a separate token, 6/6, multiple peers', async () => {
-    const { info } = await probeOft(hyper, USDT0_OFT)
+    const { info } = await probeOft(hyper, USDT0_OFT, evmByKey('hyperevm').endpointV2)
     expect(info.kind).toBe('OFTAdapter')
     expect(info.token).toBe(USDT0_TOKEN)
     expect(info.approvalRequired).toBe(false)
@@ -94,7 +94,7 @@ describe('HyperEVM / USDT0 adapter', () => {
 
 describe('Ethereum / TREAD adapter', () => {
   it('requires approve and peers back to HyperEVM', async () => {
-    const { info, flags } = await probeOft(eth, TREAD_ADAPTER)
+    const { info, flags } = await probeOft(eth, TREAD_ADAPTER, evmByKey('ethereum').endpointV2)
     expect(info.kind).toBe('OFTAdapter')
     expect(info.approvalRequired).toBe(true)
     expect(info.token).not.toBe(TREAD_ADAPTER)
@@ -107,12 +107,12 @@ describe('Ethereum / TREAD adapter', () => {
 
 describe('negative', () => {
   it('plain ERC-20 is rejected as not an OFT', async () => {
-    await expect(probeOft(hyper, WHYPE)).rejects.toMatchObject({ code: 'not_oft' } satisfies Partial<ProbeError>)
+    await expect(probeOft(hyper, WHYPE, evmByKey('hyperevm').endpointV2)).rejects.toMatchObject({ code: 'not_oft' } satisfies Partial<ProbeError>)
   })
   it('EOA is rejected as not a contract', async () => {
-    await expect(probeOft(hyper, SOME_EOA)).rejects.toMatchObject({ code: 'not_contract' })
+    await expect(probeOft(hyper, SOME_EOA, evmByKey('hyperevm').endpointV2)).rejects.toMatchObject({ code: 'not_contract' })
   })
   it('garbage address is rejected before any RPC', async () => {
-    await expect(probeOft(hyper, '0x1234')).rejects.toMatchObject({ code: 'invalid_address' })
+    await expect(probeOft(hyper, '0x1234', evmByKey('hyperevm').endpointV2)).rejects.toMatchObject({ code: 'invalid_address' })
   })
 })

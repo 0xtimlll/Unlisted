@@ -42,17 +42,17 @@ function fakeClient(peers: Record<number, Hex>): ReadClient {
 
 describe('probeOft keeps raw bytes32 peers', () => {
   it('EVM peer is stored padded, not as a 20-byte address', async () => {
-    const { info } = await probeOft(fakeClient({ 30101: addressToBytes32(TREAD_ADAPTER) }), TREAD_OFT, [30101, SOLANA_EID])
+    const { info } = await probeOft(fakeClient({ 30101: addressToBytes32(TREAD_ADAPTER) }), TREAD_OFT, ENDPOINT_HYPER, [30101, SOLANA_EID])
     expect(info.routes).toEqual([{ eid: 30101, peer: addressToBytes32(TREAD_ADAPTER) }])
   })
   it('a non-EVM (Solana-shaped) peer is present with all 32 bytes — previously it was silently dropped', async () => {
-    const { info } = await probeOft(fakeClient({ 30101: addressToBytes32(TREAD_ADAPTER), [SOLANA_EID]: SOLANA_PEER }), TREAD_OFT, [30101, SOLANA_EID])
+    const { info } = await probeOft(fakeClient({ 30101: addressToBytes32(TREAD_ADAPTER), [SOLANA_EID]: SOLANA_PEER }), TREAD_OFT, ENDPOINT_HYPER, [30101, SOLANA_EID])
     expect(info.routes.map((r) => r.eid)).toEqual([30101, SOLANA_EID])
     expect(info.routes[1]?.peer).toBe(SOLANA_PEER)
     expect(info.routes[1]?.peer).toHaveLength(66)
   })
   it('zero peers are not routes', async () => {
-    const { info } = await probeOft(fakeClient({}), TREAD_OFT, [30101, SOLANA_EID])
+    const { info } = await probeOft(fakeClient({}), TREAD_OFT, ENDPOINT_HYPER, [30101, SOLANA_EID])
     expect(info.routes).toEqual([])
   })
 })
@@ -103,5 +103,23 @@ describe('labelLooksSpoofed', () => {
 
   it('catches full-width forms', () => {
     expect(labelLooksSpoofed('ＵＳＤＣ')).toBe(true)
+  })
+})
+
+describe('the Endpoint an OFT names must be the committed one', () => {
+  const OTHER_ENDPOINT = '0xDeaDbeefDEAdbeefdEadbEEFdeadbeEFdEaDbeeF' as const
+
+  it('refuses a contract that names an Endpoint of its own', async () => {
+    // §4 asks the named endpoint for this contract's outbound nonce and send library, so a fake
+    // OFT pointing at a fake endpoint would be answering every route question about itself.
+    await expect(probeOft(fakeClient({ 30101: addressToBytes32(TREAD_ADAPTER) }), TREAD_OFT, OTHER_ENDPOINT, [30101])).rejects.toMatchObject({
+      code: 'foreign_endpoint',
+    })
+  })
+
+  it('accepts the committed one whatever its case — an address is not case-sensitive', async () => {
+    const lower = ENDPOINT_HYPER.toLowerCase() as `0x${string}`
+    const { info } = await probeOft(fakeClient({ 30101: addressToBytes32(TREAD_ADAPTER) }), TREAD_OFT, lower, [30101])
+    expect(info.endpoint).toBe(ENDPOINT_HYPER)
   })
 })
