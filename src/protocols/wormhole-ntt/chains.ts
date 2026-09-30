@@ -113,3 +113,27 @@ export function isCoreBridge(key: ChainKey, address: string): boolean {
   const cb = WORMHOLE_CHAINS[key]?.coreBridge
   return !!cb && cb.toLowerCase() === address.toLowerCase()
 }
+
+/**
+ * CoinGecko asset-platform ids, which is how the list keys its `platforms` map. A wrong entry here
+ * can only ever fail to find a token (the address must still match exactly), never match the wrong
+ * one — so this mapping cannot turn into an approval for something else.
+ *
+ * It lives here rather than in tokenList.ts because scripts/update-ntt-hubs.ts needs it and runs
+ * under Node's type stripping, which cannot parse tokenList.ts (it uses a constructor parameter
+ * property). tokenList.ts re-exports it, so every existing importer is unaffected.
+ */
+export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
+  ethereum: 'ethereum',
+  bsc: 'binance-smart-chain',
+  polygon: 'polygon-pos',
+  avalanche: 'avalanche',
+  arbitrum: 'arbitrum-one',
+  optimism: 'optimistic-ethereum',
+  base: 'base',
+  linea: 'linea',
+  scroll: 'scroll',
+  hyperevm: 'hyperevm',
+  robinhood: 'robinhood',
+  solana: 'solana',
+}
