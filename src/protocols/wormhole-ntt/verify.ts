@@ -55,8 +55,6 @@ export type NttRejectionCode =
   | 'peer_missing'
   | 'peer_not_evm'
   | 'peer_mismatch'
-  | 'no_token_anchor'
-  | 'unlisted_locking_hub'
   | 'no_wormhole_transceiver'
   | 'transceiver_wrong_core_bridge'
   | 'manual_delivery_only'
@@ -96,7 +94,15 @@ export type VerifiedNttManager = {
   }
   /** The Wormhole transceiver that will carry the message. */
   transceiver: Address
-  anchor: { side: AnchorSide; kind: AnchorKind }
+  /**
+   * What established this manager, or `null` when nothing did.
+   *
+   * `null` is not a refusal any more. Unlisted is a tool that warns: a locking hub the reviewed
+   * list has never seen looks exactly like a brand-new one, and refusing outright made the tab
+   * useless for anything young. The route is verified in every other respect and the screen says,
+   * in red, that the one thing nobody could confirm is the contract itself.
+   */
+  anchor: { side: AnchorSide; kind: AnchorKind } | null
   /**
    * The destination token also names the destination manager. Context for the details panel only:
    * we reached that token through this manager's own `getPeer()`, so it says nothing about whether
@@ -199,18 +205,18 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   // manager told us where to look.
   const dstAnchor = await tokenAnchors(p.dstClient, dstToken, dstManager)
 
-  let anchor: { side: AnchorSide; kind: AnchorKind }
-  if (srcAnchor) {
-    anchor = { side: 'source', kind: srcAnchor }
-  } else {
-    // No anchor from the token. A genuine locking hub cannot have one — nothing is minted there —
-    // so the committed list is the only thing that may speak for it. `getMode()` is deliberately
-    // not consulted to get here: the mode is the manager's own claim, so "I am a locking hub"
-    // cannot be the reason we trust a locking hub.
-    const hub = listedLockingHub(p.srcChain, manager, token)
-    if (!hub) return fail(mode === 'locking' ? 'unlisted_locking_hub' : 'no_token_anchor', `${token}`)
-    anchor = { side: 'listed', kind: 'committed' }
-  }
+  // No anchor from the token means a genuine locking hub — nothing is minted there — or something
+  // pretending to be one. The committed list is the only thing that can tell them apart, and
+  // `getMode()` is deliberately not consulted: the mode is the manager's own claim, so "I am a
+  // locking hub" can never be the reason to trust a locking hub.
+  //
+  // When neither speaks for it, the verdict is still `ok` and `anchor` is null. Guard 2b turns
+  // that into a loud warning rather than a refusal (core/severity.ts).
+  const anchor: { side: AnchorSide; kind: AnchorKind } | null = srcAnchor
+    ? { side: 'source', kind: srcAnchor }
+    : listedLockingHub(p.srcChain, manager, token)
+      ? { side: 'listed', kind: 'committed' }
+      : null
 
   // ---- 4. a Wormhole transceiver with automatic delivery --------------------
   const transceivers = await read(() => p.srcClient.readContract({ ...base, functionName: 'getTransceivers' }))
@@ -326,7 +332,6 @@ export function sameNttVerdict(a: VerifiedNttManager, b: VerifiedNttManager): bo
     a.mode === b.mode &&
     // The anchor is a REASON, and reasons may legitimately differ between providers only in the
     // ways noted below — but WHICH KIND of reason decides the verdict, so `side` is compared.
-    a.anchor.side === b.anchor.side &&
     // `listed` is deliberately absent: it comes from one shared HTTP response, not from either
     // provider, so comparing it would compare the API with itself.
 
@@ -359,5 +364,11 @@ export async function verifyNttManagerQuorum(p: VerifyInput, second: NttSecondOp
   if (!sameNttVerdict(first.verified, other.verified)) {
     return withFlag({ ok: false, code: 'unverifiable', detail: 'RPC providers disagree about this manager' }, true)
   }
-  return withFlag(first, true)
+  // The anchor is a REASON, not a destination, so it is not part of `sameNttVerdict` — and it has a
+  // benign way to differ: tokenAnchors() swallows read errors, so one flaky token read alone can
+  // turn `source` into `null`. Disagreement therefore LOWERS the verdict to the weaker of the two
+  // rather than refusing it: a hiccup must not look like a finding, and a missing anchor is a
+  // warning anyway (guard 2b).
+  const anchor = first.verified.anchor && other.verified.anchor ? first.verified.anchor : null
+  return withFlag({ ok: true, verified: { ...first.verified, anchor } }, true)
 }

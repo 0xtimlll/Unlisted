@@ -621,7 +621,11 @@ function VerificationCard({ verification, loading, hasTarget }: { verification: 
           <AddressView value={v.token} href={byKey(v.chain).explorerAddrUrl + v.token} short />
         </Row>
         <Row label={d.ntt.anchor}>
-          {v.anchor.side === 'source' ? fmt(d.ntt.anchorValue, { side: byKey(v.chain).name, kind: v.anchor.kind }) : d.ntt.anchorListed}
+          {v.anchor === null
+            ? d.ntt.anchorNone
+            : v.anchor.side === 'source'
+              ? fmt(d.ntt.anchorValue, { side: byKey(v.chain).name, kind: v.anchor.kind })
+              : d.ntt.anchorListed}
           {/* The far-side anchor is context, never a reason — see verify.ts. */}
           {v.alsoOnDestination ? <div className="mt-1 text-xs text-muted">{fmt(d.ntt.anchorAlsoDst, { chain: byKey(v.dst.chain).name })}</div> : null}
         </Row>

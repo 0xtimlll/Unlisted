@@ -11,6 +11,7 @@
  *    TransferAmountHasDust rather than rounding, so rounding happens in the plan, and this checks
  *    that it really did.
  */
+import { renameWarnings, verdictOf } from '../../core/severity'
 import { isAddressEqual, type Address } from 'viem'
 import { aboveFeeCeiling } from '../../core/chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from '../../core/encoding'
@@ -23,6 +24,7 @@ export type NttGuardCode =
   | 'chain_mismatch'
   | 'plan_missing'
   | 'manager_unverified'
+  | 'ntt_anchor_missing'
   | 'recipient_invalid'
   | 'recipient_unconfirmed'
   | 'recipient_lookalike'
@@ -94,9 +96,19 @@ export type NttGuardInput = {
   selfCheck: { ok: true } | { ok: false; mismatches: string[] } | undefined
   /** User read and accepted a delivery fee above the source chain's ceiling (guard 14). */
   highFeeAccepted?: boolean
+  /**
+   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
+   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
+   * token, the route, the amount or the recipient changes.
+   */
+  risksAccepted?: boolean | undefined
 }
 
 export type NttGuardReport = {
+  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  blocks: NttGuardResult[]
+  /** Failures the single tick covers, strongest first (core/severity.ts). */
+  riskWarnings: NttGuardResult[]
   results: NttGuardResult[]
   canSend: boolean
   /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
@@ -119,6 +131,17 @@ export function n2Verified(i: NttGuardInput): NttGuardResult {
   if (!i.verification) return fail(2, 'manager_unverified', 'checking')
   if (!i.verification.ok) return fail(2, 'manager_unverified', i.verification.code)
   return ok(2)
+}
+
+/**
+ * 2b. Nothing vouched for this manager: the token grants it nothing and the reviewed list has never
+ * seen it. Verified in every other respect, so this is a warning rather than a refusal — a genuine
+ * new locking hub looks exactly like this. core/severity.ts weighs it as a possible loss.
+ */
+export function n2Anchored(i: NttGuardInput): NttGuardResult {
+  const v = i.verification
+  if (!v || !v.ok) return ok(2) // guard 2 has already reported that there is no verdict to read
+  return v.verified.anchor === null ? fail(2, 'ntt_anchor_missing') : ok(2)
 }
 
 // 3. recipient valid; anything other than the connected wallet must be confirmed
@@ -250,11 +273,11 @@ export function n14FeeCeiling(i: NttGuardInput): NttGuardResult {
 
 export function runNttGuards(i: NttGuardInput): NttGuardReport {
   const results = [
-    n1Chain(i), n2Verified(i), n3Recipient(i), n4RecipientNotContract(i), n5Amount(i),
+    n1Chain(i), n2Verified(i), n2Anchored(i), n3Recipient(i), n4RecipientNotContract(i), n5Amount(i),
     n6RateLimits(i), n7Fee(i), n8Native(i), n9Allowance(i), n10Spender(i),
     n11NoQueue(i), n12Simulation(i), n13SelfCheck(i), n14FeeCeiling(i),
   ]
-  return { results, canSend: results.every((r) => r.ok), needsHighFeeConfirmation: nttFeeAboveCeiling(i.plan) }
+  return { results, ...renameWarnings(verdictOf(results, i.risksAccepted === true)), needsHighFeeConfirmation: nttFeeAboveCeiling(i.plan) }
 }
 
 /**
