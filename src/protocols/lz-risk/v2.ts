@@ -420,13 +420,13 @@ async function checkRecentChanges(c: V2RiskContext): Promise<Outcome> {
  * is LayerZero's. A read that fails stays `undefined`, which adapters.adapterSignsOk() treats as a
  * failure rather than a pass.
  */
-async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | undefined> {
+async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | null> {
   // Only an adapter that takes an ALLOWANCE. `approvalRequired === false` means it never calls
   // transferFrom, so no allowance is ever granted to it (guard 11 forbids one) and the
   // impersonation this rule is about has nothing to spend. It also holds no reserve by design, so
   // measuring its locked share would refuse a working bridge for a number that cannot apply:
   // USDT0 on HyperEVM locks 0% of supply across 23k deliveries, and is not an approve risk at all.
-  if (c.info.kind !== 'OFTAdapter' || !c.info.approvalRequired) return undefined
+  if (c.info.kind !== 'OFTAdapter' || !c.info.approvalRequired) return null
   const listed = !!reviewedAdapter(c.srcChain, c.info.oft, c.info.token)
 
   const [held, supply] = await Promise.all([
@@ -485,7 +485,7 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
   const adapter = await adapterStanding(c)
   return {
     checks,
-    ...(adapter ? { adapter } : {}),
+    adapter,
     unverifiedStandard: false,
     deprecatedVerifier: false,
     unknownInfra: false,

@@ -431,8 +431,8 @@ async function checkRecentChanges(c: V1RiskContext): Promise<Outcome> {
  * Endpoint V1, which detect.ts has already confirmed is this chain's committed endpoint
  * (`foreign_endpoint`), so the history is honest for the same reason it is on V2.
  */
-async function adapterStandingV1(c: V1RiskContext): Promise<AdapterStanding | undefined> {
-  if (!c.info.approvalRequired || sameAddress(c.info.token, c.info.oft)) return undefined
+async function adapterStandingV1(c: V1RiskContext): Promise<AdapterStanding | null> {
+  if (!c.info.approvalRequired || sameAddress(c.info.token, c.info.oft)) return null
   const listed = !!reviewedAdapter(c.info.chain, c.info.oft, c.info.token)
 
   const [held, supply] = await Promise.all([
@@ -500,7 +500,7 @@ export async function assessV1Route(c: V1RiskContext): Promise<V1Assessment> {
   return {
     input: {
       checks,
-      ...(adapter ? { adapter } : {}),
+      adapter,
       unverifiedStandard: isUnverifiedStandard(c.info.standard),
       deprecatedVerifier: false,
       unknownInfra: false,
