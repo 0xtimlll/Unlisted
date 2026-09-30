@@ -11,7 +11,7 @@
  *    TransferAmountHasDust rather than rounding, so rounding happens in the plan, and this checks
  *    that it really did.
  */
-import { renameWarnings, verdictOf } from '../../core/severity'
+import { verdictOf } from '../../core/severity'
 import { isAddressEqual, type Address } from 'viem'
 import { aboveFeeCeiling } from '../../core/chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from '../../core/encoding'
@@ -49,7 +49,7 @@ export type NttGuardCode =
   | 'simulation_failed'
   | 'selfcheck_missing'
   | 'selfcheck_failed'
-  | 'fee_above_ceiling_unconfirmed'
+  | 'fee_above_ceiling'
 
 /** Codes that mean "not known yet", shown muted rather than red. */
 export const NTT_PENDING: ReadonlySet<NttGuardCode> = new Set<NttGuardCode>([
@@ -94,29 +94,15 @@ export type NttGuardInput = {
   approveIntent?: NttApproveIntent | undefined
   simulation: { ok: true } | { ok: false; reason: string } | undefined
   selfCheck: { ok: true } | { ok: false; mismatches: string[] } | undefined
-  /** User read and accepted a delivery fee above the source chain's ceiling (guard 14). */
-  highFeeAccepted?: boolean
-  /**
-   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
-   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
-   * token, the route, the amount or the recipient changes.
-   */
-  risksAccepted?: boolean | undefined
 }
 
 export type NttGuardReport = {
-  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  /** Failures that hold the button, plus reads still in flight (core/severity.ts). */
   blocks: NttGuardResult[]
-  /** Failures the single tick covers, strongest first (core/severity.ts). */
-  riskWarnings: NttGuardResult[]
-  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
-  warningsCleared: boolean
-  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
-  approveReady: boolean
+  /** Failures that colour the route indicator and hold nothing. */
+  notes: NttGuardResult[]
   results: NttGuardResult[]
   canSend: boolean
-  /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
-  needsHighFeeConfirmation: boolean
 }
 
 const ok = (id: number): NttGuardResult => ({ id, ok: true })
@@ -140,9 +126,9 @@ export function n2Verified(i: NttGuardInput): NttGuardResult {
 }
 
 /**
- * 2b. Nothing vouched for this manager: the token grants it nothing and the reviewed list has never
- * seen it. Verified in every other respect, so this is a warning rather than a refusal — a genuine
- * new locking hub looks exactly like this. core/severity.ts weighs it as a possible loss.
+ * 2b. Nothing on the SOURCE chain vouches for this manager: the token grants it no minter role.
+ * Verified in every other respect, so this is a note rather than a refusal — a genuine locking hub
+ * looks exactly like this, and so does a fake. The indicator shows it red (core/indicator.ts).
  */
 export function n2Anchored(i: NttGuardInput): NttGuardResult {
   const v = i.verification
@@ -209,7 +195,9 @@ export function n8Native(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(8, 'plan_missing')
   if (i.nativeBalance === undefined) return fail(8, 'native_balance_unknown')
   if (i.plan.value > i.nativeBalance) return fail(8, 'insufficient_native', `${i.plan.value} > ${i.nativeBalance}`)
-  if (i.gasCostWei === undefined) return fail(8, 'native_balance_unknown')
+  // A simulation that has already failed produces no estimate, ever: waiting for one would hold
+  // the button forever behind a note. The fee fits; the gas is what the wallet will price.
+  if (i.gasCostWei === undefined) return i.simulation && !i.simulation.ok ? ok(8) : fail(8, 'native_balance_unknown')
   const need = i.plan.value + i.gasCostWei
   if (need > i.nativeBalance) return fail(8, 'insufficient_native', `${need} > ${i.nativeBalance}`)
   return ok(8)
@@ -267,14 +255,13 @@ export function nttFeeAboveCeiling(plan: NttPlan | undefined): boolean {
   return !!plan && aboveFeeCeiling(plan.chain, plan.value)
 }
 
-// 14. the delivery fee is within the chain's ceiling, or the user has read the number and accepted
-//     it. quoteDeliveryPrice() is whatever the manager — or whatever RPC answered for it — chose to
-//     return, and msg.value follows it, so guard 8 (the whole balance) was the only bound until now.
+// 14. the delivery fee is within the chain's ceiling. quoteDeliveryPrice() is whatever the manager
+//     — or whatever RPC answered for it — chose to return, and msg.value follows it, so guard 8
+//     (the whole balance) is the only other bound. A note for the indicator, never a refusal.
 export function n14FeeCeiling(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(14, 'plan_missing')
   if (!nttFeeAboveCeiling(i.plan)) return ok(14)
-  if (!i.highFeeAccepted) return fail(14, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
-  return ok(14)
+  return fail(14, 'fee_above_ceiling', `${i.plan.value}`)
 }
 
 export function runNttGuards(i: NttGuardInput): NttGuardReport {
@@ -283,7 +270,7 @@ export function runNttGuards(i: NttGuardInput): NttGuardReport {
     n6RateLimits(i), n7Fee(i), n8Native(i), n9Allowance(i), n10Spender(i),
     n11NoQueue(i), n12Simulation(i), n13SelfCheck(i), n14FeeCeiling(i),
   ]
-  return { results, ...renameWarnings(verdictOf(results, i.risksAccepted === true)), needsHighFeeConfirmation: nttFeeAboveCeiling(i.plan) }
+  return { results, ...verdictOf(results) }
 }
 
 /**

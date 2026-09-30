@@ -30,8 +30,8 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 1. **Connect** a browser wallet and choose the source chain: MetaMask, Rabby, … for EVM chains; Phantom, Solflare, Backpack, … when the source is Solana.
 2. **Paste** anything that identifies the token: the OFT / OFTAdapter contract address (on Solana: the OFT Store address), the hash of any past bridge transaction on any supported chain, a Solana signature, or a LayerZero Scan link. Transactions are read from their **logs**, so a bridge that went through a router, an aggregator or a smart wallet is still resolved to the contract underneath — and a transaction sent on a different network is found there and offered with a "switch" button.
 3. **Choose** a destination (only chains the contract actually has a peer on) and an amount.
-4. **Review.** The quote, the fee, the recipient and the raw `amountLD` / `minAmountLD` are shown exactly as they will be sent, in a panel that stays in view. Twenty-one checks run, including a live simulation whose reverts are decoded into named errors (`NoPeer`, `SlippageExceeded`, `ERC20InsufficientAllowance`, `EnforcedPause`, …) with what to do about each.
-5. **Send.** Delivery is tracked through LayerZero Scan until the tokens land on the other side.
+4. **Review.** The quote, the fee, the recipient and the raw `amountLD` / `minAmountLD` are shown exactly as they will be sent, in a panel that stays in view. Twenty-two checks run, including a live simulation whose reverts are decoded into named errors (`NoPeer`, `SlippageExceeded`, `ERC20InsufficientAllowance`, `EnforcedPause`, …), and one small chip says how the route looks — green, yellow or red, with the reasons on hover. Nothing to tick.
+5. **Approve, then Send.** One button: it approves exactly the amount to the verified contract when the allowance is short, waits for the receipt, reads the allowance back and becomes Send by itself. Delivery is then tracked through LayerZero Scan until the tokens land on the other side.
 
 ## Supported networks
 
@@ -96,9 +96,9 @@ Everything else v1 needs is read from the contracts too:
   then dust removed to a multiple of 10^(decimals − sharedDecimals), then the `_minAmount` it will
   enforce. Slippage is refused outright on the two standards whose `sendFrom` has no minimum to
   enforce it with, rather than shown as a setting that does nothing.
-- **A stuck path blocks the send.** `hasStoredPayload` is asked on the destination endpoint, keyed by
-  the path bytes read from the destination contract itself — a later message queues behind a stuck
-  one, so this is a refusal rather than a warning.
+- **A stuck path is said out loud.** `hasStoredPayload` is asked on the destination endpoint, keyed
+  by the path bytes read from the destination contract itself — a later message queues behind a
+  stuck one, so the indicator says so; the decision is yours.
 
 The chain ids and endpoints come from LayerZero's own metadata through
 [`scripts/gen-lz-v1.mjs`](scripts/gen-lz-v1.mjs) into a committed JSON, never fetched at runtime.
@@ -119,8 +119,7 @@ failing check rather than a silent gap.
 One standard carries a caveat the code states out loud: `OFT` / `ProxyOFT`, the original `bytes`
 shape, is implemented and unit-tested but no deployed contract of that shape was found to test
 against ([`docs/TODO.md`](docs/TODO.md) records how it was searched for). It is listed in
-`UNVERIFIED_WIRES`, and the risk indicator below holds every route on it to a test amount until a
-test transfer actually arrives.
+`UNVERIFIED_WIRES`, and the route indicator below shows every route on it in yellow, with the reason.
 
 **NativeOFT is named and refused.** It takes the transfer amount out of `msg.value` alongside the
 fee, and every amount check here rests on `msg.value` being the fee and nothing else. Loosening that
@@ -130,11 +129,29 @@ for one contract shape would cost more than the shape is worth.
 the build fails if it appears anywhere else. There is no LayerZero v1 on Solana, so the whole path is
 EVM-only by construction.
 
-## Route risk
+## Route indicator
 
-Before a LayerZero transfer can be signed — v1 or V2 — eight read-only checks run against both
-chains in parallel, and their answers are folded into one verdict for *this token, this route, this
-amount*. Three of them are the ones worth knowing about:
+Unlisted informs; you decide. There is no checkbox to tick, no test-amount cap and no red block:
+the one button goes **Connect wallet → Switch to <chain> → Approve <amount> <token> → Send**, and it
+is held only when the transaction is physically impossible (no wallet or the wrong chain, no token
+or native balance, no route, an amount that arrives as zero, a recipient that cannot be encoded for
+the destination) — said as one neutral line under the button. Everything else is a colour on one
+small chip in the preview panel:
+
+| | what it means |
+|---|---|
+| **grey** | choose a destination / enter an amount, or the checks are still running |
+| **green — Route in order** | the peer points back, the simulation passed, and: a plain OFT; or an adapter locking ≥ 0.1% of the token's supply with ≥ 20 sends recorded by the endpoint; or an NTT manager the source token names as minter; or a CCIP pool from the TokenAdminRegistry |
+| **yellow — Some nuances** | a fresh adapter (little locked, little history), only one RPC operator answered, the simulation reverted or could not run, a weak DVN set, a fee above the chain's ceiling |
+| **red — High risk** | the recipient is the zero address, a route contract or a look-alike of a saved address; the far side does not point back; LayerZero has blocked the route (dead DVN); an NTT manager nothing on the source chain vouches for |
+
+Hover the chip for every reason; red also prints its first reason under the chip without a hover.
+The long form — the eight checks below, the guard list, the contract's flags (a proxy is a fact for
+the details, never a colour) — is folded under **Details**.
+
+Before a LayerZero transfer is sent — v1 or V2 — eight read-only checks run against both chains in
+parallel, and their answers are folded into one verdict for *this token, this route, this amount*.
+Three of them are the ones worth knowing about:
 
 - **The destination is asked whether it would credit the transfer.** Not a similar transfer: the
   payload the destination will really receive, built from the contract's own codec
@@ -146,12 +163,11 @@ amount*. Three of them are the ones worth knowing about:
   there are kept apart. A payload parked in the destination endpoint (v1) blocks the route: nothing
   can get past it. Messages merely *undelivered* — the outbound nonce on the source ahead of the
   inbound nonce on the destination — are a queue, not a wall: v1 and V2 both deliver in nonce order,
-  so a transfer sent now waits for them. How long they have waited decides how hard that bites:
-  under half an hour is ordinary traffic and says nothing; between half an hour and an hour caps the
-  amount at a test and the confirmation word lifts it; **past an hour the word stops working** —
-  packets that have sat that long are not moving, verification may have stopped on the route, and
-  the only thing that answers that is a test transfer that arrives. A gap whose age cannot be
-  established is *not checked*, never "fine".
+  so a transfer sent now waits for them. How long they have waited decides what is said: under
+  half an hour is ordinary traffic and says nothing; between half an hour and an hour the route is
+  yellow with "ours queues behind them"; past an hour the sentence is plainer — packets that have
+  sat that long are not moving and verification may have stopped on the route. A gap whose age
+  cannot be established is *not checked*, never "fine".
 - **Who verifies the route is judged against LayerZero's own material, not against the defaults.**
   For V2 that is the DVN set; for v1 the oracle and relayer. Two answers matter and nothing else
   does: a party LayerZero has **deprecated** (`LZDeadDVN` above all) blocks the route, because the
@@ -165,14 +181,14 @@ amount*. Three of them are the ones worth knowing about:
   are compared **by operator, not by address** — the same DVN is a different contract on every chain,
   so comparing addresses reports every working route as broken.
 
-The verdict is one of four, and what each one permits is the point:
+The verdict is one of four, and what each one does is the point:
 
-| | what it means | what may be sent |
+| | what it means | on the chip |
 |---|---|---|
-| **OK** | every check ran and passed | anything |
-| **CAUTION** | warnings, all of them named | anything |
-| **UNVERIFIED** | the route is not proven | a test amount, until one arrives |
-| **BLOCKED** | a check failed on the facts | nothing, test amount included |
+| **OK** | every check ran and passed | nothing |
+| **CAUTION** | nuances, all of them named | yellow |
+| **UNVERIFIED** | the route is not proven — a hard check could not run, only one RPC operator answered, a fresh adapter | yellow |
+| **BLOCKED** | a check failed on the facts — a dead DVN, a config mismatch, a peer that does not point back | red |
 
 Three rules keep the colour honest, and they are enforced in
 [`src/protocols/lz-risk/risk.ts`](src/protocols/lz-risk/risk.ts) rather than merely intended:
@@ -182,29 +198,24 @@ Three rules keep the colour honest, and they are enforced in
    — asserted against clients that reject everything.
 2. **A verdict is never better than its weakest hard check.** If any of the five that decide whether
    funds move (peers, a clear path, the destination credit, adapter liquidity, pause/limits) could
-   not be made, the route is held at UNVERIFIED. **No checkbox lifts that.** The only thing that
-   does is a test transfer confirmed delivered on chain, which lifts it for 24 hours (recorded in
-   `localStorage`, every access in try/catch, and the cap simply stays without it). The same holds
-   for a contract standard no live deployment has ever verified here — v1's `bytes` shape.
+   not be made, the route is held at UNVERIFIED. The same holds for a contract standard no live
+   deployment has ever verified here — v1's `bytes` shape.
 3. **No colour without reasons.** Anything other than OK carries at least one concrete reason, and
    OK carries none — the function throws rather than return a verdict that says nothing.
 
-An UNVERIFIED that came from something softer — an unpublished verifier on a route with no
-deliveries, a queue of undelivered packets — can be lifted by typing the word, because those are
-facts about the route rather than gaps in what was checked. A BLOCKED route cannot be lifted at all.
+None of this holds the button or caps the amount: the verdict is what the chip says and why. The
+eight checks cover LayerZero EVM-to-EVM routes; a Solana source or destination, an NTT transfer and
+a CCIP transfer have no runner, so their chip is coloured by their own tab's checks alone, and the
+details say so — **"the eight route checks do not assess this route"** — so an OK on one tab cannot
+be mistaken for an OK the other tab never gave.
 
-**The test-amount limit has no default.** One unit of a token is a rounding error for some and a
-month's rent for others, so a pre-filled number would be a recommendation this app is in no position
-to make. The field starts empty, an unverified route sends nothing until it is filled in, and the
-number is then remembered for that token (per chain, in `localStorage`, guarded) so the next route
-for the same token does not ask again.
-
-Guard 22 in both tabs is what turns the verdict into a limit on the amount. The indicator covers
-LayerZero EVM-to-EVM routes; a Solana source or destination has no runner yet, so there is no verdict
-to enforce and guards 1–21 are the whole rule there. Where there is no runner the panel says so, in
-grey — **"the route indicator does not assess this route"**, never nothing and never a tick. The NTT
-and CCIP tabs show the same line above their own checks, so an OK on one tab cannot be mistaken for
-an OK the other tab never gave.
+**An adapter is judged by what its deployer cannot write.** An OFTAdapter is a lockbox the real
+token knows nothing about, so its own `peers()` and `token()` prove nothing. Two numbers are read
+from contracts the deployer does not control — the share of the token's supply the adapter holds
+(`balanceOf` / `totalSupply` on the real token) and the sends the real EndpointV2 has recorded for
+it — and an adapter clearing both floors (0.1% of supply, 20 sends) is an ordinary route. Below
+either floor it is a *fresh adapter*, yellow, with the numbers in the reason. There is no committed
+list of adapters to be on.
 
 ## Status and rescue
 
@@ -256,21 +267,28 @@ and borrowing LayerZero's four actions for them would be neither correct nor saf
 ## Wormhole NTT
 
 The **NTT** tab bridges Wormhole Native Token Transfers between EVM chains. The manager contract is
-the approve spender, so it has to earn that: `verifyNttManager` refuses unless all four of these
-hold, and a check that cannot be completed counts as a refusal.
+the approve spender, so it has to earn that: `verifyNttManager` refuses unless all of these hold,
+and a check that cannot be completed counts as a refusal.
 
-1. The token is in [Wormhole's official NTT token list](https://api.wormholescan.io/api/v1/native-token-transfer/token-list)
-   for this network, and the manager names exactly that address.
-2. **The token vouches for the manager.** On at least one side of the pair the listed token names it
-   as its minter — `minter()`, or `hasRole(MINTER_ROLE, manager)` with the role read from the token.
-   A locking hub mints nothing, so it is confirmed through the burning side of the pair.
-3. Peers point at each other in both directions, the destination side read on its own RPC.
-4. A Wormhole transceiver that reports the Wormhole type, points at this network's official core
-   bridge, and has automatic relaying enabled — a route that would need a manual redeem is refused.
+1. The manager agrees about itself: `token()`, `chainId()` for this network, `tokenDecimals()`.
+2. Peers point at each other in both directions, the destination side read on its own RPC.
+3. A Wormhole transceiver that reports the Wormhole type, points at this network's official core
+   bridge **from this repository's config**, and has automatic relaying enabled — a route that
+   would need a manual redeem is refused.
 
-Wormholescan's decoded transfers are shown as context but are never evidence: `sourceNttManager` is
-written by the manager itself, so a single self-made transfer would launder a fake. Only the token
-can vouch for the manager.
+And one thing decides the colour rather than the verdict: **does the token on the source chain
+vouch for the manager** — `minter()`, or `hasRole(MINTER_ROLE, manager)` with the role read from
+the token? That is the only fact the manager's deployer cannot write. With it the chip is green;
+without it — a locking hub mints nothing, and so does a fake — the chip is red with one line,
+"nothing on the source chain vouches for this bridge contract", and the decision is yours. The
+destination token naming the destination manager is shown as context only: we reached that token
+through the manager's own `getPeer()`.
+
+[Wormhole's token list](https://api.wormholescan.io/api/v1/native-token-transfer/token-list) only
+helps find a manager from a token address; it never changes a verdict, and a token missing from it
+is verified on the same on-chain evidence. Wormholescan's decoded transfers are shown as context but
+are never evidence: `sourceNttManager` is written by the manager itself, so a single self-made
+transfer would launder a fake.
 
 Two more things the contracts decide, not us: an approve is needed in **both** modes, because the
 manager pulls with `transferFrom` before it burns or locks; and the amount is rounded **down** to
@@ -318,7 +336,7 @@ Every event signature, error signature, chain id and selector used for this come
 - Contract facts are read from two independent RPC providers; if they disagree, nothing is sent.
 - Options copied from a sample transaction are stripped down to a receive-gas hint; `nativeDrop` and `compose` payloads (a way to route your fee to a stranger) are dropped and shown in red.
 - **The options the contract enforces are read too**, and printed in full on the review screen. `extraOptions` is the field this app fills in itself; `enforcedOptions` is the one the OFT appends to every send and you pay for — an enforced `nativeDrop` quietly routes native coin to an address the contract chose, on every transfer. It is decoded, named and warned about rather than refused, because a legitimate OFT may enforce something unexpected and a working route should not be blocked over it.
-- **The fee has a ceiling.** A quote cannot be checked against anything off-chain — `quoteSend` is whatever the contract, or whatever RPC answered for it, chose to return, and `msg.value` follows it. Each chain carries a limit an order of magnitude above what these routes actually cost; above it the number is put in front of you and has to be accepted by hand. The acceptance dies with the quote it was given for.
+- **The fee has a ceiling.** A quote cannot be checked against anything off-chain — `quoteSend` is whatever the contract, or whatever RPC answered for it, chose to return, and `msg.value` follows it. Each chain carries a limit an order of magnitude above what these routes actually cost; above it the route indicator turns yellow and names the number, so it is read before it is paid.
 - **A token does not get to choose how its own name is drawn.** Symbols and names are stripped of bidi overrides, isolates, zero-width characters and the BOM, so `USDC<RLO>toor` cannot render as `USDCroot` and an invisible space cannot clone a symbol you trust. Ordinary non-ASCII is kept and flagged instead — honest tokens use it.
 - For lock/unlock adapters the app shows how much the adapter holds and flags an empty one.
 - Slippage is capped at 5%. Sending to an address other than your own wallet requires an explicit switch and re-typing the address's last characters.

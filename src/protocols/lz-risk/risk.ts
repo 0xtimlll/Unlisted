@@ -8,9 +8,9 @@
  *      the reason it did not run, and it is counted as neither.
  *   2. **A verdict is never better than its weakest hard check.** If one of the five hard checks
  *      could not be made, the route is held at UNVERIFIED, whatever the others say. The tier is
- *      honest, and it is only a tier: it decides how loudly guard 22 speaks (core/severity.ts
- *      weighs `risk_blocked` as a possible loss), and the single tick is what sends the transfer,
- *      any amount (CLAUDE.md rule 2). Nothing here caps an amount or refuses a send.
+ *      honest, and it is only a tier: the route indicator (core/indicator.ts) turns BLOCKED into
+ *      red and UNVERIFIED / CAUTION into yellow, and prints the reasons. Nothing here caps an
+ *      amount, holds a button or asks for a tick (CLAUDE.md rule 2).
  *   3. **No colour without reasons.** Any verdict other than OK carries at least one concrete
  *      reason, and OK carries none. Asserted, not merely intended.
  *
@@ -19,8 +19,8 @@
  * they are ready, because it only ever looks at check states.
  */
 
-// The only import here, and it is data plus two predicates over it: the committed adapter list and
-// its thresholds. Everything else in this file stays a pure fold over facts handed to it.
+// The only import here, and it is two thresholds and a predicate over them. Everything else in
+// this file stays a pure fold over facts handed to it.
 import { adapterSignsOk, ADAPTER_MIN_LOCKED_BPS, ADAPTER_MIN_OUTBOUND_NONCE, type AdapterStanding } from './adapters'
 
 /** The eight checks of §4, in the order the panel lists them. */
@@ -129,17 +129,16 @@ export type RiskInput = {
    * times. A single endpoint that lies can pass all of them at once, which is exactly the fake-route
    * attack the indicator exists to catch.
    *
-   * So this is BLOCKED, not UNVERIFIED: an uncorroborated link is not a small route, it is an
-   * unknown one, and a small amount into an unknown contract is still a loss. Nothing raises the
-   * tier except another operator answering. (The tier is a warning, not a refusal — see the header.)
+   * So this holds the tier at UNVERIFIED: the route is not known to be what it claims until
+   * another operator answers. A nuance, said in yellow, not a refusal (see the header).
    */
   linkCrossChecked: boolean
   /**
    * §Adapter The source-side OFTAdapter's standing, when the source IS an adapter. Absent for a
    * plain OFT, which is the token and needs no lockbox to vouch for.
    *
-   * See adapters.ts: an adapter has no on-chain fact that can establish it, so only the committed
-   * list reaches OK. The indirect signals decide amber vs red and nothing more.
+   * See adapters.ts: an adapter that locks a real share of supply and has real delivery history
+   * is an ordinary route; one that does not is a fresh adapter, held at UNVERIFIED.
    *
    * REQUIRED, with an explicit `null` for a plain OFT. Optional would mean a future runner could
    * turn the rule off by forgetting a field, which is the failure mode `linkCrossChecked` already
@@ -155,17 +154,8 @@ export type RouteRisk = {
   checks: Record<CheckId, CheckState>
   /** Hard checks that could not be run. Non-empty holds the tier at UNVERIFIED, whatever else passed. */
   hardUnchecked: CheckId[]
-  /**
-   * §Adapter The source is an OFTAdapter that is not on the reviewed list AND whose indirect
-   * signals did not clear their floors — a brand-new token, or a fake. Distinct from the amber
-   * case, where the signals are fine and only the listing is missing.
-   *
-   * It is NOT a block: a new token's adapter looks exactly like this on its first day, and refusing
-   * it outright would make the app unusable for anything young. The panel prints the warning in
-   * red, guard 22 carries it as `adapter_unproven` (weighed as a possible loss), and the single tick
-   * covers it like every other warning. The advice to send a test amount first stays advice.
-   */
-  adapterUnproven: boolean
+  /** §Adapter The source adapter's signals, when the source is an adapter, for the details panel. */
+  adapter: AdapterStanding | null
 }
 
 /**
@@ -192,14 +182,14 @@ export const FRESH_DELIVERY_DAYS = 7
 
 const RANK: Record<Tier, number> = { BLOCKED: 0, UNVERIFIED: 1, CAUTION: 2, OK: 3 }
 
-/** Why an unreviewed adapter was refused outright — which floor it missed, or which read failed. */
-function adapterRedReason(a: AdapterStanding): string {
+/** Why an adapter is called fresh — which floor it missed, or which read failed. */
+function adapterFreshReason(a: AdapterStanding): string {
   const parts: string[] = []
   if (a.lockedBps === undefined) parts.push('the share of supply it locks could not be read')
-  else if (a.lockedBps < ADAPTER_MIN_LOCKED_BPS) parts.push(`it locks ${a.lockedBps / 100}% of supply, under the ${ADAPTER_MIN_LOCKED_BPS / 100}% floor`)
+  else if (a.lockedBps < ADAPTER_MIN_LOCKED_BPS) parts.push(`it locks ${a.lockedBps / 100}% of supply, under ${ADAPTER_MIN_LOCKED_BPS / 100}%`)
   if (a.outboundNonce === undefined) parts.push('its delivery history could not be read')
   else if (a.outboundNonce < ADAPTER_MIN_OUTBOUND_NONCE) parts.push(`the endpoint records ${a.outboundNonce} sends through it, under ${ADAPTER_MIN_OUTBOUND_NONCE}`)
-  return `this adapter is not on the reviewed list, and ${parts.join('; ')}`
+  return `fresh adapter: ${parts.join('; ')} — a new token, or a fake; a test amount first is advisable`
 }
 
 /** The worse of two tiers. */
@@ -228,23 +218,8 @@ export function assessRisk(i: RiskInput): RouteRisk {
     blocking.push({ text: 'a party that verifies this route is one LayerZero has deprecated', check: 'config' })
   }
   if (i.configMismatch) blocking.push({ text: 'the send config on the source does not match the receive config on the destination', check: 'config' })
-  // No independent operator stood behind the contract↔token link, so none of the checks below
-  // mean more than the single endpoint that answered them.
-  if (!i.linkCrossChecked) {
-    blocking.push({
-      text: 'no second, independent RPC operator confirmed this contract and its peers — one endpoint answering alone cannot establish that this route is what it claims to be',
-      check: 'peers',
-    })
-  }
   if (blocking.length > 0) {
-    return {
-      tier: 'BLOCKED',
-      reasons: blocking,
-      checks: i.checks,
-      hardUnchecked: hardUncheckedOf(i),
-      // A blocked route has no adapter question left to answer.
-      adapterUnproven: false,
-    }
+    return { tier: 'BLOCKED', reasons: blocking, checks: i.checks, hardUnchecked: hardUncheckedOf(i), adapter: i.adapter }
   }
 
   // A soft check failing is a warning, not a block — that is what makes it soft. A soft check that
@@ -266,26 +241,21 @@ export function assessRisk(i: RiskInput): RouteRisk {
     }
     tier = worse(tier, 'UNVERIFIED')
   }
-  // §Adapter Two cases, and they differ in how loudly the panel speaks, not in what may go.
-  //
-  //   signals fine, not listed   the app has partial evidence: amber, with the reason spelled out.
-  //   signals weak or unreadable the app has nothing. It says so in red and hands the decision over
-  //                              — a new token's adapter is indistinguishable from a fake on day
-  //                              one, so this cannot be a refusal. Guard 22 carries it as a
-  //                              warning; the single tick covers it.
-  let adapterUnproven = false
-  if (i.adapter && !i.adapter.listed) {
-    if (adapterSignsOk(i.adapter)) {
-      reasons.push({
-        text: 'this adapter is not on the reviewed list; its indirect signs are fine, but that is not proof — a lockbox is not vouched for by the token it holds',
-        check: 'adapter_liquidity',
-      })
-      tier = worse(tier, 'UNVERIFIED')
-    } else {
-      adapterUnproven = true
-      reasons.push({ text: adapterRedReason(i.adapter), check: 'adapter_liquidity' })
-      tier = worse(tier, 'UNVERIFIED')
-    }
+  // No independent operator stood behind the contract↔token link, so none of the checks here mean
+  // more than the single endpoint that answered them. A nuance, not a refusal.
+  if (!i.linkCrossChecked) {
+    reasons.push({
+      text: 'no second, independent RPC operator confirmed this contract and its peers — one endpoint answering alone cannot establish that this route is what it claims to be',
+      check: 'peers',
+    })
+    tier = worse(tier, 'UNVERIFIED')
+  }
+  // §Adapter An adapter that locks a real share of supply and has real history is an ordinary
+  // route. One that does not is fresh — a new token's adapter is indistinguishable from a fake on
+  // day one — and that is said in yellow, with the numbers, and the decision is the person's.
+  if (i.adapter && !adapterSignsOk(i.adapter)) {
+    reasons.push({ text: adapterFreshReason(i.adapter), check: 'adapter_liquidity' })
+    tier = worse(tier, 'UNVERIFIED')
   }
   if (i.unverifiedStandard) {
     reasons.push({ text: 'this contract’s standard has never been verified against a live deployment by this app — a test amount first is advisable' })
@@ -376,7 +346,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
   if (tier === 'OK' && reasons.length > 0) {
     throw new Error('lz-risk: OK with reasons')
   }
-  return { tier, reasons, checks: i.checks, hardUnchecked, adapterUnproven }
+  return { tier, reasons, checks: i.checks, hardUnchecked, adapter: i.adapter }
 }
 
 function hardUncheckedOf(i: RiskInput): CheckId[] {
@@ -413,12 +383,8 @@ export function emptyRiskInput(reason = 'not run yet'): RiskInput {
 
 
 /**
- * The verdict, as the one thing guard 22 needs from it.
- *
- * There is no amount in this any more. §4 used to cap an unproven route to a test amount and hold
- * the rest behind a typed word or a delivered test transfer; the app now warns instead of refusing
- * (CLAUDE.md rule 2), so the tier decides how loudly guard 22 speaks and the single tick decides
- * whether the transfer goes. `BLOCKED` is the loudest sentence this file can say, not a refusal.
+ * The verdict, as the one thing guard 22 needs from it: a note code, or nothing. There is no
+ * amount in this and no permission: the indicator prints the reasons, the person decides.
  */
 export function riskWarningCode(risk: RouteRisk): 'risk_blocked' | 'risk_unverified' | undefined {
   if (risk.tier === 'BLOCKED') return 'risk_blocked'

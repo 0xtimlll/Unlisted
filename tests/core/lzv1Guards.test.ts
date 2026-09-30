@@ -144,9 +144,7 @@ function guardInput(plan: V1SendPlan, i: OftV1Info, over: Partial<V1GuardInput> 
     selfCheck: { ok: true },
     flags: [],
     peerBack: { status: 'ok' },
-    peerBackUnavailableAccepted: false,
     storedPayload: { status: 'clear' },
-    storedPayloadUnavailableAccepted: false,
     risk: cleanRisk(),
     ...over,
   }
@@ -286,14 +284,11 @@ describe('the v1 guards', () => {
       ok: false,
       code: 'stored_payload_blocked',
     })
-    // A read that could not be made is neither a pass nor a failure: it has to be accepted by hand.
+    // A read that could not be made is neither a pass nor a failure: a note for the indicator.
     expect(v1g20StoredPayload(guardInput(p, i, { storedPayload: { status: 'unavailable', reason: 'rpc down' } }))).toMatchObject({
       ok: false,
-      code: 'stored_payload_unavailable_unconfirmed',
+      code: 'stored_payload_unavailable',
     })
-    expect(
-      v1g20StoredPayload(guardInput(p, i, { storedPayload: { status: 'unavailable', reason: 'rpc down' }, storedPayloadUnavailableAccepted: true })),
-    ).toMatchObject({ ok: true })
     // Not yet read at all is pending, not passing.
     expect(v1g20StoredPayload(guardInput(p, i, { storedPayload: undefined }))).toMatchObject({ ok: false, code: 'stored_payload_unknown' })
   })
@@ -345,13 +340,16 @@ describe('the v1 guards', () => {
     })
   })
 
-  it('treats a simulation that could not run as a failure, not a pass', async () => {
+  it('treats a simulation that could not run as a note, never as a pass', async () => {
     const i = info()
     const p = await build(i, '1')
-    for (const sim of [undefined, { status: 'unavailable' as const, reason: 'rpc down' }]) {
-      const r = runV1Guards(guardInput(p, i, { simulation: sim }))
-      expect(r.canSend).toBe(false)
-    }
+    // Not run yet: a read in flight, which holds.
+    expect(runV1Guards(guardInput(p, i, { simulation: undefined })).canSend).toBe(false)
+    // Could not run: said in the indicator, with the reason; the person decides.
+    const r = runV1Guards(guardInput(p, i, { simulation: { status: 'unavailable', reason: 'rpc down' } }))
+    expect(r.results.find((x) => x.id === 13)).toMatchObject({ ok: false, code: 'simulation_unavailable', detail: 'rpc down' })
+    expect(r.notes.some((n) => !n.ok && n.code === 'simulation_unavailable')).toBe(true)
+    expect(r.canSend).toBe(true)
   })
 
   it('rejects a plan whose amounts were tampered with after the quote', async () => {
@@ -362,26 +360,36 @@ describe('the v1 guards', () => {
     expect(v1g6Amounts(guardInput(bad, i))).toMatchObject({ ok: false, code: 'not_multiple_of_rate' })
   })
 
-  it('needs the fee ceiling accepted by hand when the quote is extravagant', async () => {
+  it('notes an extravagant fee for the indicator, and holds nothing', async () => {
     const i = info()
     const huge = await build(i, '1', { client: stubClient({ nativeFee: 10n ** 18n }) })
-    const r = runV1Guards(guardInput(huge, i))
-    expect(r.needsHighFeeConfirmation).toBe(true)
-    expect(r.results.find((x) => x.id === 21)).toMatchObject({ ok: false, code: 'fee_above_ceiling_unconfirmed' })
-    expect(runV1Guards(guardInput(huge, i, { highFeeAccepted: true })).results.find((x) => x.id === 21)).toMatchObject({ ok: true })
+    // A wallet that can pay it, so guard 8 does not hold for its own reason.
+    const r = runV1Guards(guardInput(huge, i, { nativeBalance: 10n * 10n ** 18n }))
+    expect(r.results.find((x) => x.id === 21)).toMatchObject({ ok: false, code: 'fee_above_ceiling' })
+    expect(r.notes.some((n) => !n.ok && n.code === 'fee_above_ceiling')).toBe(true)
+    expect(r.canSend).toBe(true)
   })
 })
 
-describe('guard 22: the route verdict is a warning, not a cap', () => {
-  it('a blocked verdict warns and the tick sends any amount', async () => {
+describe('guard 22: the route verdict is a note, not a cap and not a hold', () => {
+  it('a blocked verdict is a note the indicator shows in red; the send is still possible', async () => {
     const i = info()
     const p = await build(i, '1')
     const rep = runV1Guards(guardInput(p, i, { risk: blockedRisk() }))
     expect(rep.results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
-    // A warning, never a block — the owner's decision (CLAUDE.md rule 2).
+    // A note, never a block — the owner's decision (CLAUDE.md rule 2).
     expect(rep.blocks.some((b) => !b.ok && b.code === 'risk_blocked')).toBe(false)
-    expect(rep.canSend).toBe(false)
-    expect(runV1Guards(guardInput(p, i, { risk: blockedRisk(), risksAccepted: true })).canSend).toBe(true)
+    expect(rep.canSend).toBe(true)
+  })
+
+  it('a runner that failed is a note too, never a hold', async () => {
+    const i = info()
+    const p = await build(i, '1')
+    const rep = runV1Guards(guardInput(p, i, { risk: undefined, riskError: 'timeout' }))
+    expect(rep.results.find((x) => x.id === 22)).toMatchObject({ ok: false, code: 'risk_unavailable', detail: 'timeout' })
+    expect(rep.canSend).toBe(true)
+    // Without an error it is still a read in flight, which does hold.
+    expect(runV1Guards(guardInput(p, i, { risk: undefined })).canSend).toBe(false)
   })
 })
 

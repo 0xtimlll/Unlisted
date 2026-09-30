@@ -28,7 +28,7 @@ import { endpointV1Abi, isUnverifiedStandard, lzAppAbi, oftV1Abi, PT_SEND, type 
 import { lzV1 } from '../lz-v1/chains'
 import type { OftV1Info } from '../lz-v1/detect'
 import type { V1SendPlan } from '../lz-v1/plan'
-import { lockedBps, reviewedAdapter, type AdapterStanding } from './adapters'
+import { lockedBps, type AdapterStanding } from './adapters'
 import { dvnInfo } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
@@ -425,7 +425,8 @@ async function checkRecentChanges(c: V1RiskContext): Promise<Outcome> {
 
 /**
  * §Adapter The v1 adapter's standing. Same rule and same thresholds as V2 (adapters.ts): an
- * adapter is a lockbox the token knows nothing about, so only the committed list reaches OK.
+ * adapter is a lockbox the token knows nothing about, so its locked share and its history are
+ * the only facts its deployer does not write.
  *
  * v1 differs only in where the two numbers come from — `getOutboundNonce(dstChainId, oft)` on
  * Endpoint V1, which detect.ts has already confirmed is this chain's committed endpoint
@@ -433,7 +434,6 @@ async function checkRecentChanges(c: V1RiskContext): Promise<Outcome> {
  */
 async function adapterStandingV1(c: V1RiskContext): Promise<AdapterStanding | null> {
   if (!c.info.approvalRequired || sameAddress(c.info.token, c.info.oft)) return null
-  const listed = !!reviewedAdapter(c.info.chain, c.info.oft, c.info.token)
 
   const [held, supply] = await Promise.all([
     attempt(c.srcClient.readContract({ address: c.info.token, abi: erc20Abi, functionName: 'balanceOf', args: [c.info.oft] }), undefined, 'adapter balance'),
@@ -451,7 +451,7 @@ async function adapterStandingV1(c: V1RiskContext): Promise<AdapterStanding | nu
   )
   const outboundNonce = nonces.every((n) => n.ok) ? nonces.reduce((t, n) => t + BigInt(n.ok ? n.value : 0n), 0n) : undefined
 
-  return { listed, lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined, outboundNonce }
+  return { lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined, outboundNonce }
 }
 
 export type V1Assessment = { input: RiskInput; dstGasEstimate: bigint | undefined }

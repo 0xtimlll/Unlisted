@@ -7,15 +7,13 @@
  * does not — a `bytes` recipient, adapter params, a stuck-payload check on the destination — lives
  * here, and the V2 screen is left exactly as it was.
  */
-import { isStepCode, isWarningCode, shownFailures } from '@/core/severity'
-import { RiskWarnings } from './components/RiskWarnings'
+import { isNoteCode, isStepCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 import { useEffect, useMemo, useState } from 'react'
-import { erc20Abi } from 'viem'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
-import { riskTickScope } from '@/core/riskTick'
-import { useRiskTick } from './useRiskTick'
+import { assessIndicator } from '@/core/indicator'
+import { useApproveFlow } from './useApproveFlow'
 import { sameAddress } from '@/core/encoding'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
@@ -33,44 +31,39 @@ import { fmt, useDict, type Dict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
 import { Panel, TwoColumn } from './components/Layout'
 import { Tracker } from './components/Tracker'
-import { Alert, AmountInput, Box, BoxLabel, Button, Input, Row, Select, Spinner } from './components/ui'
+import { Alert, AmountInput, Box, BoxLabel, Input, Row, Select, Spinner } from './components/ui'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { pushHistory, setHistoryStatus, type Stored } from './storage'
 import { useV1PeerBack, useV1Plan, useV1Simulation, useV1StoredPayload } from './v1Hooks'
 import { useV1RouteRisk } from './riskHooks'
-import { RiskPanel } from './components/RiskPanel'
+import { RiskChecks } from './components/RiskPanel'
+import { RouteIndicator } from './components/RouteIndicator'
+import { Cta, type CtaState } from './components/Review'
 
 const GUARD_LABEL = (d: Dict, code: string): string => (d.v1Guard as Record<string, string>)[code] ?? code
 
-/** The guard list, compact: real failures in red, reads still in flight in grey, passes in green. */
+/** The guard list for the details fold: blocks in red, the approve step neutral, notes in amber, reads in flight in grey. */
 function V1Checks({ results }: { results: V1GuardResult[] }) {
   const d = useDict()
-  // "Issues to fix" are the blocks: a warning is accepted below the list, and the approve is a step.
-  const failing = results.filter((r) => !r.ok && !isV1Pending(r) && !isStepCode(r.code) && !isWarningCode(r.code))
-  const warning = results.filter((r) => !r.ok && isWarningCode(r.code))
+  const failing = results.filter((r) => !r.ok && !isV1Pending(r) && !isStepCode(r.code) && !isNoteCode(r.code))
+  const noted = results.filter((r) => !r.ok && isNoteCode(r.code))
   const stepping = results.filter((r) => !r.ok && isStepCode(r.code))
   const pending = results.filter((r) => isV1Pending(r))
   const passing = results.filter((r) => r.ok).length
-  const tone = (r: V1GuardResult) => (isV1Pending(r) ? 'text-muted' : r.ok ? 'text-ok' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger')
-  const glyph = (r: V1GuardResult) => (isV1Pending(r) ? '○' : r.ok ? '✓' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗')
+  const tone = (r: V1GuardResult) => (isV1Pending(r) ? 'text-muted' : r.ok ? 'text-ok' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger')
+  const glyph = (r: V1GuardResult) => (isV1Pending(r) ? '○' : r.ok ? '✓' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗')
   return (
     <div className="space-y-1.5">
-      <div className="text-xs">
-        {failing.length ? (
-          <span className="text-danger">✗ {fmt(d.ui.checksIssues, { n: failing.length })}</span>
-        ) : pending.length ? (
-          <span className="inline-flex items-center gap-2 text-muted">
+      <div className="text-xs font-semibold text-muted">
+        {pending.length ? (
+          <span className="inline-flex items-center gap-2">
             <Spinner /> {fmt(d.ui.checksPending, { done: passing, total: results.length })}
           </span>
         ) : (
-          <span className={warning.length ? 'text-warn' : 'text-ok'}>
-            {warning.length ? '⚠' : '✓'} {d.ui.checks}: {passing}/{results.length}
-            {warning.length ? ` · ${fmt(d.ui.checksWarnings, { n: warning.length })}` : ''}
-            {stepping.length ? ` · ${d.ui.checksStep}` : ''}
-          </span>
+          `${d.ui.checks}: ${passing}/${results.length}`
         )}
       </div>
-      {[...failing, ...stepping, ...warning, ...pending].map((r) => (
+      {[...failing, ...stepping, ...noted, ...pending].map((r) => (
         <div key={r.id} className={`text-xs ${tone(r)}`}>
           {glyph(r)} {!r.ok ? GUARD_LABEL(d, r.code) : null}
           {!r.ok && r.detail ? <span className="mono ml-1 opacity-70">{r.detail}</span> : null}
@@ -106,9 +99,6 @@ export function BridgeV1({
   const [confirmLast6, setConfirmLast6] = useState('')
   const [slippageBps, setSlippageBps] = useState(0)
   const [feeBufferBps] = useState(1000) // +10%: v1 refunds the excess to the sender
-  const [peerBackAccepted, setPeerBackAccepted] = useState(false)
-  const [storedPayloadAccepted, setStoredPayloadAccepted] = useState(false)
-  const [highFeeAccepted, setHighFeeAccepted] = useState(false)
   const [txError, setTxError] = useState('')
   const [sent, setSent] = useState<{ txHash: string; dstKey: ChainKey; at: number } | null>(null)
 
@@ -168,24 +158,12 @@ export function BridgeV1({
   // §Address book. LayerZero v1 routes in this app are EVM to EVM.
   const bookFamily = familyOfVm('evm')
   const bookVerdict = useBookVerdict(bookFamily, recipientCustom ? recipient?.display : undefined)
-  // The one tick covers what was on screen when it was ticked: chain, token, route, amount,
-  // recipient and wallet — and the warnings shown then (ui/useRiskTick.ts). Any of them changing
-  // is a different scope.
-  const tickScope = riskTickScope({
-    chain: src.key,
-    contract: info.oft,
-    destination: dstKey,
-    amount: planData?.amounts.amountLD,
-    recipient: planData?.recipient,
-    sender: wallet,
-  })
 
   const last6Ok = !recipientCustom || (recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6)))
 
-  // Two passes on purpose: the warnings do not depend on the tick, so the first pass finds what is
-  // on screen, the tick is judged against that list (and its scope), and the second pass is the
-  // verdict with the tick applied. `guardInput` is what the click re-runs, so it carries it.
-  const draftInput: V1GuardInput = {
+  const riskError = risk.error ? shortError(risk.error) : undefined
+  // `guardInput` is what the click re-runs, so it carries everything the render judged.
+  const guardInput: V1GuardInput = {
     walletAddress: wallet,
     walletChainId,
     srcChainId: src.chainId,
@@ -206,22 +184,40 @@ export function BridgeV1({
     selfCheck,
     flags,
     peerBack: peerBack.data,
-    peerBackUnavailableAccepted: peerBackAccepted,
     storedPayload: storedPayload.data,
-    storedPayloadUnavailableAccepted: storedPayloadAccepted,
-    highFeeAccepted,
     risk: risk.data?.risk,
+    riskError,
   }
-  const draft = runV1Guards(draftInput)
-  const tick = useRiskTick(tickScope, planData ? shownFailures(draft.riskWarnings) : [])
-  const guardInput: V1GuardInput = { ...draftInput, risksAccepted: tick.accepted }
   const report = runV1Guards(guardInput)
-  // Reads in flight are "checking", not problems to accept.
-  const shownBlocks = planData ? shownFailures(report.blocks, { dropPending: true, dropSteps: true }) : []
-  const shownWarnings = planData ? shownFailures(report.riskWarnings) : []
+  // The line under the button names the impossibility, if there is one. Notes are the indicator's.
+  const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
 
-  const approveWrite = useWriteContract()
+  // The route indicator: one colour from everything above. It decides nothing (core/indicator.ts).
+  const indicator = assessIndicator({
+    hasDestination: dstKey !== undefined,
+    hasPlan: !!planData,
+    results: report.results,
+    label: (c) => GUARD_LABEL(d, c),
+    flags: report.warnings,
+    flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
+    risk: risk.data?.risk,
+    riskCovered: true,
+    riskPending: risk.isFetching,
+    riskError,
+  })
+
   const sendWrite = useWriteContract()
+  // The flow signs approve(spender, amount) for exactly the intent the guards checked, waits for
+  // the receipt and reads the allowance back; the button becomes Send by itself.
+  const approveFlow = useApproveFlow({
+    chainId: src.chainId,
+    owner: wallet,
+    token: info.approvalRequired ? info.token : undefined,
+    spender: approveIntent?.spender,
+    amount: approveIntent?.amount,
+    allowance: allowance.data,
+    refetchAllowance: async () => (await allowance.refetch()).data,
+  })
 
   const onApprove = () => {
     setTxError('')
@@ -233,19 +229,9 @@ export function BridgeV1({
     if (!intent) return
     if (!sameAddress(intent.spender, info.oft) || !sameAddress(intent.token, info.token)) return
     if (intent.amount !== planData.amounts.amountLD) return
-    approveWrite.writeContract(
-      {
-        address: intent.token,
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [intent.spender, intent.amount],
-        chainId: src.chainId,
-      },
-      {
-        onSuccess: () => void allowance.refetch(),
-        onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)),
-      },
-    )
+    // No allowance for a transfer that cannot happen: the approve is a step of THIS transfer.
+    if (!waitsOnlyForApprove(runV1Guards(guardInput).blocks)) return
+    void approveFlow.start()
   }
 
   // Not memoised: it reads `guardInput`, which is new every render. A callback kept across renders
@@ -282,6 +268,41 @@ export function BridgeV1({
   }
 
   const chainMismatch = walletChainId !== undefined && walletChainId !== src.chainId
+  // Connect wallet → Switch to <chain> → Approve <amount> <token> → Send; one impossibility under it.
+  const cta: CtaState = !wallet
+    ? { kind: 'connect' }
+    : chainMismatch
+      ? { kind: 'switch', chain: src }
+      : !dstKey
+        ? { kind: 'destination' }
+        : amountInput.trim() === ''
+          ? { kind: 'amount' }
+          : !recipient
+            ? { kind: 'recipient' }
+            : !planData
+              ? plan.error
+                ? { kind: 'send', enabled: false, reason: shortError(plan.error) }
+                : { kind: 'quote' }
+              : approveIntent
+                ? { kind: 'approve', intent: approveIntent, enabled: waitsOnlyForApprove(report.blocks), ...(impossible ? { reason: GUARD_LABEL(d, impossible.code) } : {}) }
+                : !report.canSend && report.results.every((r) => r.ok || isV1Pending(r))
+                  ? { kind: 'checking' }
+                  : { kind: 'send', enabled: report.canSend, ...(impossible ? { reason: GUARD_LABEL(d, impossible.code) } : {}) }
+  const onCta = () => {
+    switch (cta.kind) {
+      case 'switch':
+        switchChain({ chainId: src.chainId })
+        return
+      case 'approve':
+        onApprove()
+        return
+      case 'send':
+        void onSend()
+        return
+      default:
+        return
+    }
+  }
   const adapter = planData ? v1AdapterParamsSummary(planData.adapterParams) : undefined
   const route = info.routes.find((r) => r.key === dstKey)
   const feeStr = planData ? `${formatAmount(planData.value, 18, { maxFraction: 6 })} ${src.nativeSymbol}` : ''
@@ -451,84 +472,28 @@ export function BridgeV1({
               {adapter?.empty ? d.v1.adapterEmpty : adapter ? fmt(d.v1.adapterGas, { gas: adapter.gas.toString() }) : '—'}
             </Row>
             {route && route.minDstGas > 0n ? <p className="text-xs text-muted">{fmt(d.v1.adapterMin, { gas: route.minDstGas.toString() })}</p> : null}
-            {simulation.data?.status === 'reverted' ? <Alert kind="error">{formatRevert(simulation.data.revert)}</Alert> : null}
           </>
         ) : (
           <p className="text-xs text-muted">{d.ui.previewEmpty}</p>
         )}
 
-        {report.needsHighFeeConfirmation ? (
-          <div className="space-y-2">
-            <Alert kind="warn">{fmt(d.v1.warnHighFee, { fee: feeStr, chain: src.name })}</Alert>
-            <label className="flex items-start gap-2 text-xs text-ink">
-              <input type="checkbox" className="mt-0.5" checked={highFeeAccepted} onChange={(e) => setHighFeeAccepted(e.target.checked)} />
-              {d.v1.confirmHighFee}
-            </label>
-          </div>
-        ) : null}
-        {peerBack.data?.status === 'unavailable' ? (
-          <div className="space-y-2">
-            <Alert kind="warn">{d.v1.warnPeerBack}</Alert>
-            <label className="flex items-start gap-2 text-xs text-ink">
-              <input type="checkbox" className="mt-0.5" checked={peerBackAccepted} onChange={(e) => setPeerBackAccepted(e.target.checked)} />
-              {d.v1.confirmPeerBack}
-            </label>
-          </div>
-        ) : null}
-        {storedPayload.data?.status === 'unavailable' ? (
-          <div className="space-y-2">
-            <Alert kind="warn">{d.v1.warnStoredPayload}</Alert>
-            <label className="flex items-start gap-2 text-xs text-ink">
-              <input type="checkbox" className="mt-0.5" checked={storedPayloadAccepted} onChange={(e) => setStoredPayloadAccepted(e.target.checked)} />
-              {d.v1.confirmStoredPayload}
-            </label>
-          </div>
-        ) : null}
+        <div>
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
+          <RouteIndicator indicator={indicator} noneText={dstKey === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
+            <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} />
+            <V1Checks results={report.results} />
+            {simulation.data?.status === 'reverted' ? <p className="mono text-xs text-warn">{formatRevert(simulation.data.revert)}</p> : null}
+          </RouteIndicator>
+        </div>
 
-        <RiskPanel
-          risk={risk.data?.risk}
-          awaitingDestination={dstKey === undefined}
-          loading={risk.isFetching}
-          error={risk.error ? shortError(risk.error) : ''}
+        <Cta
+          state={cta}
+          info={info}
+          sending={switching || sendWrite.isPending}
+          approve={{ phase: approveFlow.phase, explorerTxUrl: src.explorerTxUrl }}
+          onClick={onCta}
+          error={txError}
         />
-
-        <V1Checks results={report.results} />
-
-        {txError ? <Alert kind="error">{txError}</Alert> : null}
-        <RiskWarnings
-          blocks={shownBlocks}
-          warnings={shownWarnings}
-          label={(c) => GUARD_LABEL(d, c)}
-          accepted={tick.accepted}
-          onAccepted={tick.setAccepted}
-          added={tick.added}
-        />
-        {chainMismatch ? (
-          <Button variant="cta" disabled={switching} onClick={() => switchChain({ chainId: src.chainId })}>
-            {fmt(d.ui.cta_switch, { chain: src.name })}
-          </Button>
-        ) : approveIntent ? (
-          // The approve grants an allowance, so it waits for the same tick the send does.
-          <Button variant="cta" disabled={approveWrite.isPending || !report.approveReady} onClick={onApprove}>
-            {approveWrite.isPending ? (
-              <>
-                <Spinner /> {d.ui.cta_checking}
-              </>
-            ) : (
-              fmt(d.step3.approveBtn, { amount: formatAmount(approveIntent.amount, info.decimals), symbol: info.symbol })
-            )}
-          </Button>
-        ) : (
-          <Button variant="cta" disabled={!report.canSend || sendWrite.isPending} onClick={() => void onSend()}>
-            {sendWrite.isPending ? (
-              <>
-                <Spinner /> {d.ui.cta_checking}
-              </>
-            ) : (
-              d.ui.cta_send
-            )}
-          </Button>
-        )}
       </div>
     </Panel>
   )

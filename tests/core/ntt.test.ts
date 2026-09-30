@@ -15,12 +15,9 @@ import { parseNttOperations, wormholescanTxUrl } from '@/protocols/wormhole-ntt/
 import { findListedToken, listedChains, parseTokenList } from '@/protocols/wormhole-ntt/tokenList'
 import { verifyNttManager, type NttVerification, verifyNttManagerQuorum } from '@/protocols/wormhole-ntt/verify'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
-import { LOCKING_HUBS } from '@/protocols/wormhole-ntt/lockingHubs'
 import type { ReadClient } from '@/core/client'
 
-// Synthetic on purpose. These used to be the real L3 addresses, which silently coupled the tests
-// to mainnet: once locking-hubs.json gained the real L3 hub, the "unlisted hub" case started
-// passing because the fixture WAS listed. A test about the rule must not depend on the roster.
+// Synthetic on purpose: a test about the rule must not depend on any real deployment.
 const MANAGER = getAddress('0xaaaaaaa000000000000000000000000000000001')
 const DST_MANAGER = getAddress('0xbbbbbbb000000000000000000000000000000002')
 const TOKEN = getAddress('0xccccccc000000000000000000000000000000003')
@@ -251,9 +248,9 @@ describe('the four-part gate', () => {
     // could easily have one self-made transfer indexed by Wormholescan. The one thing it cannot
     // forge is the token naming it — and that is exactly what comes back as `anchor: null`.
     //
-    // Unlisted warns rather than refuses (core/severity.ts), so verification now succeeds and the
-    // protection is guard 2b: `ntt_anchor_missing`, which holds the button until the user ticks
-    // the risk box. The test below this one is the half that matters most.
+    // Unlisted informs rather than refuses (core/severity.ts), so verification succeeds and the
+    // protection is guard 2b: `ntt_anchor_missing`, a note the indicator shows in red with one
+    // visible line. The send stays possible; the person decides.
     const FAKE = getAddress('0xdeadbeef00000000000000000000000000000001')
     const FAKE_DST = getAddress('0xdeadbeef00000000000000000000000000000002')
     const src: Answers = {
@@ -290,14 +287,12 @@ describe('the four-part gate', () => {
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.verified.anchor).toBeNull()
 
-    // The protection that remains, and the one that matters: guard 2b holds the button.
-    const held = runNttGuards(guardInput({ verification: r }))
-    expect(held.canSend).toBe(false)
-    expect(held.riskWarnings.map((w) => !w.ok && w.code)).toContain('ntt_anchor_missing')
-    // It is a WARNING, not a block — the owner's decision, see core/severity.ts.
-    expect(held.blocks.map((b) => !b.ok && b.code)).not.toContain('ntt_anchor_missing')
-    // And the tick opens it, because this is a tool that warns rather than refuses.
-    expect(runNttGuards(guardInput({ verification: r, risksAccepted: true })).canSend).toBe(true)
+    // The protection that remains, and the one that matters: guard 2b says so, in red.
+    const rep = runNttGuards(guardInput({ verification: r }))
+    expect(rep.notes.map((w) => !w.ok && w.code)).toContain('ntt_anchor_missing')
+    // It is a NOTE, not a block — the owner's decision, see core/severity.ts.
+    expect(rep.blocks.map((b) => !b.ok && b.code)).not.toContain('ntt_anchor_missing')
+    expect(rep.canSend).toBe(true)
   })
 })
 
@@ -519,28 +514,21 @@ describe('NTT fee ceiling (guard 14)', () => {
 
   it('passes silently while the fee is ordinary', () => {
     const r = runNttGuards(guardInput())
-    expect(r.needsHighFeeConfirmation).toBe(false)
     expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
   })
 
-  it('blocks a fee above the chain ceiling until it is read', () => {
+  it('notes a fee above the chain ceiling for the indicator, and holds nothing', () => {
     const r = runNttGuards(guardInput({ plan: planFixture(high) }))
-    expect(r.needsHighFeeConfirmation).toBe(true)
-    expect(r.canSend).toBe(false)
-    expect(r.results.find((x) => x.id === 14)).toMatchObject({ ok: false, code: 'fee_above_ceiling_unconfirmed' })
-  })
-
-  it('lets the same fee through once the user accepts it', () => {
-    const r = runNttGuards(guardInput({ plan: planFixture(high), highFeeAccepted: true }))
-    expect(r.results.find((x) => x.id === 14)?.ok).toBe(true)
+    expect(r.results.find((x) => x.id === 14)).toMatchObject({ ok: false, code: 'fee_above_ceiling' })
+    expect(r.notes.some((n) => !n.ok && n.code === 'fee_above_ceiling')).toBe(true)
     expect(r.canSend).toBe(true)
   })
 
-  it('still blocks a fee the balance could cover — the ceiling is not the balance', () => {
-    // Guard 8 would allow this: 0.5 + gas < 1 ETH. Guard 14 is the only thing that objects.
+  it('still notes a fee the balance could cover — the ceiling is not the balance', () => {
+    // Guard 8 allows this: 0.5 + gas < 1 ETH. Guard 14 is the only thing that speaks, and it speaks.
     const r = runNttGuards(guardInput({ plan: planFixture(high) }))
     expect(r.results.find((x) => x.id === 8)?.ok).toBe(true)
-    expect(r.canSend).toBe(false)
+    expect(r.results.find((x) => x.id === 14)?.ok).toBe(false)
   })
 })
 
@@ -706,47 +694,16 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
     [`${DST_MANAGER.toLowerCase()}.token`]: DST_TOKEN,
   })
 
-  it('3. a locking hub in the committed list is accepted, on that list alone', async () => {
-    const hub = LOCKING_HUBS.find((h) => h.chain === 'ethereum')
-    expect(hub, 'locking-hubs.json has no ethereum entry to test with').toBeDefined()
-    const m = hub!.manager
+  it('3. a locking hub verifies with no anchor: nothing on the source chain can vouch for it, and no list does either', async () => {
+    const m = getAddress('0xdddddddd0000000000000000000000000000000d')
     const r = await verifyNttManager({
       srcChain: 'ethereum',
       dstChain: 'bsc',
       manager: m,
       srcClient: mockClient({
-        [`${m.toLowerCase()}.token`]: hub!.token,
-        [`${m.toLowerCase()}.chainId`]: ETH_WH,
-        [`${m.toLowerCase()}.getMode`]: 0, // locking: nothing mints, so no token anchor exists
-        [`${m.toLowerCase()}.tokenDecimals`]: 18,
-        [`${m.toLowerCase()}.getPeer`]: { peerAddress: pad(DST_MANAGER.toLowerCase() as Address, { size: 32 }), tokenDecimals: 18 },
-        [`${m.toLowerCase()}.getTransceivers`]: [TRANSCEIVER],
-        [`${TRANSCEIVER.toLowerCase()}.getTransceiverType`]: 'wormhole',
-        [`${TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
-        [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
-        [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
-        [`${hub!.token.toLowerCase()}.minter`]: new Error('locking hub: nothing mints'),
-        [`${hub!.token.toLowerCase()}.MINTER_ROLE`]: new Error('no role'),
-      }),
-      dstClient: mockClient(dstPeeringBackAt(m)),
-      tokenList: [],
-    })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.verified.anchor).toEqual({ side: 'listed', kind: 'committed' })
-  })
-
-  it('3b. a listed hub does not vouch for a manager that has started naming another token', async () => {
-    const hub = LOCKING_HUBS.find((h) => h.chain === 'ethereum')!
-    const m = hub.manager
-    const r = await verifyNttManager({
-      srcChain: 'ethereum',
-      dstChain: 'bsc',
-      manager: m,
-      srcClient: mockClient({
-        // Same listed manager, different token: the match is chain + manager + token, all three.
         [`${m.toLowerCase()}.token`]: REAL_TOKEN,
         [`${m.toLowerCase()}.chainId`]: ETH_WH,
-        [`${m.toLowerCase()}.getMode`]: 0,
+        [`${m.toLowerCase()}.getMode`]: 0, // locking: nothing mints, so no token anchor exists
         [`${m.toLowerCase()}.tokenDecimals`]: 6,
         [`${m.toLowerCase()}.getPeer`]: { peerAddress: pad(DST_MANAGER.toLowerCase() as Address, { size: 32 }), tokenDecimals: 6 },
         [`${m.toLowerCase()}.getTransceivers`]: [TRANSCEIVER],
@@ -754,7 +711,7 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
         [`${TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
         [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
         [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
-        [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('not a minter'),
+        [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('locking hub: nothing mints'),
         [`${REAL_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('no role'),
       }),
       dstClient: mockClient(dstPeeringBackAt(m)),
@@ -762,9 +719,10 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
     })
     expect(r.ok).toBe(true)
     if (r.ok) expect(r.verified.anchor).toBeNull()
+    // `getMode()` saying "locking" is the manager's own claim and changes nothing.
   })
 
-  it('4. a locking manager that is not in the list is refused', async () => {
+  it('4. a locking manager with a destination-side anchor only is still unvouched for', async () => {
     const r = await verify(
       srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
       dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),

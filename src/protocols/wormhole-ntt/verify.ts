@@ -11,8 +11,8 @@
  *      minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens, with the
  *      role read from the token itself. This is the only fact in the whole gate the manager's
  *      deployer cannot write, so it is the only one that can establish trust (CLAUDE.md rule 2).
- *      A locking hub has no minter and is established instead by the committed list in
- *      lockingHubs.ts, matched on chain + manager + token.
+ *      A locking hub has no minter, so nothing on the source chain can establish it; the route
+ *      still verifies, and the indicator says in red that the manager is vouched for by nothing.
  *   3. Peers in both directions: source.getPeer(dst) == destination manager AND
  *      destination.getPeer(src) == source manager, read on the destination's own RPC.
  *   4. A Wormhole transceiver: it reports the Wormhole type and points at the core bridge whose
@@ -45,7 +45,6 @@ import type { ReadClient } from '../../core/client'
 import { isZeroBytes32, peerToAddress } from '../../core/encoding'
 import { nttManagerAbi, nttTokenAnchorAbi, WORMHOLE_TRANSCEIVER_TYPE, wormholeTransceiverAbi, nttMode, type NttMode } from './abi'
 import { WORMHOLE_CHAINS, wormholeChainId } from './chains'
-import { listedLockingHub } from './lockingHubs'
 import { findListedToken, type NttToken } from './tokenList'
 
 export type NttRejectionCode =
@@ -61,14 +60,12 @@ export type NttRejectionCode =
   | 'unverifiable'
 
 /**
- * What established this manager.
- *
- * `source` is the token itself vouching; `listed` is our committed locking-hub file. Those are the
- * only two, because they are the only two an attacker cannot author. A destination-side anchor is
+ * What established this manager: the token on the SOURCE chain naming it as minter, or granting it
+ * the minter role. That is the only fact an attacker cannot author. A destination-side anchor is
  * reported separately as `alsoOnDestination` and is never a reason on its own.
  */
-export type AnchorSide = 'source' | 'listed'
-export type AnchorKind = 'minter' | 'role' | 'committed'
+export type AnchorSide = 'source'
+export type AnchorKind = 'minter' | 'role'
 
 export type VerifiedNttManager = {
   chain: ChainKey
@@ -97,10 +94,10 @@ export type VerifiedNttManager = {
   /**
    * What established this manager, or `null` when nothing did.
    *
-   * `null` is not a refusal any more. Unlisted is a tool that warns: a locking hub the reviewed
-   * list has never seen looks exactly like a brand-new one, and refusing outright made the tab
-   * useless for anything young. The route is verified in every other respect and the screen says,
-   * in red, that the one thing nobody could confirm is the contract itself.
+   * `null` is not a refusal. Unlisted is a tool that informs: a locking hub looks exactly like a
+   * fake from the source chain, and refusing outright made the tab useless for anything that
+   * locks. The route is verified in every other respect and the indicator says, in red, that the
+   * one thing nobody could confirm is the contract itself.
    */
   anchor: { side: AnchorSide; kind: AnchorKind } | null
   /**
@@ -206,17 +203,13 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   const dstAnchor = await tokenAnchors(p.dstClient, dstToken, dstManager)
 
   // No anchor from the token means a genuine locking hub — nothing is minted there — or something
-  // pretending to be one. The committed list is the only thing that can tell them apart, and
-  // `getMode()` is deliberately not consulted: the mode is the manager's own claim, so "I am a
-  // locking hub" can never be the reason to trust a locking hub.
+  // pretending to be one. Nothing on chain can tell them apart, and `getMode()` is deliberately
+  // not consulted: the mode is the manager's own claim, so "I am a locking hub" can never be the
+  // reason to trust a locking hub.
   //
-  // When neither speaks for it, the verdict is still `ok` and `anchor` is null. Guard 2b turns
-  // that into a loud warning rather than a refusal (core/severity.ts).
-  const anchor: { side: AnchorSide; kind: AnchorKind } | null = srcAnchor
-    ? { side: 'source', kind: srcAnchor }
-    : listedLockingHub(p.srcChain, manager, token)
-      ? { side: 'listed', kind: 'committed' }
-      : null
+  // When nothing speaks for it, the verdict is still `ok` and `anchor` is null. Guard 2b carries
+  // that as a note the indicator shows in red (core/indicator.ts) rather than a refusal.
+  const anchor: { side: AnchorSide; kind: AnchorKind } | null = srcAnchor ? { side: 'source', kind: srcAnchor } : null
 
   // ---- 4. a Wormhole transceiver with automatic delivery --------------------
   const transceivers = await read(() => p.srcClient.readContract({ ...base, functionName: 'getTransceivers' }))

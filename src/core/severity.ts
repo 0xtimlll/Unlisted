@@ -1,34 +1,35 @@
 /**
- * What a failed check means: stop, or say so and let the user decide.
+ * What a failed check means: the button stays down, or the indicator changes colour.
  *
- * Unlisted is a tool for arbitrage. It WARNS; the person decides. A verdict the app computed
- * honestly is still only the app's opinion about someone else's contract, and refusing to build a
- * transaction because of an opinion makes the tool useless for exactly the routes it exists for —
- * new tokens, thin history, an RPC that would not answer.
+ * Unlisted is a tool for arbitrage. It INFORMS; the person decides. The app never asks for a tick,
+ * never caps an amount, and never refuses a transfer because of its opinion about someone else's
+ * contract. A failed check holds the button in exactly one case: the transaction is IMPOSSIBLE —
  *
- * So a failed check stops a transfer only when one of two things is true:
+ *   no wallet, or the wallet is on another chain;
+ *   the token or the native coin is not there;
+ *   there is no route (no peer, no trusted remote, the manager did not verify);
+ *   the amount is zero once dust and fees are taken;
+ *   the recipient cannot be encoded for the destination's VM at all.
  *
- *   the loss is certain        the recipient cannot hold the token, or is a contract of this very
- *                              route, or the amount arrives as zero — send it and it is gone;
- *   the transaction cannot go  the wallet is on the wrong chain, the balance is not there, no peer
- *                              is configured, or the app would have to build something malformed.
- *
- * Everything else is a warning. One tick covers all of them (`risksAccepted`), and it opens any
- * amount — see the send screens. A tick can never lift a block, and there is no code path where it
- * lifts more than the warnings that were shown.
+ * Everything else is a reason for the route indicator (core/indicator.ts): a colour, a sentence,
+ * and the details underneath. A recipient that is the zero address or one of the route's own
+ * contracts, a look-alike of a saved address, a peer that does not point back, a route LayerZero
+ * has blocked — all of these are RED, said in one visible line, and none of them holds the button.
  *
  * THE ASSEMBLY INVARIANTS ARE NOT OPINIONS and are always blocks: calldata only as
  * abi + functionName + args, approve for exactly the amount, the spender being the route contract
  * that was verified, no approve at all when the contract says none is required, refundAddress being
  * the connected wallet, and the recipient encoded the way the destination will read it. Those are
- * the app being correct about itself, not the app judging a stranger's contract.
+ * the app being correct about itself, not the app judging a stranger's contract. They are not shown
+ * as restrictions: if one of them ever fires, it is a bug in this app, and the button simply stays
+ * down with the code in the line under it.
  *
  * Codes are named consistently across the four guard sets, so one table serves all of them.
  */
 
 /**
- * Reads still in flight. Not a verdict at all: nothing has been judged yet, so there is nothing to
- * accept. They hold the button the same way a block does, and resolve on their own.
+ * Reads still in flight. Not a verdict at all: nothing has been judged yet. They hold the button
+ * the same way a block does, and resolve on their own.
  */
 const PENDING: ReadonlySet<string> = new Set([
   'plan_missing',
@@ -43,36 +44,26 @@ const PENDING: ReadonlySet<string> = new Set([
   'stored_payload_unknown',
   'recipient_class_unknown',
   'risk_unknown',
+  'svm_dest_unknown',
 ])
 
 /**
- * The only failures a tick cannot lift. Grouped by the reason they are here, because the reason is
- * the thing to check when adding a code: "would the money certainly be lost, or would the
- * transaction certainly not go, or would we be building something malformed?"
+ * The only failures that hold the button. Grouped by the reason they are here, because the reason
+ * is the thing to check when adding a code: "is the transaction physically impossible, or would we
+ * be building something malformed?"
  */
 const BLOCKING: ReadonlySet<string> = new Set([
-  // ── the recipient cannot receive: the money would be gone ────────────────────
-  'recipient_invalid',
-  'recipient_zero',
-  'recipient_vm_mismatch',
-  // guard 4 only names contracts OF THIS ROUTE — the token, the bridge, the adapter, the manager,
-  // the router, the peer. A recipient that is merely *a* contract is a warning: exchange deposits
-  // and multisigs are contracts.
-  'recipient_is_contract',
-  // An SPL token account cannot be credited this way; the transfer would be lost.
-  'recipient_token_account',
-  // Shares its first and last four characters with a saved address but is not it. This is the
-  // shape of an address swap, and a user who could tick past it has already been fooled.
-  'recipient_lookalike',
-  // The tail confirmation. Not a risk to accept — a ten-second action, and it stays required.
-  'recipient_unconfirmed',
+  // ── the wallet cannot make this transaction ──────────────────────────────────
+  'wallet_not_connected',
+  'chain_mismatch',
+  'insufficient_balance',
+  'insufficient_native',
 
-  // ── there is no route, or the destination could not be identified ────────────
+  // ── there is no route ────────────────────────────────────────────────────────
   'peer_missing',
   'route_missing',
   'route_unsupported',
   'manager_unverified',
-  'svm_dest_unknown',
 
   // ── the amount does not survive the trip ─────────────────────────────────────
   'amount_zero',
@@ -83,11 +74,15 @@ const BLOCKING: ReadonlySet<string> = new Set([
   // The NTT manager reverts on dust rather than rounding it away.
   'amount_has_dust',
 
-  // ── the wallet cannot make this transaction ──────────────────────────────────
-  'wallet_not_connected',
-  'chain_mismatch',
-  'insufficient_balance',
-  'insufficient_native',
+  // ── the recipient cannot be encoded for the destination ──────────────────────
+  'recipient_invalid',
+  'recipient_vm_mismatch',
+  // The tail confirmation is INPUT, not a tick: a new or imported address is typed once against
+  // its source (core/recipient.ts, core/addressBook.ts). Until then the recipient is not entered.
+  'recipient_unconfirmed',
+
+  // ── the next step, not a problem (see STEP) ──────────────────────────────────
+  'needs_approve',
 
   // ── assembly invariants: the app being correct about itself ──────────────────
   'fee_mismatch',
@@ -101,8 +96,8 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'queueing_enabled',
   // OFTCore._checkAdapterParams requires them empty; anything else reverts.
   'adapter_params_forbidden',
+  'adapter_params_missing',
   'not_multiple_of_rate',
-  'needs_approve',
   'approve_amount_mismatch',
   'approve_forbidden',
   'approve_wrong_spender',
@@ -116,9 +111,8 @@ const BLOCKING: ReadonlySet<string> = new Set([
 /**
  * The blocks an approve is FOR, or waits on: the allowance it is about to grant, and the reads that
  * cannot finish before it lands (the simulation of a send needs the allowance; the gas estimate
- * needs the simulation). Any other block — a recipient that is refused, a wallet on the wrong
- * chain, a manager that did not verify — means the transfer this approve is for cannot happen, so
- * no allowance is granted for it.
+ * needs the simulation). Any other block — a wallet on the wrong chain, a manager that did not
+ * verify — means the transfer this approve is for cannot happen, so no allowance is granted for it.
  */
 const APPROVE_STEP: ReadonlySet<string> = new Set([
   'needs_approve',
@@ -129,25 +123,27 @@ const APPROVE_STEP: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Blocks that are a STEP, not a problem: the send cannot go yet, but nothing is wrong and there is
- * nothing to fix or to accept — the app itself will clear it with the next transaction. The one
+ * Blocks that are a STEP, not a problem: the send cannot go yet, but nothing is wrong. The one
  * member is the allowance. It holds `canSend` like any block (the send would revert without it),
- * but a screen must not show it in the red "cannot be sent" list, count it as an issue, or let it
- * hide the tick: the approve is what the user does NEXT, and the approve itself waits for the tick
- * (`approveReady`), so hiding the tick behind this "block" was a deadlock.
+ * but a screen must not show it as something to fix: the approve is what the user does NEXT.
  */
 const STEP: ReadonlySet<string> = new Set(['needs_approve'])
 
-export type GuardSeverity = 'pending' | 'block' | 'warn'
+export type GuardSeverity = 'pending' | 'block' | 'note'
 
-/** Unknown codes are warnings on purpose: a new check must not silently become a refusal. */
+/**
+ * Unknown codes are notes on purpose: a new check must not silently become a refusal. The colour
+ * a note gives the indicator is decided in core/indicator.ts.
+ */
 export function guardSeverity(code: string): GuardSeverity {
   if (PENDING.has(code)) return 'pending'
-  return BLOCKING.has(code) ? 'block' : 'warn'
+  return BLOCKING.has(code) ? 'block' : 'note'
 }
 
 export const isBlockingCode = (code: string): boolean => guardSeverity(code) === 'block'
-export const isWarningCode = (code: string): boolean => guardSeverity(code) === 'warn'
+export const isNoteCode = (code: string): boolean => guardSeverity(code) === 'note'
+/** True while a read is still in flight: shown as "checking", never as a problem. */
+export const isPendingCode = (code: string): boolean => guardSeverity(code) === 'pending'
 /** A block that is the next step rather than a problem — see `STEP`. Always also a block. */
 export const isStepCode = (code: string): boolean => STEP.has(code)
 
@@ -159,122 +155,34 @@ export function waitsOnlyForApprove(blocks: readonly AnyGuardResult[]): boolean 
   return blocks.every((b) => b.ok || APPROVE_STEP.has(b.code))
 }
 
-/**
- * How loudly a warning should be said, so the screen can sort them with the dangerous ones on top.
- * Higher is worse. Only affects presentation — every warning is covered by the same single tick.
- *
- * `loss` is for the ones where a wrong answer costs the transfer: the contract may not be what it
- * claims, or nobody could confirm that it is. `stuck` is for a transfer that arrives late or not at
- * all but is not taken by anyone. `note` is everything else.
- */
-export type WarningWeight = 'loss' | 'stuck' | 'note'
-
-const LOSS: ReadonlySet<string> = new Set([
-  'risk_blocked',
-  'adapter_unproven',
-  'ntt_anchor_missing',
-  'peer_back_mismatch',
-  'trusted_remote_back_mismatch',
-  'peer_back_unavailable_unconfirmed',
-  'trusted_remote_back_unavailable_unconfirmed',
-  'not_cross_checked',
-  'simulation_failed',
-  'simulation_unavailable',
-])
-
-const STUCK: ReadonlySet<string> = new Set([
-  'no_executor_gas_unconfirmed',
-  'no_executor_options_svm',
-  'gas_below_min_dst',
-  'adapter_params_missing',
-  'stored_payload_blocked',
-  'stored_payload_unavailable_unconfirmed',
-  'over_outbound_capacity',
-  'over_inbound_capacity',
-  'inbound_capacity_unknown',
-  'outbound_limit_unknown',
-  'inbound_limit_unknown',
-  'amount_out_of_limits',
-  'received_lt_min',
-])
-
-export function warningWeight(code: string): WarningWeight {
-  if (LOSS.has(code)) return 'loss'
-  return STUCK.has(code) ? 'stuck' : 'note'
-}
-
-const ORDER: Record<WarningWeight, number> = { loss: 0, stuck: 1, note: 2 }
-
-/** Is `a` a heavier warning than `b`? (`loss` outweighs `stuck` outweighs `note`.) */
-export function outweighs(a: WarningWeight, b: WarningWeight): boolean {
-  return ORDER[a] < ORDER[b]
-}
-
-/** Sorts warning codes strongest first, keeping the original order within a weight. */
-export function sortWarnings<T extends { code: string }>(warnings: readonly T[]): T[] {
-  return [...warnings].sort((a, b) => ORDER[warningWeight(a.code)] - ORDER[warningWeight(b.code)])
-}
-
 /** The shape every guard set's result already has. */
 export type FailedGuard = { ok: false; code: string; detail?: string }
 export type AnyGuardResult = { ok: true } | FailedGuard
 
 export type GuardVerdict<R> = {
-  /** Failures that hold the button no matter what: blocks, plus reads still in flight. */
+  /** Failures that hold the button: blocks, plus reads still in flight. */
   blocks: R[]
-  /** Failures one tick covers, strongest first. */
-  warnings: R[]
-  /**
-   * True when there is nothing to warn about, or the tick is on. Separate from `canSend` because
-   * the APPROVE step needs it on its own: an allowance granted to a contract the user has not yet
-   * accepted the risk of is the exploitable half of this app, and `canSend` cannot be used there —
-   * it is false until the approve lands, which is what the approve is for.
-   */
-  warningsCleared: boolean
-  /**
-   * The approve may be signed: the warnings are cleared AND nothing blocks except what the approve
-   * itself is for (`APPROVE_STEP`). `warningsCleared` alone is not enough — it says nothing about
-   * blocks, and an exact allowance to the route contract was being granted for transfers the guards
-   * had already refused.
-   */
-  approveReady: boolean
-  /** True when nothing blocks and either nothing warns or the tick is on. */
+  /** Failures that colour the indicator and hold nothing. */
+  notes: R[]
+  /** True when nothing blocks. Notes never enter into it. */
   canSend: boolean
 }
 
-/**
- * One rule, four guard sets. `risksAccepted` is the single tick; it is consulted for warnings and
- * for nothing else, so there is no arrangement of inputs in which it lifts a block.
- */
-export function verdictOf<R extends AnyGuardResult>(results: readonly R[], risksAccepted: boolean): GuardVerdict<R> {
+/** One rule, four guard sets. There is no input that can turn a block into a note. */
+export function verdictOf<R extends AnyGuardResult>(results: readonly R[]): GuardVerdict<R> {
   const blocks: R[] = []
-  const warnings: R[] = []
+  const notes: R[] = []
   for (const r of results) {
     if (r.ok) continue
-    if (guardSeverity(r.code) === 'warn') warnings.push(r)
+    if (guardSeverity(r.code) === 'note') notes.push(r)
     else blocks.push(r)
   }
-  const sorted = sortWarnings(warnings as unknown as { code: string }[]) as unknown as R[]
-  const warningsCleared = sorted.length === 0 || risksAccepted
-  const approveReady = warningsCleared && waitsOnlyForApprove(blocks)
-  return { blocks, warnings: sorted, warningsCleared, approveReady, canSend: blocks.length === 0 && warningsCleared }
+  return { blocks, notes, canSend: blocks.length === 0 }
 }
-
-/**
- * The guard reports already use `warnings` for guard 16's soft flags, which are a different thing:
- * those are shown and never hold anything. This renames the verdict's field so both can live in
- * one report without either quietly shadowing the other.
- */
-export function renameWarnings<R>(v: GuardVerdict<R>): { blocks: R[]; riskWarnings: R[]; warningsCleared: boolean; approveReady: boolean; canSend: boolean } {
-  return { blocks: v.blocks, riskWarnings: v.warnings, warningsCleared: v.warningsCleared, approveReady: v.approveReady, canSend: v.canSend }
-}
-
-/** True while a read is still in flight: shown as "checking", never as a problem to accept. */
-export const isPendingCode = (code: string): boolean => guardSeverity(code) === 'pending'
 
 /**
  * Narrows a report's list to the failures a screen should show, dropping reads still in flight
- * and, for the red "cannot be sent" list, the approve step (`dropSteps`). A type predicate so the
+ * and, for the line under the button, the approve step (`dropSteps`). A type predicate so the
  * screens keep `code` without a cast.
  */
 export function shownFailures<R extends { ok: boolean }>(

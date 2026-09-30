@@ -125,10 +125,8 @@ describe('Solana source: PENGU', () => {
       gasCostWei: svmTxFeeLamports(plan),
       simulation: { ok: true },
       selfCheck: selfCheckSvm(plan, view),
-      noExecutorGasAccepted: false,
       flags: [],
       peerBack: { status: 'ok' },
-      peerBackUnavailableAccepted: false,
     }
     const report = runGuards(input)
     const failing = report.results.filter((r) => !r.ok)

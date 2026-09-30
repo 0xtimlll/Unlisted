@@ -4,7 +4,8 @@ import { formatAmount } from '@/core/amounts'
 import { describeOptions, receiveTotals, type OptionItem } from '@/core/options'
 import { byEid, type ChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
-import { isStepCode, isWarningCode } from '@/core/severity'
+import { approveBusy, type ApprovePhase } from '@/core/approveFlow'
+import { isNoteCode, isStepCode } from '@/core/severity'
 import type { SendPlan } from '@/core/plan'
 import type { SvmOptionsPlan } from '@/core/options'
 import type { SvmOftInfo } from '@/core/svm/discover'
@@ -13,7 +14,7 @@ import type { SourceInfo } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import type { DestinationState } from './FromTo'
-import { Alert, Button, Disclosure, Input, Row, Spinner } from './ui'
+import { Button, Disclosure, Input, Row, Spinner } from './ui'
 
 /** Quote breakdown + advanced settings. Collapsed by default, like Relay's fee row. */
 export function Details(p: {
@@ -207,119 +208,47 @@ function optionLine(o: OptionItem, d: ReturnType<typeof useDict>): string {
   }
 }
 
-/** The guards, compact. Real failures in red; reads still in flight in grey; passes in green. */
-export function Checks(p: {
-  report: GuardReport
-  noGasAccepted: boolean
-  onNoGasAccepted: (v: boolean) => void
-  peerBackAccepted: boolean
-  onPeerBackAccepted: (v: boolean) => void
-  pdaAccepted: boolean
-  onPdaAccepted: (v: boolean) => void
-  highFeeAccepted: boolean
-  onHighFeeAccepted: (v: boolean) => void
-  /** Source chain + the plan's value, for the fee warning's text. */
-  feeNotice?: { fee: string; chain: string } | undefined
-  show: boolean
-  /** Right-hand panel: the list is the content, so it starts expanded. */
-  defaultOpen?: boolean
-}) {
+
+/**
+ * The guard list, for the details fold: passes in green, reads in flight in grey, the approve step
+ * neutral, notes in amber, blocks in red. Nothing here is a control — there is nothing to tick.
+ */
+export function Checks(p: { report: GuardReport; show: boolean }) {
   const d = useDict()
-  const [open, setOpen] = useState(p.defaultOpen ?? false)
   const results = p.report.results
-  // "Issues to fix" are the blocks: a warning is accepted below the list, and the approve is a step.
-  const failing = results.filter((r) => !r.ok && !isPending(r) && !isStepCode(r.code) && !isWarningCode(r.code))
-  const warning = results.filter((r) => !r.ok && isWarningCode(r.code))
-  const stepping = results.filter((r) => !r.ok && isStepCode(r.code))
   const pending = results.filter((r) => isPending(r))
   const shown = results.filter((r) => (r.ok ? okLabel(r.id, d) : true))
   const passingShown = shown.filter((r) => r.ok).length
-  const totalShown = shown.length
-  const peerBackUnavailable = results.some((r) => !r.ok && r.code === 'peer_back_unavailable_unconfirmed') || p.peerBackAccepted
-  const pdaRecipient = results.some((r) => !r.ok && r.code === 'recipient_pda_unconfirmed') || p.pdaAccepted
   if (!p.show) return null
 
-  const title = failing.length ? (
-    <span className="text-danger">✗ {fmt(d.ui.checksIssues, { n: failing.length })}</span>
-  ) : pending.length ? (
-    <span className="inline-flex items-center gap-2 text-muted">
-      <Spinner /> {fmt(d.ui.checksPending, { done: passingShown, total: totalShown })}
-    </span>
-  ) : (
-    <span className={warning.length ? 'text-warn' : 'text-ok'}>
-      {warning.length ? '⚠' : '✓'} {d.ui.checks}: {passingShown}/{totalShown}
-      {warning.length ? ` · ${fmt(d.ui.checksWarnings, { n: warning.length })}` : ''}
-      {stepping.length ? ` · ${d.ui.checksStep}` : ''}
-    </span>
-  )
-
   return (
-    <div className="px-1">
-      {peerBackUnavailable ? (
-        <div className="mb-2 space-y-2">
-          <Alert kind="warn">{d.step3.warnPeerBack}</Alert>
-          <label className="flex items-start gap-2 text-xs text-ink">
-            <input type="checkbox" className="mt-0.5" checked={p.peerBackAccepted} onChange={(e) => p.onPeerBackAccepted(e.target.checked)} />
-            {d.step3.confirmPeerBack}
-          </label>
-        </div>
-      ) : null}
-      {pdaRecipient ? (
-        <div className="mb-2 space-y-2">
-          <Alert kind="warn">{d.guard.recipient_pda_unconfirmed}</Alert>
-          <label className="flex items-start gap-2 text-xs text-ink">
-            <input type="checkbox" className="mt-0.5" checked={p.pdaAccepted} onChange={(e) => p.onPdaAccepted(e.target.checked)} />
-            {d.step3.confirmPda}
-          </label>
-        </div>
-      ) : null}
-      {p.report.needsNoGasConfirmation ? (
-        <div className="mb-2 space-y-2">
-          <Alert kind="warn">{d.step3.warnNoGas}</Alert>
-          <label className="flex items-start gap-2 text-xs text-ink">
-            <input type="checkbox" className="mt-0.5" checked={p.noGasAccepted} onChange={(e) => p.onNoGasAccepted(e.target.checked)} />
-            {d.step3.confirmNoGas}
-          </label>
-        </div>
-      ) : null}
-      {p.report.needsHighFeeConfirmation && p.feeNotice ? (
-        <div className="mb-2 space-y-2">
-          <Alert kind="warn">{fmt(d.step3.warnHighFee, p.feeNotice)}</Alert>
-          <label className="flex items-start gap-2 text-xs text-ink">
-            <input type="checkbox" className="mt-0.5" checked={p.highFeeAccepted} onChange={(e) => p.onHighFeeAccepted(e.target.checked)} />
-            {d.step3.confirmHighFee}
-          </label>
-        </div>
-      ) : null}
-      {p.report.warnings.length > 0 ? (
-        <div className="mb-2">
-          <Alert kind="warn">
-            {p.report.warnings.map((w) => (
-              <div key={w}>⚠ {d.card[`flag_${w}`]}</div>
-            ))}
-          </Alert>
-        </div>
-      ) : null}
-      <Disclosure title={title} open={open || failing.length > 0} onToggle={() => setOpen(!open)}>
-        <ul className="grid gap-x-3 gap-y-0.5 text-xs">
-          {results.map((r) => {
-            const label = r.ok ? okLabel(r.id, d) : d.guard[r.code]
-            if (!label) return null
-            const pend = isPending(r)
-            // Four tones: passed, in flight, the approve step (neutral), a warning (amber), a block (red).
-            const tone = r.ok ? 'text-ok' : pend ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isWarningCode(r.code) ? 'text-warn' : 'text-danger'
-            const glyph = r.ok ? '✓' : pend ? '○' : isStepCode(r.code) ? '→' : isWarningCode(r.code) ? '⚠' : '✗'
-            return (
-              <li key={r.id} className={tone}>
-                {glyph} {label}
-                {!r.ok && r.detail && (r.code === 'simulation_failed' || r.code === 'selfcheck_failed' || r.code === 'peer_back_mismatch') ? (
-                  <span className="mono block pl-4 text-xs opacity-80">{r.detail}</span>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
-      </Disclosure>
+    <div>
+      <div className="mb-1 text-xs font-semibold text-muted">
+        {pending.length ? (
+          <span className="inline-flex items-center gap-2">
+            <Spinner /> {fmt(d.ui.checksPending, { done: passingShown, total: shown.length })}
+          </span>
+        ) : (
+          `${d.ui.checks}: ${passingShown}/${shown.length}`
+        )}
+      </div>
+      <ul className="grid gap-x-3 gap-y-0.5 text-xs">
+        {results.map((r) => {
+          const label = r.ok ? okLabel(r.id, d) : d.guard[r.code]
+          if (!label) return null
+          const pend = isPending(r)
+          const tone = r.ok ? 'text-ok' : pend ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'
+          const glyph = r.ok ? '✓' : pend ? '○' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗'
+          return (
+            <li key={r.id} className={tone}>
+              {glyph} {label}
+              {!r.ok && r.detail && (r.code === 'simulation_failed' || r.code === 'selfcheck_failed' || r.code === 'peer_back_mismatch') ? (
+                <span className="mono block pl-4 text-xs opacity-80">{r.detail}</span>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -332,15 +261,42 @@ export type CtaState =
   | { kind: 'amount' }
   | { kind: 'recipient' }
   | { kind: 'quote' }
-  /** The allowance is the next step. Disabled until the warnings are accepted (`reason` says so). */
+  /** A tab-specific wait: "find the manager", "checking the manager…". Disabled, with its own words. */
+  | { kind: 'hold'; label: string; spinner?: boolean }
+  /** The allowance is the next step. `reason` is the impossibility that holds it, if any. */
   | { kind: 'approve'; intent: ApproveIntent; enabled: boolean; reason?: string }
   | { kind: 'checking' }
   | { kind: 'send'; enabled: boolean; reason?: string }
 
-/** One big Relay-style button whose label is the next thing the user must do. */
-export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: boolean; busyLabel: string; onClick: () => void; error: string }) {
+/** What the approve flow is doing, for the button's label and the line under it. */
+export type CtaApprove = { phase: ApprovePhase; explorerTxUrl: string }
+
+/**
+ * One big Relay-style button whose label is the next thing the user must do:
+ * Connect wallet → Switch to <chain> → Approve <amount> <token> → Send.
+ *
+ * Under it, one neutral line at most: the impossibility that holds the button, the approve's
+ * progress with a link to its transaction, "cancelled in the wallet", or an error and the offer
+ * to try again. Never a red block.
+ */
+export function Cta(p: {
+  state: CtaState
+  /** The token the approve names, for the button's label. */
+  info: { decimals: number; symbol: string } | undefined
+  /** The send is being signed or has been submitted. */
+  sending: boolean
+  /** The approve flow, when this tab has one. */
+  approve?: CtaApprove | undefined
+  onClick: () => void
+  error: string
+}) {
   const d = useDict()
   const s = p.state
+  const phase = p.approve?.phase ?? { kind: 'idle' }
+  const approving = approveBusy(phase)
+  const dec = p.info?.decimals ?? 18
+  const sym = p.info?.symbol ?? ''
+
   const label =
     s.kind === 'connect'
       ? d.ui.cta_connect
@@ -356,30 +312,65 @@ export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: bo
                 ? d.ui.cta_recipient
                 : s.kind === 'quote'
                   ? d.ui.cta_quote
-                : s.kind === 'checking'
-                  ? d.ui.cta_checking
-                  : s.kind === 'approve'
-                  ? fmt(d.step3.approveBtn, { amount: formatAmount(s.intent.amount, p.info?.decimals ?? 18), symbol: p.info?.symbol ?? '' })
-                  : d.ui.cta_send
+                  : s.kind === 'hold'
+                    ? s.label
+                  : s.kind === 'checking'
+                    ? d.ui.cta_checking
+                    : s.kind === 'approve'
+                      ? phase.kind === 'error'
+                        ? d.approve.retry
+                        : fmt(d.step3.approveBtn, { amount: formatAmount(s.intent.amount, dec), symbol: sym })
+                      : d.ui.cta_send
+
+  // What the button says while busy. The step counter appears only when there are two approves.
+  const busyLabel = p.sending
+    ? d.step3.sending_
+    : phase.kind === 'simulating'
+      ? d.approve.simulating
+      : phase.kind === 'signing'
+        ? `${phase.step.of > 1 ? `${fmt(d.approve.step, { n: phase.step.n, of: phase.step.of })} · ` : ''}${d.approve.signing}`
+        : phase.kind === 'mining'
+          ? `${phase.step.of > 1 ? `${fmt(d.approve.step, { n: phase.step.n, of: phase.step.of })} · ` : ''}${d.approve.mining}`
+          : phase.kind === 'rereading'
+            ? d.approve.rereading
+            : ''
+  const busy = p.sending || approving
+
   const disabled =
-    p.busy ||
+    busy ||
     s.kind === 'check' ||
     s.kind === 'destination' ||
     s.kind === 'amount' ||
     s.kind === 'recipient' ||
     s.kind === 'quote' ||
+    s.kind === 'hold' ||
     s.kind === 'checking' ||
     (s.kind === 'send' && !s.enabled) ||
     (s.kind === 'approve' && !s.enabled)
+
+  // The one line under the button.
+  const txHash = phase.kind === 'mining' || phase.kind === 'rereading' || phase.kind === 'done' || phase.kind === 'error' ? phase.hash : undefined
+  const clearing = (phase.kind === 'signing' || phase.kind === 'mining') && phase.step.amount === 0n
+  const line: { text: string; tone: 'muted' | 'danger' } | undefined = p.error
+    ? { text: p.error, tone: 'danger' }
+    : phase.kind === 'error'
+      ? { text: phase.message, tone: 'danger' }
+      : phase.kind === 'cancelled'
+        ? { text: d.approve.cancelled, tone: 'muted' }
+        : clearing
+          ? { text: d.approve.clearing, tone: 'muted' }
+          : (s.kind === 'send' || s.kind === 'approve') && !s.enabled && s.reason
+            ? { text: s.reason, tone: 'muted' }
+            : undefined
+
   return (
     <div className="space-y-2">
-      {p.error ? <Alert kind="error">{p.error}</Alert> : null}
       <Button variant="cta" disabled={disabled} onClick={p.onClick}>
-        {p.busy ? (
+        {busy ? (
           <>
-            <Spinner /> {p.busyLabel}
+            <Spinner /> {busyLabel}
           </>
-        ) : s.kind === 'checking' || s.kind === 'quote' ? (
+        ) : s.kind === 'checking' || s.kind === 'quote' || (s.kind === 'hold' && s.spinner) ? (
           <>
             <Spinner /> {label}
           </>
@@ -387,7 +378,14 @@ export function Cta(p: { state: CtaState; info: SourceInfo | undefined; busy: bo
           label
         )}
       </Button>
-      {(s.kind === 'send' || s.kind === 'approve') && !s.enabled && s.reason ? <div className="text-center text-xs text-muted">{s.reason}</div> : null}
+      {line ? <div className={`text-center text-xs ${line.tone === 'danger' ? 'text-danger' : 'text-muted'}`}>{line.text}</div> : null}
+      {txHash && p.approve ? (
+        <div className="text-center text-xs">
+          <a href={p.approve.explorerTxUrl + txHash} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
+            {d.approve.viewTx} ↗
+          </a>
+        </div>
+      ) : null}
       <div className="text-center text-xs text-faint">{d.step3.simulationHint}</div>
     </div>
   )

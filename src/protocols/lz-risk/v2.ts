@@ -23,7 +23,7 @@ import type { ReadClient } from '../../core/client'
 import { sameAddress } from '../../core/encoding'
 import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
-import { lockedBps, reviewedAdapter, type AdapterStanding } from './adapters'
+import { lockedBps, type AdapterStanding } from './adapters'
 import { dvnInfo, judgeDvns } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
@@ -427,7 +427,6 @@ async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | null
   // measuring its locked share would refuse a working bridge for a number that cannot apply:
   // USDT0 on HyperEVM locks 0% of supply across 23k deliveries, and is not an approve risk at all.
   if (c.info.kind !== 'OFTAdapter' || !c.info.approvalRequired) return null
-  const listed = !!reviewedAdapter(c.srcChain, c.info.oft, c.info.token)
 
   const [held, supply] = await Promise.all([
     attempt(c.srcClient.readContract({ address: c.info.token, abi: erc20Abi, functionName: 'balanceOf', args: [c.info.oft] }), undefined, 'adapter balance'),
@@ -449,11 +448,7 @@ async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | null
   // floor for a reason that has nothing to do with the adapter.
   const outboundNonce = nonces.every((n) => n.ok) ? nonces.reduce((t, n) => t + BigInt(n.ok ? n.value : 0n), 0n) : undefined
 
-  return {
-    listed,
-    lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined,
-    outboundNonce,
-  }
+  return { lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined, outboundNonce }
 }
 
 export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {

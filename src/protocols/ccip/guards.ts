@@ -5,7 +5,7 @@
  * — never from the pool, never from the token, never from anything a user typed. Guard 9 checks
  * that at the moment of use, not at the moment of rendering.
  */
-import { renameWarnings, verdictOf } from '../../core/severity'
+import { verdictOf } from '../../core/severity'
 import { isAddressEqual, type Address } from 'viem'
 import { aboveFeeCeiling, type ChainKey } from '../../core/chains'
 import { ccipConfig } from './chains'
@@ -42,7 +42,7 @@ export type CcipGuardCode =
   | 'simulation_failed'
   | 'selfcheck_missing'
   | 'selfcheck_failed'
-  | 'fee_above_ceiling_unconfirmed'
+  | 'fee_above_ceiling'
 
 export const CCIP_PENDING: ReadonlySet<CcipGuardCode> = new Set<CcipGuardCode>([
   'plan_missing',
@@ -86,29 +86,15 @@ export type CcipGuardInput = {
   approveIntent?: CcipApproveIntent | undefined
   simulation: { ok: true } | { ok: false; reason: string } | undefined
   selfCheck: { ok: true } | { ok: false; mismatches: string[] } | undefined
-  /** User read and accepted a fee above the source chain's ceiling (guard 14). */
-  highFeeAccepted?: boolean
-  /**
-   * The one tick: "I understand the risks, send". It covers every WARNING at once and opens any
-   * amount. It can never lift a block — see core/severity.ts. The screen clears it whenever the
-   * token, the route, the amount or the recipient changes.
-   */
-  risksAccepted?: boolean | undefined
 }
 
 export type CcipGuardReport = {
-  /** Failures that hold the button whatever the user says, plus reads still in flight. */
+  /** Failures that hold the button, plus reads still in flight (core/severity.ts). */
   blocks: CcipGuardResult[]
-  /** Failures the single tick covers, strongest first (core/severity.ts). */
-  riskWarnings: CcipGuardResult[]
-  /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
-  warningsCleared: boolean
-  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
-  approveReady: boolean
+  /** Failures that colour the route indicator and hold nothing. */
+  notes: CcipGuardResult[]
   results: CcipGuardResult[]
   canSend: boolean
-  /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
-  needsHighFeeConfirmation: boolean
 }
 
 const ok = (id: number): CcipGuardResult => ({ id, ok: true })
@@ -201,7 +187,9 @@ export function c8Native(i: CcipGuardInput): CcipGuardResult {
   if (!i.plan) return fail(8, 'plan_missing')
   if (i.nativeBalance === undefined) return fail(8, 'native_balance_unknown')
   if (i.plan.value > i.nativeBalance) return fail(8, 'insufficient_native', `${i.plan.value} > ${i.nativeBalance}`)
-  if (i.gasCostWei === undefined) return fail(8, 'native_balance_unknown')
+  // A simulation that has already failed produces no estimate, ever: waiting for one would hold
+  // the button forever behind a note. The fee fits; the gas is what the wallet will price.
+  if (i.gasCostWei === undefined) return i.simulation && !i.simulation.ok ? ok(8) : fail(8, 'native_balance_unknown')
   if (i.plan.value + i.gasCostWei > i.nativeBalance) return fail(8, 'insufficient_native')
   return ok(8)
 }
@@ -266,14 +254,13 @@ export function ccipFeeAboveCeiling(plan: CcipPlan | undefined): boolean {
   return !!plan && aboveFeeCeiling(plan.chain, plan.value)
 }
 
-// 14. the fee is within the chain's ceiling, or the user has read the number and accepted it.
-//     Nothing off-chain can verify a quote, so without this guard 8 (the whole balance) was the
-//     only bound on what the router could charge.
+// 14. the fee is within the chain's ceiling. Nothing off-chain can verify a quote, so without
+//     this guard 8 (the whole balance) is the only bound on what the router could charge. A note
+//     for the indicator — the number is on screen — never a refusal.
 export function c14FeeCeiling(i: CcipGuardInput): CcipGuardResult {
   if (!i.plan) return fail(14, 'plan_missing')
   if (!ccipFeeAboveCeiling(i.plan)) return ok(14)
-  if (!i.highFeeAccepted) return fail(14, 'fee_above_ceiling_unconfirmed', `${i.plan.value}`)
-  return ok(14)
+  return fail(14, 'fee_above_ceiling', `${i.plan.value}`)
 }
 
 export function runCcipGuards(i: CcipGuardInput): CcipGuardReport {
@@ -282,7 +269,7 @@ export function runCcipGuards(i: CcipGuardInput): CcipGuardReport {
     c6RateLimits(i), c7Fee(i), c8Native(i), c9Allowance(i), c10Spender(i),
     c11PlainMessage(i), c12Simulation(i), c13SelfCheck(i), c14FeeCeiling(i),
   ]
-  return { results, ...renameWarnings(verdictOf(results, i.risksAccepted === true)), needsHighFeeConfirmation: ccipFeeAboveCeiling(i.plan) }
+  return { results, ...verdictOf(results) }
 }
 
 /**

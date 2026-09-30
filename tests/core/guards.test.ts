@@ -60,8 +60,7 @@ describe('runGuards on a good snapshot', () => {
     expect(rep.results.map(code)).toEqual(Array(22).fill('ok'))
     expect(rep.canSend).toBe(true)
     expect(rep.warnings).toEqual([])
-    expect(rep.needsNoGasConfirmation).toBe(false)
-    expect(rep.needsHighFeeConfirmation).toBe(false)
+    expect(rep.notes).toEqual([])
   })
 
   it('recipient is stored as bytes32 and equals SendParam.to', () => {
@@ -70,10 +69,25 @@ describe('runGuards on a good snapshot', () => {
     expect(plan.recipientDisplay).toBe(WALLET)
   })
 
-  it('a single failing guard disables Send', () => {
-    const rep = runGuards(goodInput({ simulation: { ok: false, reason: 'revert' } }))
-    expect(rep.canSend).toBe(false)
-    expect(rep.results.filter((r) => !r.ok).map((r) => r.id)).toEqual([13])
+  it('a single failing guard is reported on its own: a block disables Send, a note does not', () => {
+    const held = runGuards(goodInput({ tokenBalance: 0n }))
+    expect(held.canSend).toBe(false)
+    expect(held.results.filter((r) => !r.ok).map((r) => r.id)).toEqual([5])
+    const noted = runGuards(goodInput({ simulation: { ok: false, reason: 'revert' } }))
+    expect(noted.canSend).toBe(true)
+    expect(noted.results.filter((r) => !r.ok).map((r) => r.id)).toEqual([13])
+    expect(noted.notes.map((r) => !r.ok && r.code)).toEqual(['simulation_failed'])
+  })
+
+  it('a failed simulation never leaves guard 8 waiting for a gas estimate that cannot come', () => {
+    // No estimate and no verdict yet: a read in flight.
+    expect(runGuards(goodInput({ gasCostWei: undefined, simulation: undefined })).results.find((r) => r.id === 8)).toMatchObject({ ok: false, code: 'native_balance_unknown' })
+    // No estimate because the simulation reverted: the fee fits, and 8 passes — the note is 13's.
+    const rep = runGuards(goodInput({ gasCostWei: undefined, simulation: { ok: false, reason: 'revert' } }))
+    expect(rep.results.find((r) => r.id === 8)).toMatchObject({ ok: true })
+    expect(rep.canSend).toBe(true)
+    // The fee alone still has to fit.
+    expect(runGuards(goodInput({ gasCostWei: undefined, simulation: { ok: false, reason: 'revert' }, nativeBalance: 1n })).results.find((r) => r.id === 8)).toMatchObject({ ok: false, code: 'insufficient_native' })
   })
 
   it('with nothing loaded, everything but 16 fails and Send is disabled', () => {
@@ -422,21 +436,20 @@ describe('14. self-check', () => {
   })
 })
 
-describe('15. executor gas warning', () => {
-  it('enforced options present -> no confirmation needed', () => {
-    const rep = runGuards(goodInput())
-    expect(rep.needsNoGasConfirmation).toBe(false)
+describe('15. executor gas note', () => {
+  it('enforced options present -> nothing to say', () => {
     expect(code(g15ExecutorGas(goodInput()))).toBe('ok')
   })
-  it('no enforced, no extra -> requires acceptance', () => {
+  it('no enforced, no extra -> a note for the indicator, and the send is still possible', () => {
     const info = treadOftInfo({ enforced: { [ETH_EID]: '0x' } })
-    expect(code(g15ExecutorGas(goodInput({ info })))).toBe('no_executor_gas_unconfirmed')
-    expect(runGuards(goodInput({ info })).needsNoGasConfirmation).toBe(true)
-    expect(code(g15ExecutorGas(goodInput({ info, noExecutorGasAccepted: true })))).toBe('ok')
+    expect(code(g15ExecutorGas(goodInput({ info })))).toBe('no_executor_gas')
+    const rep = runGuards(goodInput({ info }))
+    expect(rep.notes.some((n) => !n.ok && n.code === 'no_executor_gas')).toBe(true)
+    expect(rep.canSend).toBe(true)
   })
   it('missing enforced entry counts as empty', () => {
     const info = treadOftInfo({ enforced: {} })
-    expect(code(g15ExecutorGas(goodInput({ info })))).toBe('no_executor_gas_unconfirmed')
+    expect(code(g15ExecutorGas(goodInput({ info })))).toBe('no_executor_gas')
   })
   it('extraOptions set -> no confirmation needed', () => {
     const info = treadOftInfo({ enforced: {} })
@@ -449,18 +462,19 @@ describe('17. destination peer points back', () => {
   it('unknown → blocks (still loading)', () => {
     expect(code(g17PeerBack(goodInput({ peerBack: undefined })))).toBe('peer_back_unknown')
   })
-  it('mismatch → peer_back_mismatch, and the acceptance flag does not turn it into ok', () => {
-    const r = g17PeerBack(goodInput({ peerBack: { status: 'mismatch', theirPeer: `0x${'0'.repeat(64)}` }, peerBackUnavailableAccepted: true }))
+  it('mismatch → peer_back_mismatch, a red note: the send is possible, the indicator says why not to', () => {
+    const r = g17PeerBack(goodInput({ peerBack: { status: 'mismatch', theirPeer: `0x${'0'.repeat(64)}` } }))
     expect(code(r)).toBe('peer_back_mismatch')
+    const rep = runGuards(goodInput({ peerBack: { status: 'mismatch', theirPeer: '0x00' } }))
+    expect(rep.notes.some((n) => !n.ok && n.code === 'peer_back_mismatch')).toBe(true)
+    expect(rep.canSend).toBe(true)
   })
-  it('unavailable → blocks until explicitly accepted', () => {
+  it('unavailable → a yellow note, with the reason', () => {
     const u = { status: 'unavailable' as const, reason: 'rpc down' }
-    expect(code(g17PeerBack(goodInput({ peerBack: u })))).toBe('peer_back_unavailable_unconfirmed')
-    expect(code(g17PeerBack(goodInput({ peerBack: u, peerBackUnavailableAccepted: true })))).toBe('ok')
+    expect(g17PeerBack(goodInput({ peerBack: u }))).toMatchObject({ ok: false, code: 'peer_back_unavailable', detail: 'rpc down' })
   })
-  it('ok passes; acceptance flag cannot turn a mismatch into ok', () => {
+  it('ok passes', () => {
     expect(code(g17PeerBack(goodInput()))).toBe('ok')
-    expect(runGuards(goodInput({ peerBack: { status: 'mismatch', theirPeer: '0x00' }, peerBackUnavailableAccepted: true })).canSend).toBe(false)
   })
 })
 
@@ -507,17 +521,17 @@ describe('g21 fee ceiling', () => {
     expect(feeAboveCeiling(treadPlan())).toBe(false)
   })
 
-  it('stops a fee above the chain ceiling until it is accepted', () => {
+  it('notes a fee above the chain ceiling, with the number', () => {
     const plan = treadPlan({ value: overCeiling })
     expect(feeAboveCeiling(plan)).toBe(true)
-    expect(code(g21FeeCeiling(goodInput({ plan })))).toBe('fee_above_ceiling_unconfirmed')
-    expect(code(g21FeeCeiling(goodInput({ plan, highFeeAccepted: true })))).toBe('ok')
+    expect(g21FeeCeiling(goodInput({ plan }))).toMatchObject({ ok: false, code: 'fee_above_ceiling', detail: overCeiling.toString() })
   })
 
-  it('blocks Send and reports the confirmation is needed', () => {
-    const rep = runGuards(goodInput({ plan: treadPlan({ value: overCeiling }) }))
-    expect(rep.canSend).toBe(false)
-    expect(rep.needsHighFeeConfirmation).toBe(true)
+  it('does not hold the send: the number is on screen, the person decides', () => {
+    // A wallet that can pay it, so guard 8 does not hold for its own reason.
+    const rep = runGuards(goodInput({ plan: treadPlan({ value: overCeiling }), nativeBalance: 10n * 10n ** 18n }))
+    expect(rep.canSend).toBe(true)
+    expect(rep.notes.some((n) => !n.ok && n.code === 'fee_above_ceiling')).toBe(true)
   })
 })
 
@@ -555,7 +569,7 @@ describe('g16 surfaces the contract enforced options', () => {
   })
 })
 
-describe('22. the route verdict is a warning, and the Solana path is not swept up in it', () => {
+describe('22. the route verdict is a note, and the Solana path is not swept up in it', () => {
   const riskWith = (id: CheckId, state: CheckState) => {
     const checks = {} as Record<CheckId, CheckState>
     for (const c of CHECK_IDS) checks[c] = { status: 'pass' }
@@ -563,29 +577,32 @@ describe('22. the route verdict is a warning, and the Solana path is not swept u
     return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
   }
 
-  it('a blocked route warns loudly, and the tick sends any amount', () => {
+  it('a blocked route is a note the indicator shows in red; the send stays possible', () => {
     const risk = riskWith('peers', { status: 'fail', reason: 'the destination peer does not point back' })
     expect(risk.tier).toBe('BLOCKED')
     const rep = runGuards(goodInput({ risk }))
     expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_blocked' })
-    // It is a WARNING, not a block: the owner's decision (CLAUDE.md rule 2).
-    expect(rep.riskWarnings.some((w) => !w.ok && w.code === 'risk_blocked')).toBe(true)
+    // It is a NOTE, not a block: the owner's decision (CLAUDE.md rule 2).
+    expect(rep.notes.some((w) => !w.ok && w.code === 'risk_blocked')).toBe(true)
     expect(rep.blocks.some((b) => !b.ok && b.code === 'risk_blocked')).toBe(false)
-    expect(rep.canSend).toBe(false)
-    // Any amount, including the full one — there is no test limit any more.
-    expect(runGuards(goodInput({ risk, risksAccepted: true })).canSend).toBe(true)
+    expect(rep.canSend).toBe(true)
   })
 
-  it('an unverified route warns too, and no amount is special', () => {
+  it('an unverified route is a note too, and no amount is special', () => {
     const risk = riskWith('adapter_liquidity', { status: 'unchecked', reason: 'destination RPC did not answer' })
     expect(risk.tier).toBe('UNVERIFIED')
     const rep = runGuards(goodInput({ risk }))
     expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_unverified' })
-    expect(rep.canSend).toBe(false)
-    expect(runGuards(goodInput({ risk, risksAccepted: true })).canSend).toBe(true)
+    expect(rep.canSend).toBe(true)
   })
 
-  it('a CAUTION route needs no tick at all', () => {
+  it('a runner that failed is a note, never a hold', () => {
+    const rep = runGuards(goodInput({ risk: undefined, riskError: 'timeout' }))
+    expect(rep.results.find((r) => r.id === 22)).toMatchObject({ ok: false, code: 'risk_unavailable', detail: 'timeout' })
+    expect(rep.canSend).toBe(true)
+  })
+
+  it('a CAUTION route says nothing here — the indicator reads the verdict itself', () => {
     const risk = riskWith('recent_changes', { status: 'fail', reason: 'a peer changed two days ago' })
     expect(risk.tier).toBe('CAUTION')
     expect(runGuards(goodInput({ risk })).results.find((r) => r.id === 22)).toMatchObject({ ok: true })

@@ -53,10 +53,10 @@ Stargate, whose contracts this app refuses for unrelated reasons.
 **Why it matters** This is the standard where a mistake is unrecoverable: a 32-byte left-padded
 address handed to it is delivered to twelve zero bytes.
 
-**Held in the meantime** The route is held at UNVERIFIED by the risk indicator, whatever the other
-checks say, with a reason that names the unverified standard and advises a test amount first. That
-is a warning, not a cap (CLAUDE.md rule 2): the single tick opens any amount, and the self-check
-still blocks a `bytes` recipient that is not exactly 20 bytes.
+**Held in the meantime** The route is held at UNVERIFIED by the eight checks, whatever the others
+say, so the indicator is yellow with a reason that names the unverified standard and advises a test
+amount first. That is information, not a cap (CLAUDE.md rule 2): nothing holds the button, and the
+self-check still blocks a `bytes` recipient that is not exactly 20 bytes.
 
 **To close it** Find a deployed `OFT` or `ProxyOFT` on a chain in the registry, add it to
 `tests/integration/lzv1.live.test.ts` alongside the others, and remove `'bytes'` from
