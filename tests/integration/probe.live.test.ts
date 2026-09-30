@@ -15,7 +15,7 @@ import { assessRisk, CHECK_IDS, emptyRiskInput, type CheckId, type CheckState, t
 function cleanRisk(): RouteRisk {
   const checks = {} as Record<CheckId, CheckState>
   for (const id of CHECK_IDS) checks[id] = { status: 'pass' }
-  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 } })
+  return assessRisk({ ...emptyRiskInput(), checks, history: { kind: 'delivered', days: 1 }, linkCrossChecked: true })
 }
 import { probeOft, ProbeError } from '@/core/probe'
 
