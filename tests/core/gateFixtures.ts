@@ -29,6 +29,7 @@ export type AnyReport = {
   blocks: readonly ({ ok: true } | { ok: false; code: string })[]
   riskWarnings: readonly ({ ok: true } | { ok: false; code: string })[]
   warningsCleared: boolean
+  approveReady: boolean
   canSend: boolean
 }
 
