@@ -457,6 +457,19 @@ describe('7. the tick opens warnings and nothing else', () => {
     expect(stray, 'a file outside the guards and the screens reads the tick').toEqual([])
   })
 
+  it('a plan made for another sender is refused: the refund goes to plan.sender, and the wallet is who signs', () => {
+    const other = getAddress('0x9999999999999999999999999999999999999999')
+    for (const h of all) {
+      for (const risksAccepted of [false, true]) {
+        const rep = h.run({ walletAddress: other, risksAccepted })
+        // The recipient defaults to "my wallet", so a swapped wallet trips the recipient guard too;
+        // what this pins is that the sender mismatch is reported on its own.
+        expect(codesOf(rep.blocks), `${h.name} (tick=${risksAccepted})`).toContain('chain_mismatch')
+        expect(rep.canSend, h.name).toBe(false)
+      }
+    }
+  })
+
   it('every send handler judges the guards of the render it is called from, not of an earlier one', () => {
     // A memoised onSend keeps the guardInput of the render it was created in: the tick, the balance
     // and the simulation would all be stale at the moment of the click.
@@ -475,5 +488,44 @@ describe('7. the tick opens warnings and nothing else', () => {
     const plan = treadPlan()
     expect(encodeSendCalldata(assembleSendArgs(plan))).toBe(encodeSendCalldata(assembleSendArgs(plan)))
     expect(Object.keys(plan)).not.toContain('risksAccepted')
+  })
+})
+
+describe('the approve waits for the blocks too, not only for the warnings', () => {
+  it('is ready when the allowance is the only thing missing, and nothing else blocks', () => {
+    for (const h of all) {
+      const rep = h.run(h.blockers['needs_approve']!())
+      expect(codesOf(rep.blocks), h.name).toEqual(['needs_approve'])
+      expect(rep.approveReady, h.name).toBe(true)
+    }
+  })
+
+  it('is NOT ready while a refused recipient stands — no allowance for a transfer that cannot happen', () => {
+    for (const h of all) {
+      for (const other of ['recipient_lookalike', 'recipient_zero', 'insufficient_balance', 'chain_mismatch']) {
+        const rep = h.run({ ...h.blockers['needs_approve']!(), ...h.blockers[other]!() })
+        expect(codesOf(rep.blocks), `${h.name}+${other}`).toContain('needs_approve')
+        expect(rep.approveReady, `${h.name}+${other}`).toBe(false)
+        expect(h.run({ ...h.blockers['needs_approve']!(), ...h.blockers[other]!(), risksAccepted: true }).approveReady, `${h.name}+${other} ticked`).toBe(false)
+      }
+    }
+  })
+
+  it('still waits for the tick when something warns', () => {
+    for (const name of ['OFT V2', 'OFT v1']) {
+      const h = all.find((x) => x.name === name)!
+      const risk = riskOf({ adapter: { listed: false, lockedBps: 0, outboundNonce: 0n } })
+      const off = h.run({ ...h.blockers['needs_approve']!(), risk })
+      expect(off.approveReady, name).toBe(false)
+      expect(h.run({ ...h.blockers['needs_approve']!(), risk, risksAccepted: true }).approveReady, name).toBe(true)
+    }
+  })
+
+  it('the four screens gate the approve on approveReady, not on warningsCleared', () => {
+    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
+      const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
+      expect(src, f).toContain('report.approveReady')
+      expect(src, f).not.toContain('report.warningsCleared')
+    }
   })
 })

@@ -505,7 +505,7 @@ export function BridgeV1({
           </Button>
         ) : approveIntent ? (
           // The approve grants an allowance, so it waits for the same tick the send does.
-          <Button variant="cta" disabled={approveWrite.isPending || !report.warningsCleared} onClick={onApprove}>
+          <Button variant="cta" disabled={approveWrite.isPending || !report.approveReady} onClick={onApprove}>
             {approveWrite.isPending ? (
               <>
                 <Spinner /> {d.ui.cta_checking}

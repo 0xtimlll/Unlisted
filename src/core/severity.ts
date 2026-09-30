@@ -113,6 +113,21 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'message_not_plain',
 ])
 
+/**
+ * The blocks an approve is FOR, or waits on: the allowance it is about to grant, and the reads that
+ * cannot finish before it lands (the simulation of a send needs the allowance; the gas estimate
+ * needs the simulation). Any other block — a recipient that is refused, a wallet on the wrong
+ * chain, a manager that did not verify — means the transfer this approve is for cannot happen, so
+ * no allowance is granted for it.
+ */
+const APPROVE_STEP: ReadonlySet<string> = new Set([
+  'needs_approve',
+  'allowance_unknown',
+  'simulation_missing',
+  'selfcheck_missing',
+  'native_balance_unknown',
+])
+
 export type GuardSeverity = 'pending' | 'block' | 'warn'
 
 /** Unknown codes are warnings on purpose: a new check must not silently become a refusal. */
@@ -191,6 +206,13 @@ export type GuardVerdict<R> = {
    * it is false until the approve lands, which is what the approve is for.
    */
   warningsCleared: boolean
+  /**
+   * The approve may be signed: the warnings are cleared AND nothing blocks except what the approve
+   * itself is for (`APPROVE_STEP`). `warningsCleared` alone is not enough — it says nothing about
+   * blocks, and an exact allowance to the route contract was being granted for transfers the guards
+   * had already refused.
+   */
+  approveReady: boolean
   /** True when nothing blocks and either nothing warns or the tick is on. */
   canSend: boolean
 }
@@ -209,7 +231,8 @@ export function verdictOf<R extends AnyGuardResult>(results: readonly R[], risks
   }
   const sorted = sortWarnings(warnings as unknown as { code: string }[]) as unknown as R[]
   const warningsCleared = sorted.length === 0 || risksAccepted
-  return { blocks, warnings: sorted, warningsCleared, canSend: blocks.length === 0 && warningsCleared }
+  const approveReady = warningsCleared && blocks.every((b) => APPROVE_STEP.has((b as unknown as FailedGuard).code))
+  return { blocks, warnings: sorted, warningsCleared, approveReady, canSend: blocks.length === 0 && warningsCleared }
 }
 
 /**
@@ -217,8 +240,8 @@ export function verdictOf<R extends AnyGuardResult>(results: readonly R[], risks
  * those are shown and never hold anything. This renames the verdict's field so both can live in
  * one report without either quietly shadowing the other.
  */
-export function renameWarnings<R>(v: GuardVerdict<R>): { blocks: R[]; riskWarnings: R[]; warningsCleared: boolean; canSend: boolean } {
-  return { blocks: v.blocks, riskWarnings: v.warnings, warningsCleared: v.warningsCleared, canSend: v.canSend }
+export function renameWarnings<R>(v: GuardVerdict<R>): { blocks: R[]; riskWarnings: R[]; warningsCleared: boolean; approveReady: boolean; canSend: boolean } {
+  return { blocks: v.blocks, riskWarnings: v.warnings, warningsCleared: v.warningsCleared, approveReady: v.approveReady, canSend: v.canSend }
 }
 
 /** True while a read is still in flight: shown as "checking", never as a problem to accept. */

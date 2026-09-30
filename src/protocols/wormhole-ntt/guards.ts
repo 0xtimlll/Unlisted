@@ -111,6 +111,8 @@ export type NttGuardReport = {
   riskWarnings: NttGuardResult[]
   /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
   warningsCleared: boolean
+  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
+  approveReady: boolean
   results: NttGuardResult[]
   canSend: boolean
   /** True iff the fee is above the source chain's ceiling (regardless of acceptance). */
@@ -125,6 +127,8 @@ const fail = (id: number, code: NttGuardCode, detail?: string): NttGuardResult =
 export function n1Chain(i: NttGuardInput): NttGuardResult {
   if (i.walletAddress === undefined || i.walletChainId === undefined) return fail(1, 'wallet_not_connected')
   if (i.walletChainId !== i.srcChainId) return fail(1, 'chain_mismatch', `${i.walletChainId} != ${i.srcChainId}`)
+  // refundAddress is derived from plan.sender: it must be the wallet that signs.
+  if (i.plan && !sameAddress(i.plan.sender, i.walletAddress)) return fail(1, 'chain_mismatch', 'plan.sender != wallet')
   return ok(1)
 }
 

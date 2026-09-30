@@ -165,6 +165,8 @@ export type GuardReport = {
   riskWarnings: GuardResult[]
   /** Warnings are cleared: nothing to warn about, or the tick is on. Gates the APPROVE step. */
   warningsCleared: boolean
+  /** The approve may be signed: warnings cleared and no block but the allowance itself (core/severity.ts). */
+  approveReady: boolean
   results: GuardResult[]
   /** Soft flags (§6.16). Shown, never block. */
   warnings: SuspiciousFlag[]
@@ -199,6 +201,8 @@ export function g1Chain(i: GuardInput): GuardResult {
   const src = byChainId(i.srcChainId)
   if (!src) return fail(1, 'chain_mismatch', `unknown chainId ${i.srcChainId}`)
   if (i.plan && i.plan.srcEid !== src.eid) return fail(1, 'chain_mismatch', `plan.srcEid ${i.plan.srcEid} != ${src.eid}`)
+  // refundAddress is plan.sender: it must be the wallet that signs, or the refund goes to someone else.
+  if (i.plan && !sameAddress(i.plan.sender, i.walletAddress)) return fail(1, 'chain_mismatch', 'plan.sender != wallet')
   return ok(1)
 }
 
