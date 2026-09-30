@@ -563,3 +563,42 @@ describe('the approve waits for the blocks too, not only for the warnings', () =
     }
   })
 })
+
+// ------------------------------------------ 8. a failed simulation warns, with its reason ----
+
+describe('8. a failed simulation is a warning that says what the node said, on every protocol', () => {
+  const REASON = 'Error("LzApp: destination chain is not a trusted source")'
+  /** The failed simulation in each protocol's own shape, all decoding to REASON. */
+  const failed: Record<string, Record<string, unknown>> = {
+    'OFT V2': { simulation: { ok: false, reason: REASON } },
+    'OFT v1': { simulation: { status: 'reverted', revert: { kind: 'string', message: 'LzApp: destination chain is not a trusted source', meaning: 'generic' } } },
+    NTT: { simulation: { ok: false, reason: REASON } },
+    CCIP: { simulation: { ok: false, reason: REASON } },
+  }
+
+  it('is classified as a warning of weight loss, never a block', () => {
+    expect(guardSeverity('simulation_failed')).toBe('warn')
+    expect(guardSeverity('simulation_unavailable')).toBe('warn')
+  })
+
+  it('holds the button without the tick, opens with it, and carries the decoded reason', () => {
+    for (const h of all) {
+      const over = failed[h.name]
+      expect(over, h.name).toBeDefined()
+      const held = h.run({ ...over, risksAccepted: false })
+      expect(codesOf(held.blocks), h.name).not.toContain('simulation_failed')
+      const w = held.riskWarnings.find((r) => !r.ok && r.code === 'simulation_failed') as FailedGuard | undefined
+      expect(w, h.name).toBeDefined()
+      expect(w!.detail, h.name).toBe(REASON)
+      expect(held.canSend, h.name).toBe(false)
+      const opened = h.run({ ...over, risksAccepted: true })
+      expect(opened.canSend, h.name).toBe(true)
+    }
+  })
+
+  it('the warnings panel prints that reason under the sentence', () => {
+    const src = readFileSync(join(ROOT, 'src/ui/components/RiskWarnings.tsx'), 'utf8')
+    expect(src).toMatch(/DETAILED\.has\(w\.code\) && w\.detail/)
+    expect(src).toMatch(/'simulation_failed'/)
+  })
+})

@@ -30,6 +30,13 @@ const WEIGHT_CLASS: Record<WarningWeight, string> = {
 
 const WEIGHT_GLYPH: Record<WarningWeight, string> = { loss: '⛔', stuck: '⚠', note: '·' }
 
+/**
+ * Warnings whose `detail` is the reason itself, and belongs next to the sentence: a simulation that
+ * reverted says what the node said (the decoded revert), one that could not run says why. Without
+ * it "simulation failed" reads as a verdict about the transfer, when it may be a verdict about the RPC.
+ */
+const DETAILED: ReadonlySet<string> = new Set(['simulation_failed', 'simulation_unavailable'])
+
 export function RiskWarnings(p: {
   blocks: readonly ShownGuard[]
   warnings: readonly ShownGuard[]
@@ -64,6 +71,7 @@ export function RiskWarnings(p: {
               <div key={`${w.id}-${w.code}`} className={`rounded-xl border px-3 py-2 text-xs ${WEIGHT_CLASS[weight]}`}>
                 <span className="mr-1">{WEIGHT_GLYPH[weight]}</span>
                 {p.label(w.code)}
+                {DETAILED.has(w.code) && w.detail ? <div className="mono mt-1 break-all opacity-80">{w.detail}</div> : null}
                 {/* The strongest ones say what to do about them, not just what is wrong. */}
                 {weight === 'loss' ? <div className="mt-1 font-semibold">{d.risks.testFirst}</div> : null}
               </div>

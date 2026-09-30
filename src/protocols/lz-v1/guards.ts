@@ -17,6 +17,7 @@ import { judgeAdapterParams } from './adapterParams'
 import type { OftV1Info, V1PeerBack } from './detect'
 import type { V1SendPlan } from './plan'
 import type { V1Simulation } from './simulate'
+import { formatRevert } from '../../core/sim/revert'
 import type { V1SelfCheckResult } from './selfcheck'
 import { riskWarningCode, type RouteRisk } from '../lz-risk/risk'
 
@@ -303,10 +304,14 @@ export function v1g12Spender(i: V1GuardInput): V1GuardResult {
   return ok(12)
 }
 
-// 13. the exact transaction was executed against the chain and did not revert
+// 13. the exact transaction was executed against the chain and did not revert.
+//     A revert is a warning, not a block (core/severity.ts): the reverts that are certain — no peer,
+//     no balance, an amount that arrives as zero — are caught by their own blocking guards, and what
+//     is left is often the RPC's state, not the chain's. The decoded reason travels as `detail` so
+//     the warning can say what the node said.
 export function v1g13Simulation(i: V1GuardInput): V1GuardResult {
   if (!i.simulation) return fail(13, 'simulation_missing')
-  if (i.simulation.status === 'reverted') return fail(13, 'simulation_failed')
+  if (i.simulation.status === 'reverted') return fail(13, 'simulation_failed', formatRevert(i.simulation.revert))
   if (i.simulation.status === 'unavailable') return fail(13, 'simulation_unavailable', i.simulation.reason)
   return ok(13)
 }
