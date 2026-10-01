@@ -141,7 +141,6 @@ export function BridgeApp({
   const reset = useCallback(() => {
     setProbeTarget(null)
     setAdapterHint(null)
-    setOpenedFromLink(false)
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
@@ -176,13 +175,11 @@ export function BridgeApp({
    * `oft-store` is deliberately left out: a Solana source is set up by its own decode path.
    */
   const [handedOver, setHandedOver] = useState<string | undefined>(undefined)
-  const [openedFromLink, setOpenedFromLink] = useState(false)
   useEffect(() => {
     if (!handoff) return
     if (handoff.kind === 'oft' || handoff.kind === 'lz-oapp') {
       applyTarget(handoff)
       setHandedOver(handoff.address)
-      setOpenedFromLink(handoff.via === 'link')
     } else if (handoff.kind === 'oft-store' && handoff.via === 'link') {
       // A Solana source from a link: the store is probed on Solana, like one pasted there.
       setSrcKey('solana')
@@ -190,7 +187,6 @@ export function BridgeApp({
       setProbeTarget(handoff.address)
       setHandedOver(handoff.address)
       setDest(handoff.dstChain ? { ...EMPTY_DEST, dstEid: byKey(handoff.dstChain).eid } : EMPTY_DEST)
-      setOpenedFromLink(true)
     }
     onHandoffConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,7 +197,6 @@ export function BridgeApp({
     setTxError('')
     setProbeTarget(null)
     setAdapterHint(null)
-    setOpenedFromLink(false)
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
@@ -745,7 +740,7 @@ export function BridgeApp({
         flags={flags}
         error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
         decodedHint={!!decodeData}
-        hint={adapterNote || (openedFromLink && info ? d.step1.openedFromLink : '')}
+        hint={adapterNote}
         hintBusy={adapterSearch.isFetching}
         choices={adapterChoices}
         onChoose={(address) => {

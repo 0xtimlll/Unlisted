@@ -102,11 +102,9 @@ export function CcipApp({
     }
     // Consumed either way: a target this tab cannot use must not sit there and re-apply itself
     // over something the user types next.
-    if (handoff.via === 'link') setOpenedFromLink(true)
     onHandoffConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoff?.address, handoff?.chain])
-  const [openedFromLink, setOpenedFromLink] = useState(false)
 
   // The address bar follows the form: bridge (the path), source, token, destination (core/link.ts).
   useLinkSync(target ? { from: srcKey, token: target, to: dstChain } : undefined)
@@ -133,7 +131,6 @@ export function CcipApp({
       return
     }
     setInputError('')
-    setOpenedFromLink(false)
     if (r.input.kind === 'evm_address') {
       setAnalysisInput(null)
       setTarget(r.input.address)
@@ -472,7 +469,6 @@ export function CcipApp({
             <Alert kind="error">{d.ccipReject[discovery.data.reason]}</Alert>
           </div>
         ) : null}
-        {openedFromLink && token ? <p className="mt-2 text-xs text-muted">{d.step1.openedFromLink}</p> : null}
         {token && pool ? (
           <p className="mt-2 text-xs text-muted">
             {d.ccip.foundPool} <AddressView value={pool} href={src.explorerAddrUrl + pool} short />
