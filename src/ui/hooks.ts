@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Address, type Hex } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { byEid, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
-import type { ReadClient } from '@/core/client'
+import { byEid, evmByKey, evmChains, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
+import { makeReadClient, type ReadClient } from '@/core/client'
+import { findAdapterForToken } from '@/core/adapterSearch'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
 import { readDvnConfig } from '@/core/lz/dvn'
 import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
@@ -336,5 +337,31 @@ export function useSvmRecipient(info: SvmOftInfo | undefined, recipientBase58: s
     enabled: !!info && !!recipientBase58,
     staleTime: 30_000,
     retry: 1,
+  })
+}
+
+/**
+ * Paste the token, get the adapter (core/adapterSearch.ts). Asked only once the V2 and v1 probes
+ * have both declined the address: every other EVM chain is asked for `peers(srcEid)` at the same
+ * address, and each distinct answer is probed on the source chain through the ordinary quorum
+ * probe — so what comes back has passed exactly what a pasted address passes.
+ */
+export function useAdapterSearch(src: EvmChainDef | undefined, token: Address | null, customRpc: Partial<Record<ChainKey, string>>, enabled: boolean) {
+  return useQuery({
+    queryKey: ['adapterSearch', src?.key, token?.toLowerCase(), JSON.stringify(customRpc)],
+    queryFn: () => {
+      const srcPair = clientPair(src!, customRpc[src!.key])
+      return findAdapterForToken(
+        { token: token!, srcChain: src!.key, srcEid: src!.eid, chains: evmChains().map((c) => c.key) },
+        {
+          readPeer: (chain, address, eid) =>
+            makeReadClient(evmByKey(chain), customRpc[chain]).readContract({ address, abi: oftAbi, functionName: 'peers', args: [eid] }),
+          probe: async (address) => (await probeOftQuorum(srcPair, address)).info,
+        },
+      )
+    },
+    enabled: enabled && !!src && !!token,
+    staleTime: 5 * 60_000,
+    retry: false,
   })
 }

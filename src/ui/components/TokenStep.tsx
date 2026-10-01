@@ -31,6 +31,12 @@ export function TokenStep(p: {
   flags: SuspiciousFlag[]
   error: string
   decodedHint: boolean
+  /** The adapter search: what is being asked, what was found, or why nothing was (BridgeApp). */
+  hint?: string
+  hintBusy?: boolean
+  /** Several adapters found for the pasted token: the user picks one. */
+  choices?: { address: string; note: string }[]
+  onChoose?: (address: string) => void
   /** The sample transaction failed on-chain (Solana reports this; its parameters are still a hint). */
   decodedFailed?: boolean
   droppedOptions: OptionItem[]
@@ -118,6 +124,28 @@ export function TokenStep(p: {
       {p.decodedHint ? (
         <div className="mt-3">
           <Alert kind="info">{d.step1.decodedHint}</Alert>
+        </div>
+      ) : null}
+      {p.hint ? (
+        <div className="mt-3">
+          <Alert kind="info">
+            <span className="inline-flex items-start gap-2">
+              {p.hintBusy ? <Spinner /> : null}
+              <span>{p.hint}</span>
+            </span>
+            {p.choices && p.choices.length > 0 ? (
+              <ul className="mt-2 space-y-1">
+                {p.choices.map((c) => (
+                  <li key={c.address}>
+                    <button type="button" className="mono text-left underline decoration-dotted underline-offset-2 hover:no-underline" onClick={() => p.onChoose?.(c.address)}>
+                      {c.address}
+                    </button>
+                    <span className="ml-2 text-xs text-muted">{c.note}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </Alert>
         </div>
       ) : null}
       {p.decodedFailed ? (

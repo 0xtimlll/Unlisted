@@ -1,13 +1,13 @@
 'use client'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { encodeFunctionData, type Hash } from 'viem'
+import { encodeFunctionData, type Address, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
 import { oftAbi } from '@/core/abi'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
 import { AmountError, parseAmount } from '@/core/amounts'
-import { byChainId, byEid, byKey, isEvm, type ChainKey } from '@/core/chains'
+import { byChainId, byEid, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
 import { analyzeSvmPrefill } from '@/core/analysis/svm'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
@@ -36,7 +36,7 @@ import { Alert } from './components/ui'
 import { ContractFacts, TokenStep } from './components/TokenStep'
 import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
-import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
+import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
@@ -139,6 +139,7 @@ export function BridgeApp({
 
   const reset = useCallback(() => {
     setProbeTarget(null)
+    setAdapterHint(null)
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
@@ -186,6 +187,7 @@ export function BridgeApp({
   const onInput = (i: AnalysisInput) => {
     setTxError('')
     setProbeTarget(null)
+    setAdapterHint(null)
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
@@ -231,10 +233,47 @@ export function BridgeApp({
   const v1Info = probeV1.data?.info
   const v1Flags = probeV1.data?.flags ?? []
 
+  /**
+   * Paste the token, get the adapter (core/adapterSearch.ts). Asked only once V2 and v1 have both
+   * declined the address: the same address on every other EVM chain is asked which contract on
+   * this chain it names as its peer, and each answer is probed here like a pasted address. One
+   * adapter found is applied at once; several are offered; none is said with what was asked.
+   */
+  const bothDeclined = v2SaysNotOft && !!probeV1.error && !svmSource
+  const adapterSearch = useAdapterSearch(evmSrc, bothDeclined ? (probeTarget as Address) : null, stored.customRpc, bothDeclined)
+  const [adapterHint, setAdapterHint] = useState<{ token: string; adapter: string; foundOn: ChainKey[] } | null>(null)
+  useEffect(() => {
+    const r = adapterSearch.data
+    if (!r || !bothDeclined || !probeTarget || r.found.length !== 1) return
+    const f = r.found[0]!
+    setAdapterHint({ token: probeTarget, adapter: f.adapter, foundOn: f.foundOn })
+    applyTarget({ chain: src.key, address: f.adapter, kind: 'oft' })
+    setHandedOver(f.adapter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adapterSearch.data])
+  const adapterApplied = !!adapterHint && probeTarget?.toLowerCase() === adapterHint.adapter.toLowerCase()
+  const otherChains = evmChains().length - 1
+  const adapterNote: string = adapterSearch.isFetching
+    ? fmt(d.step1.adapterSearching, { chain: src.name, n: otherChains })
+    : adapterApplied
+      ? fmt(d.step1.adapterFound, { foundOn: adapterHint!.foundOn.map((c) => byKey(c).name).join(', '), chain: src.name })
+      : bothDeclined && adapterSearch.data && adapterSearch.data.found.length > 1
+        ? fmt(d.step1.adapterSeveral, { chain: src.name })
+        : bothDeclined && adapterSearch.data && adapterSearch.data.found.length === 0
+          ? fmt(d.step1.adapterNone, { chain: src.name, n: otherChains }) +
+            (adapterSearch.data.failed.length ? fmt(d.step1.adapterNoneFailed, { failed: adapterSearch.data.failed.length }) : '') +
+            (adapterSearch.data.rejected.length ? fmt(d.step1.adapterRejected, { rejected: adapterSearch.data.rejected.map((a) => `${a.slice(0, 6)}…${a.slice(-4)}`).join(', ') }) : '')
+          : ''
+  const adapterChoices =
+    bothDeclined && adapterSearch.data && adapterSearch.data.found.length > 1
+      ? adapterSearch.data.found.map((f) => ({ address: f.adapter, note: f.foundOn.map((c) => byKey(c).name).join(', ') }))
+      : []
+
   const probeError = svmSource
     ? svmProbe.error
-    : // While v1 is being asked, or once it has answered, "not an OFT" is not the verdict to show.
-      v2SaysNotOft && (probeV1.isFetching || v1Info)
+    : // While v1 or the adapter search is still being asked, or once either has answered with a
+      // contract, "not an OFT" is not the verdict to show.
+      v2SaysNotOft && (probeV1.isFetching || v1Info || adapterSearch.isFetching || adapterSearch.data?.found.length)
       ? null
       : v2SaysNotOft && probeV1.error
         ? probeV1.error
@@ -682,12 +721,22 @@ export function BridgeApp({
         chain={src}
         onInput={onInput}
         prefill={handedOver}
-        busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching}
+        busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching || adapterSearch.isFetching}
         recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
         info={info}
         flags={flags}
         error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
         decodedHint={!!decodeData}
+        hint={adapterNote}
+        hintBusy={adapterSearch.isFetching}
+        choices={adapterChoices}
+        onChoose={(address) => {
+          const f = adapterSearch.data?.found.find((x) => x.adapter.toLowerCase() === address.toLowerCase())
+          if (!f || !probeTarget) return
+          setAdapterHint({ token: probeTarget, adapter: f.adapter, foundOn: f.foundOn })
+          applyTarget({ chain: src.key, address: f.adapter, kind: 'oft' })
+          setHandedOver(f.adapter)
+        }}
         decodedFailed={svmDecode.data?.observed.failed ?? false}
         droppedOptions={decodeData?.droppedOptions ?? []}
         optionsMalformed={decodeData?.optionsMalformed ?? false}
