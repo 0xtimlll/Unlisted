@@ -241,6 +241,8 @@ export const en = {
     confirmedWaitingScan: 'Confirmed on {chain} · LayerZero is verifying (usually a few minutes)',
     elapsed: 'elapsed {mm}:{ss}',
     restored: 'Restored your last transfer. Delivery is tracked below.',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing…',
     newTransfer: 'New transfer',
   },
   analysis: {

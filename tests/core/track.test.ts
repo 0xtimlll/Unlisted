@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Hash } from 'viem'
-import { fetchStatus, parseScanResponse, pollMessage, scanApiUrl, scanMessageUrl, type FetchLike } from '@/core/track'
+import { fetchStatus, parseScanResponse, pollMessage, POLL_GIVE_UP_MS, POLL_INTERVAL_MS, POLL_SLOW_INTERVAL_MS, POLL_TIMEOUT_MS, scanApiUrl, scanMessageUrl, trackPollInterval, type FetchLike } from '@/core/track'
 
 const HASH: Hash = `0x${'ab'.repeat(32)}`
 const DST: Hash = `0x${'cd'.repeat(32)}`
@@ -149,5 +149,29 @@ describe('pollMessage', () => {
     const s = await pollMessage(HASH, { fetchImpl, sleep, signal: ac.signal })
     expect(s.phase).toBe('pending')
     expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('trackPollInterval: the screen keeps asking until the message is final', () => {
+  const t0 = 1_700_000_000_000
+  it('every 12 s for the first 20 minutes, whatever Scan has said so far', () => {
+    for (const phase of [undefined, 'no_data', 'pending'] as const) {
+      expect(trackPollInterval(phase, t0, t0 + 1_000), String(phase)).toBe(POLL_INTERVAL_MS)
+      expect(trackPollInterval(phase, t0, t0 + POLL_TIMEOUT_MS - 1), String(phase)).toBe(POLL_INTERVAL_MS)
+    }
+  })
+  it('slows down after 20 minutes instead of stopping — a slow message is not a lost one', () => {
+    expect(trackPollInterval('pending', t0, t0 + POLL_TIMEOUT_MS + 1)).toBe(POLL_SLOW_INTERVAL_MS)
+    expect(trackPollInterval('pending', t0, t0 + 3 * 60 * 60_000)).toBe(POLL_SLOW_INTERVAL_MS)
+  })
+  it('gives up only after six hours', () => {
+    expect(trackPollInterval('pending', t0, t0 + POLL_GIVE_UP_MS + 1)).toBe(false)
+  })
+  it('stops the moment the message is delivered or failed', () => {
+    expect(trackPollInterval('delivered', t0, t0 + 1_000)).toBe(false)
+    expect(trackPollInterval('failed', t0, t0 + 1_000)).toBe(false)
+  })
+  it('a transfer with no start time is polled as a fresh one', () => {
+    expect(trackPollInterval('pending', undefined)).toBe(POLL_INTERVAL_MS)
   })
 })

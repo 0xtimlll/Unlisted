@@ -10,6 +10,24 @@ export const LZ_SCAN_UI = 'https://layerzeroscan.com'
 
 export const POLL_INTERVAL_MS = 12_000
 export const POLL_TIMEOUT_MS = 20 * 60_000
+/** After the first 20 minutes the message is slow, not gone: keep asking, less often, for hours. */
+export const POLL_SLOW_INTERVAL_MS = 30_000
+export const POLL_GIVE_UP_MS = 6 * 60 * 60_000
+
+/**
+ * How long to wait before asking Scan again, or `false` to stop.
+ *
+ * A delivered or failed message needs no more asking. An undelivered one is asked every 12 s for
+ * the first 20 minutes and every 30 s after that — a transfer that takes forty minutes is slow, not
+ * lost, and a screen that stopped asking at minute twenty would sit on "in flight" until a reload.
+ * Six hours is where it stops: by then the Status / Rescue tab is the right tool.
+ */
+export function trackPollInterval(phase: TrackPhase | undefined, startedAt: number | undefined, now: number = Date.now()): number | false {
+  if (phase === 'delivered' || phase === 'failed') return false
+  const age = startedAt === undefined ? 0 : now - startedAt
+  if (age > POLL_GIVE_UP_MS) return false
+  return age > POLL_TIMEOUT_MS ? POLL_SLOW_INTERVAL_MS : POLL_INTERVAL_MS
+}
 
 /** Status names LayerZero Scan reports. Anything else is kept verbatim in `raw`. */
 export type LzStatusName =

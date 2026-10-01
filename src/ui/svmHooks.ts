@@ -189,6 +189,8 @@ export function useSvmSignatureStatus(signature: string | undefined, customRpc: 
     },
     enabled: !!signature,
     refetchInterval: (q) => (q.state.data === 'confirmed' || q.state.data === 'failed' ? false : 3_000),
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
     retry: 1,
   })
 }

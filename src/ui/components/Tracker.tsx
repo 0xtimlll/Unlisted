@@ -1,11 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
 import type { Hash } from 'viem'
-import { useWaitForTransactionReceipt } from 'wagmi'
 import { byEid, isEvm, type ChainDef } from '@/core/chains'
 import { scanMessageUrl, type TrackPhase } from '@/core/track'
 import { fmt, useDict } from '@/i18n'
-import { useTrack } from '../hooks'
+import { useSourceReceipt, useTrack } from '../hooks'
 import { useSvmSignatureStatus } from '../svmHooks'
 import { ChainIcon } from './ChainIcon'
 import { Alert, Box, BoxLabel, Button, Spinner } from './ui'
@@ -34,14 +33,22 @@ export function Tracker(p: {
   const d = useDict()
   const dst = byEid(p.dstEid)
   const evm = isEvm(p.src)
-  // Source-chain confirmation: a receipt on EVM, a signature status on Solana.
-  const receipt = useWaitForTransactionReceipt({ hash: evm ? (p.txHash as Hash) : undefined, chainId: isEvm(p.src) ? p.src.chainId : undefined, query: { enabled: evm } })
+  // Source-chain confirmation: a receipt on EVM, a signature status on Solana. Scan is asked in
+  // parallel from the start: it only ever indexes a mined transaction, so a Scan answer is a
+  // confirmation in itself, and a receipt poll that lags behind can no longer hold the tracker.
+  const receipt = useSourceReceipt(isEvm(p.src) ? p.src : undefined, evm ? (p.txHash as Hash) : undefined)
   const sig = useSvmSignatureStatus(evm ? undefined : p.txHash, p.customRpc)
-  const confirmed = evm ? receipt.isSuccess : sig.data === 'confirmed'
-  const sourceFailed = evm ? receipt.isError : sig.data === 'failed'
-  const track = useTrack(confirmed ? p.txHash : undefined, p.startedAt)
+  const track = useTrack(p.txHash, p.startedAt)
   const s = track.data
+  const scanSawIt = s !== undefined && s.phase !== 'no_data'
+  const confirmed = scanSawIt || (evm ? receipt.data?.status === 'success' : sig.data === 'confirmed')
+  const sourceFailed = evm ? receipt.data?.status === 'reverted' : sig.data === 'failed'
   const phase: TrackPhase = sourceFailed ? 'failed' : (s?.phase ?? 'no_data')
+  const refresh = () => {
+    void track.refetch()
+    if (evm) void receipt.refetch()
+    else void sig.refetch()
+  }
   const final = phase === 'delivered' || phase === 'failed'
   const elapsed = useElapsed(p.startedAt)
   // Confirmations are counted in blocks, so the block time has to come from the chain: 20 of them
@@ -87,7 +94,20 @@ export function Tracker(p: {
 
   return (
     <Box>
-      <BoxLabel right={!final ? <span className="mono text-xs">{fmt(d.tracker.elapsed, { mm: elapsed.slice(0, 2), ss: elapsed.slice(3) })}</span> : null}>{d.tracker.title}</BoxLabel>
+      <BoxLabel
+        right={
+          !final ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="mono text-xs">{fmt(d.tracker.elapsed, { mm: elapsed.slice(0, 2), ss: elapsed.slice(3) })}</span>
+              <button type="button" className="text-xs text-accent-ink hover:underline disabled:opacity-50" disabled={track.isFetching} onClick={refresh}>
+                {track.isFetching ? d.tracker.refreshing : d.tracker.refresh}
+              </button>
+            </span>
+          ) : null
+        }
+      >
+        {d.tracker.title}
+      </BoxLabel>
       {p.restored ? (
         <div className="mb-2">
           <Alert kind="info">{d.tracker.restored}</Alert>

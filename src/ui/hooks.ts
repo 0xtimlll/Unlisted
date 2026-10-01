@@ -1,7 +1,7 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { encodeFunctionData, type Address, type Hex } from 'viem'
+import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
 import { byEid, evmByKey, evmChains, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
@@ -17,7 +17,7 @@ import { sanitizeText } from '@/core/text'
 import type { Recipient } from '@/core/recipient'
 import type { SvmOftInfo, SvmUnknownStore } from '@/core/svm/discover'
 import type { SvmRecipientCheck } from '@/core/svm/recipient'
-import { fetchStatus, POLL_INTERVAL_MS, POLL_TIMEOUT_MS, type TrackState } from '@/core/track'
+import { fetchStatus, trackPollInterval, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
 import { checkPeerBack, type PeerBackResult } from '@/core/verify'
 import { svmRpcUrls } from '@/core/svm/urls'
@@ -238,18 +238,54 @@ export function useNativeBalance(chain: EvmChainDef | undefined, owner: Address 
   return useBalance({ address: owner, chainId: chain?.chainId ?? 1, query: { enabled: !!chain && !!owner, refetchInterval: 15_000 } })
 }
 
-/** §5.5 via react-query: poll LayerZero Scan every 12s until terminal or 20 min. */
+/**
+ * §5.5 via react-query: poll LayerZero Scan until the message is delivered or failed.
+ *
+ * Asked from the moment the hash exists — Scan answers `no_data` until it has indexed the source
+ * transaction, which is a fine thing to show. The schedule is core/track.trackPollInterval. Two
+ * settings matter as much as the schedule: the poll keeps going while the tab is in the background
+ * (the user is usually looking at the explorer in another tab), and coming back to this tab asks
+ * at once rather than waiting for the next tick.
+ */
 export function useTrack(hash: string | undefined, startedAt: number | undefined) {
   return useQuery({
     queryKey: ['track', hash],
     queryFn: () => fetchStatus(hash!),
     enabled: !!hash,
-    refetchInterval: (q) => {
-      const s = q.state.data as TrackState | undefined
-      if (s && (s.phase === 'delivered' || s.phase === 'failed')) return false
-      if (startedAt && Date.now() - startedAt > POLL_TIMEOUT_MS) return false
-      return POLL_INTERVAL_MS
+    refetchInterval: (q) => trackPollInterval((q.state.data as TrackState | undefined)?.phase, startedAt),
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    retry: false,
+  })
+}
+
+export type SourceReceipt = { status: 'pending' | 'success' | 'reverted'; blockNumber?: bigint }
+
+/**
+ * The source-chain receipt, asked for directly every few seconds until it exists.
+ *
+ * Not wagmi's `useWaitForTransactionReceipt`: that one watches blocks through one provider and, on
+ * a public RPC that lags or errors, can sit on "waiting" long after the transaction is mined — and
+ * its error state used to be shown as "the transaction failed". Here a receipt that is not there
+ * yet, and an RPC that did not answer, are both simply "pending"; only a mined receipt with
+ * `status: 'reverted'` is a failure.
+ */
+export function useSourceReceipt(chain: EvmChainDef | undefined, hash: Hash | undefined) {
+  const client = useReadClient(chain)
+  return useQuery({
+    queryKey: ['sourceReceipt', chain?.key, hash],
+    queryFn: async (): Promise<SourceReceipt> => {
+      try {
+        const r = await client!.getTransactionReceipt({ hash: hash! })
+        return { status: r.status === 'success' ? 'success' : 'reverted', blockNumber: r.blockNumber }
+      } catch {
+        return { status: 'pending' }
+      }
     },
+    enabled: !!client && !!hash,
+    refetchInterval: (q) => ((q.state.data as SourceReceipt | undefined)?.status === 'pending' || !q.state.data ? 5_000 : false),
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
     retry: false,
   })
 }
