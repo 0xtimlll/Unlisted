@@ -4,7 +4,9 @@ import { CHAINS, type ChainKey } from '@/core/chains'
 import { validateRpcUrl } from '@/core/rpcPolicy'
 import { fmt, useDict } from '@/i18n'
 import { clearAll, exportJson, type Stored } from '../storage'
-import { Button, Input } from './ui'
+import { ChainIcon } from './ChainIcon'
+import { DownloadIcon, TrashIcon } from './icons'
+import { Button, Group, Input, Modal, SettingRow } from './ui'
 
 export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; onSave: (rpc: Partial<Record<ChainKey, string>>) => void; onClose: () => void }) {
   const d = useDict()
@@ -45,50 +47,64 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="mt-8 w-full max-w-md rounded-card border border-line bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-bold text-ink">{d.settings.title}</h2>
-          <Button variant="ghost" onClick={onClose} className="w-9 px-0" aria-label={d.settings.close}>
-            ✕
-          </Button>
-        </div>
-        <p className="mb-2 text-xs text-muted">{d.settings.hint}</p>
+    <Modal title={d.settings.title} onClose={onClose} closeLabel={d.settings.close} width={560}>
+      <div className="flex flex-col gap-4">
         {/* A custom RPC answers every read this screen makes; say so before the fields, not after. */}
-        <p className="mb-3 rounded-xl border border-warn/40 bg-warn/5 px-3 py-2 text-xs text-warn">{d.settings.rpcTrust}</p>
-        <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
-          {CHAINS.map((c) => (
-            <label key={c.key} className="block text-xs">
-              <span className="text-muted">{fmt(d.settings.customRpc, { chain: c.name })}</span>
-              <Input
-                value={draft[c.key] ?? ''}
-                onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })}
-                placeholder={c.rpcUrls[0]}
-                aria-invalid={!!errors[c.key]}
-                className="mono mt-1 h-9"
-              />
-              {errors[c.key] ? <span className="text-danger">{errors[c.key]}</span> : null}
-              {c.vm === 'svm' ? <span className="block text-muted">{d.settings.solanaHint}</span> : null}
-            </label>
-          ))}
+        <div className="rounded-2xl bg-surface-2 p-4 text-xs text-warn">{d.settings.rpcTrust}</div>
+        <div>
+          <div className="mb-2 px-1 text-xs font-semibold text-muted">{d.settings.rpcGroup}</div>
+          <Group>
+            {CHAINS.map((c) => (
+              <SettingRow
+                key={c.key}
+                icon={<ChainIcon chain={c.key} size={24} />}
+                title={c.name}
+                note={
+                  errors[c.key] ? <span className="text-danger">{errors[c.key]}</span> : c.vm === 'svm' ? d.settings.solanaHint : undefined
+                }
+                align={c.vm === 'svm' ? 'start' : 'center'}
+              >
+                <Input
+                  value={draft[c.key] ?? ''}
+                  onChange={(e) => setDraft({ ...draft, [c.key]: e.target.value })}
+                  placeholder={c.rpcUrls[0]}
+                  aria-label={fmt(d.settings.customRpc, { chain: c.name })}
+                  aria-invalid={!!errors[c.key]}
+                  className="mono w-[236px] text-xs"
+                />
+              </SettingRow>
+            ))}
+          </Group>
+          <p className="mt-2 px-1 text-xs text-muted">{d.settings.hint}</p>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div>
+          <div className="mb-2 px-1 text-xs font-semibold text-muted">{d.settings.dataGroup}</div>
+          <Group>
+            <SettingRow icon={<DownloadIcon />} title={d.settings.export} note={d.settings.exportNote}>
+              <Button variant="muted" className="h-9 px-4" onClick={doExport}>
+                {d.settings.exportAction}
+              </Button>
+            </SettingRow>
+            <SettingRow icon={<TrashIcon />} title={d.settings.clearAll} note={d.settings.clearAllNote}>
+              <Button
+                variant="danger"
+                className="h-9 px-4"
+                onClick={() => {
+                  clearAll()
+                  location.reload()
+                }}
+              >
+                {d.settings.clearAllAction}
+              </Button>
+            </SettingRow>
+          </Group>
+        </div>
+        <div className="flex justify-end">
           <Button variant="primary" onClick={save} disabled={hasErrors}>
             {d.settings.save}
           </Button>
-          <span className="flex-1" />
-          <Button onClick={doExport}>{d.settings.export}</Button>
-          <Button
-            variant="danger"
-            onClick={() => {
-              clearAll()
-              location.reload()
-            }}
-          >
-            {d.settings.clearAll}
-          </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

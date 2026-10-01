@@ -26,7 +26,8 @@ import {
 import { CONFIRM_TAIL } from '@/core/recipient'
 import { fmt, useDict } from '@/i18n'
 import { useAddressBook } from '../addressBookContext'
-import { Alert, Button, Input, Select } from './ui'
+import { CopyIcon, DownloadIcon, PencilIcon, PlusIcon, TrashIcon, UploadIcon } from './icons'
+import { Alert, Button, Input, Modal, Select } from './ui'
 
 const FAMILIES: AddressFamily[] = ['evm', 'solana']
 
@@ -93,24 +94,18 @@ export function AddressBookDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-scrim p-4 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="mt-8 w-full max-w-2xl rounded-card border border-line bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-bold text-ink">{d.addressBook.title}</h2>
-          <Button variant="ghost" onClick={onClose} className="w-9 px-0" aria-label={d.addressBook.close}>
-            ✕
-          </Button>
-        </div>
-        <p className="mb-3 text-xs text-muted">{d.addressBook.intro}</p>
+    <Modal title={d.addressBook.title} onClose={onClose} closeLabel={d.addressBook.close} width={640}>
+      <div className="flex flex-col gap-3">
+        <p className="px-1 text-xs text-muted">{d.addressBook.intro}</p>
 
         {ab.status === 'corrupt' ? (
-          <div className="mb-3">
+          <div>
             <Alert kind="error">{d.addressBook.corrupt}</Alert>
-            <textarea readOnly value={ab.corruptRaw} className="mono mt-2 h-24 w-full rounded-xl border border-line bg-surface-2 p-2 text-xs text-muted" />
+            <textarea readOnly value={ab.corruptRaw} className="mono mt-2 h-24 w-full rounded-xl bg-surface-2 p-3 text-xs text-muted outline-none" />
           </div>
         ) : null}
-        {ab.status === 'unavailable' ? <div className="mb-3"><Alert kind="warn">{d.addressBook.unavailable}</Alert></div> : null}
-        {ab.unsaved ? <div className="mb-3"><Alert kind="warn">{d.addressBook.unsaved}</Alert></div> : null}
+        {ab.status === 'unavailable' ? <Alert kind="warn">{d.addressBook.unavailable}</Alert> : null}
+        {ab.unsaved ? <Alert kind="warn">{d.addressBook.unsaved}</Alert> : null}
 
         {adding ? (
           <AddForm
@@ -121,14 +116,17 @@ export function AddressBookDialog({
             }}
           />
         ) : (
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Button onClick={() => setAdding(true)} disabled={readOnly}>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => setAdding(true)} disabled={readOnly}>
+              <PlusIcon className="h-4 w-4" />
               {d.addressBook.add}
             </Button>
-            <Button variant="ghost" onClick={doExport}>
+            <Button variant="muted" onClick={doExport}>
+              <DownloadIcon className="h-4 w-4" />
               {d.addressBook.export}
             </Button>
-            <Button variant="ghost" onClick={() => fileRef.current?.click()} disabled={readOnly}>
+            <Button variant="muted" onClick={() => fileRef.current?.click()} disabled={readOnly}>
+              <UploadIcon className="h-4 w-4" />
               {d.addressBook.import}
             </Button>
             <input
@@ -144,9 +142,9 @@ export function AddressBookDialog({
           </div>
         )}
 
-        {importError ? <div className="mb-3"><Alert kind="error">{importError}</Alert></div> : null}
+        {importError ? <Alert kind="error">{importError}</Alert> : null}
         {preview ? (
-          <div className="mb-3 rounded-xl border border-line bg-surface-2 p-3">
+          <div className="rounded-card bg-surface-2 p-4">
             <div className="mb-2 text-xs text-muted">
               {fmt(d.addressBook.importPreview, { add: preview.add.length, duplicates: preview.duplicates, invalid: preview.invalid })}
               {Object.keys(preview.twins).length > 0 ? (
@@ -167,7 +165,7 @@ export function AddressBookDialog({
                       <span className="text-ink">{e.label}</span> <span className="text-muted">({d.addressBook[`family_${e.family}`]})</span>
                       <div className="mono break-all text-muted">{e.address}</div>
                       {twin ? (
-                        <div className="mt-0.5 rounded-lg border border-danger/40 bg-danger/10 p-2 text-danger">
+                        <div className="mt-0.5 rounded-xl bg-surface p-3 text-danger">
                           <div className="font-semibold">⛔ {fmt(d.addressBook.lookalikeOnAdd, { label: twin.label })}</div>
                           {twins.map((t) => (
                             <div key={t.id} className="mono break-all opacity-90">
@@ -224,9 +222,9 @@ export function AddressBookDialog({
           </div>
         ) : null}
 
-        <div className="max-h-[45vh] space-y-2 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-2">
           {ab.book.entries.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted">{d.addressBook.empty}</p>
+            <p className="rounded-card bg-surface-2 py-6 text-center text-xs text-muted">{d.addressBook.empty}</p>
           ) : (
             FAMILIES.flatMap((f) =>
               entriesFor(ab.book, f).map((e) => <EntryRow key={e.id} entry={e} readOnly={readOnly} />),
@@ -234,7 +232,7 @@ export function AddressBookDialog({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -260,12 +258,12 @@ function EntryRow({ entry, readOnly }: { entry: AddressBookEntry; readOnly: bool
   const when = (t: number | undefined) => (t === undefined ? d.addressBook.never : new Date(t).toISOString().slice(0, 10))
 
   return (
-    <div className="rounded-xl border border-line bg-surface-2 p-3">
-      <div className="flex items-start justify-between gap-2">
+    <div className="rounded-card bg-surface-2 p-4">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           {renaming ? (
             <div className="flex gap-2">
-              <Input value={draft} onChange={(e) => setDraft(e.target.value)} className="max-w-xs" autoFocus />
+              <Input tone="surface" value={draft} onChange={(e) => setDraft(e.target.value)} className="max-w-xs" autoFocus />
               <Button
                 onClick={() => {
                   if (ab.rename(entry.id, draft).ok) setRenaming(false)
@@ -296,23 +294,26 @@ function EntryRow({ entry, readOnly }: { entry: AddressBookEntry; readOnly: bool
             {d.addressBook.created} {when(entry.createdAt)} · {d.addressBook.lastUsed} {when(entry.lastUsedAt)}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col gap-1">
-          <Button variant="ghost" onClick={copy} className="text-xs">
+        <div className="flex shrink-0 items-center gap-1">
+          <Button variant="pill" onClick={copy} title={d.addressBook.copy} aria-label={d.addressBook.copy}>
+            <CopyIcon className="h-3.5 w-3.5" />
             {copied ? d.addressBook.copied : d.addressBook.copy}
           </Button>
-          <Button variant="ghost" onClick={() => setRenaming(true)} disabled={readOnly} className="text-xs">
-            {d.addressBook.rename}
+          <Button variant="pill" onClick={() => setRenaming(true)} disabled={readOnly} title={d.addressBook.rename} aria-label={d.addressBook.rename}>
+            <PencilIcon className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" onClick={() => setConfirmDel(true)} disabled={readOnly} className="text-xs">
-            {d.addressBook.remove}
+          <Button variant="pill" onClick={() => setConfirmDel(true)} disabled={readOnly} title={d.addressBook.remove} aria-label={d.addressBook.remove}>
+            <TrashIcon className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
       {confirmDel ? (
-        <div className="mt-2 rounded-lg border border-danger/40 bg-danger/5 p-2">
+        <div className="mt-3 rounded-xl bg-surface p-3">
           <div className="mb-2 text-xs text-danger">{fmt(d.addressBook.confirmRemove, { label: entry.label })}</div>
           <div className="flex gap-2">
-            <Button onClick={() => ab.remove(entry.id)}>{d.addressBook.remove}</Button>
+            <Button variant="danger" onClick={() => ab.remove(entry.id)}>
+              {d.addressBook.remove}
+            </Button>
             <Button variant="ghost" onClick={() => setConfirmDel(false)}>
               {d.addressBook.cancel}
             </Button>
@@ -362,12 +363,12 @@ function AddForm({
   }
 
   return (
-    <div className="mb-3 rounded-xl border border-line bg-surface-2 p-3">
+    <div className="rounded-card bg-surface-2 p-4">
       <div className="mb-2 text-sm font-semibold text-ink">{d.addressBook.addTitle}</div>
       <div className="space-y-2">
         <label className="block text-xs">
           <span className="text-muted">{d.addressBook.family}</span>
-          <Select value={family} onChange={(e) => setFamily(e.target.value as AddressFamily)} className="mt-1" disabled={!!initial}>
+          <Select value={family} onChange={(e) => setFamily(e.target.value as AddressFamily)} wrapClassName="mt-1 w-full" disabled={!!initial}>
             {FAMILIES.map((f) => (
               <option key={f} value={f}>
                 {d.addressBook[`family_${f}`]}
@@ -385,6 +386,7 @@ function AddForm({
               // new value is a new question, even if it resembles the same entry.
               setTwinAccepted(false)
             }}
+            tone="surface"
             className="mono mt-1"
             spellCheck={false}
             readOnly={!!initial}
@@ -392,10 +394,10 @@ function AddForm({
         </label>
         <label className="block text-xs">
           <span className="text-muted">{d.addressBook.label}</span>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} className="mt-1" placeholder={d.addressBook.labelPlaceholder} autoFocus />
+          <Input tone="surface" value={label} onChange={(e) => setLabel(e.target.value)} className="mt-1" placeholder={d.addressBook.labelPlaceholder} autoFocus />
         </label>
         {twin ? (
-          <div className="rounded-lg border border-danger/40 bg-danger/10 p-2 text-xs text-danger">
+          <div className="rounded-xl bg-surface p-3 text-xs text-danger">
             <div className="font-semibold">⛔ {fmt(d.addressBook.lookalikeOnAdd, { label: twin.label })}</div>
             <div className="mono mt-1 break-all opacity-90">{fmt(d.addressBook.lookalikeSaved, { label: twin.label, saved: twin.address })}</div>
             <label className="mt-2 flex items-start gap-2">
@@ -409,10 +411,11 @@ function AddForm({
             {/* The expected value is deliberately absent — see the note at the top of this file. */}
             <span className="text-muted">{d.addressBook.confirmTail}</span>
             <Input
+              tone="surface"
               value={tail}
               onChange={(e) => setTail(e.target.value)}
               maxLength={CONFIRM_TAIL}
-              className={`mono mt-1 max-w-36 ${tailOk ? 'border-ok' : ''}`}
+              className={`mono mt-1 max-w-36 ${tailOk ? 'ring-1 ring-ok' : ''}`}
               spellCheck={false}
               aria-invalid={!tailOk}
             />
@@ -420,9 +423,9 @@ function AddForm({
           </label>
         )}
       </div>
-      {error ? <div className="mt-2"><Alert kind="error">{error}</Alert></div> : null}
+      {error ? <div className="mt-2 text-xs text-danger">{error}</div> : null}
       <div className="mt-3 flex gap-2">
-        <Button onClick={save} disabled={!canSave}>
+        <Button variant="primary" onClick={save} disabled={!canSave}>
           {d.addressBook.save}
         </Button>
         <Button variant="ghost" onClick={onDone}>
