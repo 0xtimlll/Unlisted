@@ -21,6 +21,27 @@ export type DestinationState = {
   extraOptions: `0x${string}`
 }
 
+/**
+ * The arrow between "From" and "To". When the route can be reversed it is a button (⇅) that swaps
+ * the two sides in one click; otherwise it is the plain ↓ it always was, with the reason as its title.
+ */
+export function ReverseArrow({ onClick, enabled, title }: { onClick: () => void; enabled: boolean; title: string }) {
+  return (
+    <div className="relative z-10 -my-4 flex justify-center">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!enabled}
+        title={title}
+        aria-label={title}
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm transition enabled:hover:border-ink/40 enabled:hover:text-ink disabled:cursor-default"
+      >
+        <span aria-hidden>{enabled ? '⇅' : '↓'}</span>
+      </button>
+    </div>
+  )
+}
+
 /** "Sell"-style box: source chain + amount. */
 export function FromBox(p: {
   src: ChainDef

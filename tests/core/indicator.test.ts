@@ -53,6 +53,10 @@ describe('grey', () => {
     expect(assessIndicator(base({ results: [failed('simulation_missing')] })).level).toBe('pending')
     expect(assessIndicator(base({ risk: undefined, riskPending: true })).level).toBe('pending')
   })
+  it('behind a hold the reads never run, so it is "not assessed" rather than "checking" — red is still said', () => {
+    expect(assessIndicator(base({ results: [failed('simulation_missing'), failed('insufficient_balance')], held: true })).level).toBe('none')
+    expect(assessIndicator(base({ results: [failed('simulation_missing'), failed('insufficient_balance'), failed('recipient_zero')], held: true })).level).toBe('red')
+  })
   it('red is red even while something is still loading', () => {
     expect(assessIndicator(base({ results: [failed('simulation_missing'), failed('recipient_zero')] })).level).toBe('red')
   })

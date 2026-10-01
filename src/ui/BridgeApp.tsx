@@ -26,7 +26,9 @@ import type { DvnConfig } from '@/core/lz/dvn'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { sanitizeText } from '@/core/text'
 import { fmt, useDict, type Dict } from '@/i18n'
-import { FromBox, ToBox, type DestinationState } from './components/FromTo'
+import { FromBox, ReverseArrow, ToBox, type DestinationState } from './components/FromTo'
+import { reverseOft, type Reversal } from '@/core/reverse'
+import { approveBusy } from '@/core/approveFlow'
 import { ProtocolBadge } from './components/History'
 import { Panel, TwoColumn } from './components/Layout'
 import { Checks, Cta, Details, type CtaState } from './components/Review'
@@ -109,6 +111,9 @@ export function BridgeApp({
   const [analysisInput, setAnalysisInput] = useState<AnalysisInput | null>(null)
   const [decodeTarget, setDecodeTarget] = useState<string | null>(null)
   const [dest, setDest] = useState<DestinationState>(EMPTY_DEST)
+  /** The destination a reversed v1 route should start on, and the amount it carries over. */
+  const [v1Dst, setV1Dst] = useState<ChainKey | undefined>(undefined)
+  const [v1Amount, setV1Amount] = useState('')
   // A transfer that was in flight when the page was last closed is re-opened, not forgotten.
   const [sent, setSent] = useState<Sent | null>(() => {
     const a = activeTransfer(stored, 'lz-oft')
@@ -137,6 +142,8 @@ export function BridgeApp({
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
+    setV1Dst(undefined)
+    setV1Amount('')
     setSent(null)
     setTxError('')
   }, [])
@@ -477,12 +484,16 @@ export function BridgeApp({
     riskError,
   }
   const report = runGuards(fullInput)
+  // The line under the button names the impossibility, if there is one: the first block that is
+  // neither a read in flight nor the approve step. Notes never appear here — they are the indicator's.
+  const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
 
   // The route indicator: one colour from everything above. It decides nothing (core/indicator.ts).
   const indicator = assessIndicator({
     hasDestination: dest.dstEid !== undefined,
     hasPlan: !!planData,
     results: report.results,
+    held: impossible !== undefined,
     label: (c) => d.guard[c as keyof typeof d.guard] ?? c,
     flags: report.warnings,
     flagLabel: (f) => d.card[`flag_${f}` as keyof typeof d.card] ?? f,
@@ -570,9 +581,6 @@ export function BridgeApp({
 
   // ---- CTA state: the next thing the user has to do ------------------------------
   const chainMismatch = !svmSource && wallet !== undefined && walletChainId !== undefined && evmSrc !== undefined && walletChainId !== evmSrc.chainId
-  // The line under the button names the impossibility, if there is one: the first block that is
-  // neither a read in flight nor the approve step. Notes never appear here — they are the indicator's.
-  const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
   const cta: CtaState = !sender
     ? { kind: 'connect' }
     : chainMismatch
@@ -599,6 +607,38 @@ export function BridgeApp({
                     : { kind: 'send', enabled: report.canSend, ...(impossible ? { reason: d.guard[impossible.code] } : {}) }
 
   const sending = switching || sendWrite.isPending || svmSend.isPending
+
+  // ---- reverse: A → B becomes B → A in one click --------------------------------
+  // The other side's contract comes from this one's peer and is probed again from scratch, so it is
+  // held to every check a pasted address is (core/reverse.ts). The amount and the settings stay;
+  // the recipient goes back to the connected wallet, because the old one belonged to the other chain.
+  const reverseBusy = sending || approveBusy(approveFlow.phase)
+  const reversalV2 = info ? reverseOft(src.key, info, dest.dstEid) : undefined
+  const applyReversal = (r: Reversal, keep: { amountInput: string }) => {
+    setSrcKey(r.chain)
+    setDecodeTarget(null)
+    setAnalysisInput(null)
+    setChosen(0)
+    setProbeTarget(r.contract)
+    setHandedOver(r.contract)
+    setV1Dst(r.dstChain)
+    setDest({ ...EMPTY_DEST, dstEid: r.dstEid, amountInput: keep.amountInput, slippageBps: dest.slippageBps, feeBufferBps: dest.feeBufferBps })
+    setSent(null)
+    setTxError('')
+    // One click, not two: ask the wallet to follow. Declining leaves "Switch to …" on the button.
+    const next = byKey(r.chain)
+    if (isEvm(next) && wallet && walletChainId !== next.chainId) switchChain({ chainId: next.chainId })
+  }
+  const onReverse = () => {
+    if (reverseBusy || !reversalV2?.ok) return
+    applyReversal(reversalV2, { amountInput: dest.amountInput })
+  }
+  const reverseEnabled = !reverseBusy && !!reversalV2?.ok
+  const reverseTitle = reverseBusy
+    ? d.reverse.busy
+    : reversalV2?.ok
+      ? fmt(d.reverse.go, { from: byKey(reversalV2.chain).name, to: src.name })
+      : d.reverse[reversalV2?.reason ?? 'no_destination']
   const onCta = () => {
     switch (cta.kind) {
       case 'connect':
@@ -666,9 +706,7 @@ export function BridgeApp({
 
       {info ? (
         <>
-          <div className="relative z-10 -my-4 flex justify-center">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm">↓</span>
-          </div>
+          <ReverseArrow onClick={onReverse} enabled={reverseEnabled} title={reverseTitle} />
           <ToBox
             info={info}
             wallet={sender}
@@ -751,7 +789,7 @@ export function BridgeApp({
                 <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat />
               </PanelSection>
               <PanelSection title={d.risk.title}>
-                <RouteIndicator indicator={indicator} noneText={dest.dstEid === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
+                <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dest.dstEid === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
                   {riskCovered ? <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} /> : <RiskNotAssessed />}
                   <Checks report={report} show={!!planData} />
                   <SimulationNote check={evmData} />
@@ -770,7 +808,23 @@ export function BridgeApp({
   // A v1 contract gets its own form. Rendered instead of the V2 one rather than woven into it, so
   // the screen people already use does not change shape because v1 exists.
   if (v1Info && evmSrc && !sent) {
-    return <BridgeV1 src={evmSrc} info={v1Info} flags={v1Flags} stored={stored} setStored={setStored} onReset={reset} />
+    return (
+      <BridgeV1
+        key={`${evmSrc.key}:${v1Info.oft}`}
+        src={evmSrc}
+        info={v1Info}
+        flags={v1Flags}
+        stored={stored}
+        setStored={setStored}
+        onReset={reset}
+        initialDstKey={v1Dst}
+        initialAmount={v1Amount}
+        onReverse={(r, amountInput) => {
+          setV1Amount(amountInput)
+          applyReversal(r, { amountInput })
+        }}
+      />
+    )
   }
 
   return (

@@ -109,6 +109,12 @@ export type IndicatorInput = {
   riskPending: boolean
   /** The runner threw: said as a yellow reason, never as a block. */
   riskError?: string | undefined
+  /**
+   * Something holds the button (no balance, wrong chain…). The simulation and the gas estimate
+   * never run behind a hold, so a pending read is not "still checking" — the route is simply not
+   * assessed until the transfer is possible. Red reasons already known are still said.
+   */
+  held?: boolean
   /** LayerZero V2: only one party attests to messages on this route. */
   dvnWeak?: boolean
   dvnWeakText?: string
@@ -152,6 +158,6 @@ export function assessIndicator(i: IndicatorInput): Indicator {
 
   reasons.sort((a, b) => RANK[a.level] - RANK[b.level])
   const headline = reasons.find((r) => r.level === 'red')
-  const level: IndicatorLevel = headline ? 'red' : pending ? 'pending' : reasons.some((r) => r.level === 'yellow') ? 'yellow' : 'green'
+  const level: IndicatorLevel = headline ? 'red' : pending ? (i.held ? 'none' : 'pending') : reasons.some((r) => r.level === 'yellow') ? 'yellow' : 'green'
   return { level, reasons, headline }
 }

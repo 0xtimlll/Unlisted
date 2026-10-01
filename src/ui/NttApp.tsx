@@ -34,6 +34,9 @@ import { VerdictCard } from './components/Verdict'
 import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
 import { RiskNotAssessed } from './components/RiskPanel'
 import { RouteIndicator } from './components/RouteIndicator'
+import { ReverseArrow } from './components/FromTo'
+import { approveBusy } from '@/core/approveFlow'
+import { reverseNtt } from '@/core/reverse'
 import { Cta, type CtaState } from './components/Review'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { useAnalysis } from './useAnalysis'
@@ -247,6 +250,7 @@ export function NttApp({
     hasDestination: !!dstChain,
     hasPlan: !!planData,
     results: report.results,
+    held: impossible !== undefined,
     label: nttLabel,
     flags: verification.data?.ok && verification.data.crossChecked === false ? ['not_cross_checked'] : [],
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
@@ -359,6 +363,36 @@ export function NttApp({
       default:
         return
     }
+  }
+
+
+  // ---- reverse: A → B becomes B → A in one click --------------------------------
+  // The manager on the other side is the peer verification already found; on the new source it is
+  // verified again from scratch, anchor included (core/reverse.ts). The amount stays; the recipient
+  // goes back to the connected wallet.
+  const reversal = reverseNtt(verified)
+  const reverseBusy = switching || sendWrite.isPending || approveBusy(approveFlow.phase)
+  const reverseEnabled = !reverseBusy && reversal.ok
+  const reverseTitle = reverseBusy
+    ? d.reverse.busy
+    : reversal.ok
+      ? fmt(d.reverse.go, { from: byKey(reversal.chain).name, to: src.name })
+      : d.reverse[reversal.reason]
+  const onReverse = () => {
+    if (!reverseEnabled || !reversal.ok) return
+    setSrcKey(reversal.chain)
+    setDstChain(reversal.dstChain)
+    setInput(reversal.contract)
+    setTarget(reversal.contract)
+    setAnalysisInput(null)
+    setInputError('')
+    setRecipientCustom(false)
+    setRecipientInput('')
+    setConfirmLast6('')
+    setSent(null)
+    setTxError('')
+    const next = byKey(reversal.chain)
+    if (isEvm(next) && wallet && walletChainId !== next.chainId) switchChain({ chainId: next.chainId })
   }
 
   // ---- render ---------------------------------------------------------------------
@@ -475,6 +509,8 @@ export function NttApp({
         </div>
       </Box>
 
+      <ReverseArrow onClick={onReverse} enabled={reverseEnabled} title={reverseTitle} />
+
       <Box>
         <BoxLabel
           right={
@@ -581,7 +617,7 @@ export function NttApp({
             </div>
             <div>
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
-              <RouteIndicator indicator={indicator} noneText={dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination}>
+              <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination}>
                 {/* §4 The eight LayerZero checks have no NTT runner; this tab's own guards are the whole rule. */}
                 <RiskNotAssessed why={d.risk.notCoveredNtt} />
                 <ul className="grid gap-x-3 gap-y-0.5 text-xs">

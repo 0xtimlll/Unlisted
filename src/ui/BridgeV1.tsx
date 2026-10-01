@@ -14,6 +14,8 @@ import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
+import { approveBusy } from '@/core/approveFlow'
+import { reverseV1, type Reversal } from '@/core/reverse'
 import { sameAddress } from '@/core/encoding'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
@@ -80,6 +82,9 @@ export function BridgeV1({
   stored,
   setStored,
   onReset,
+  initialDstKey,
+  initialAmount,
+  onReverse,
 }: {
   src: EvmChainDef
   info: OftV1Info
@@ -87,13 +92,20 @@ export function BridgeV1({
   stored: Stored
   setStored: (s: Stored) => void
   onReset: () => void
+  /** Where a reversed route starts: the chain it came from, when this contract has a route there. */
+  initialDstKey?: ChainKey | undefined
+  initialAmount?: string | undefined
+  /** Reverse this route: the remote becomes the source and is probed again from scratch. */
+  onReverse: (r: Reversal, amountInput: string) => void
 }) {
   const d = useDict()
   const { address: wallet, chainId: walletChainId } = useAccount()
   const { switchChain, isPending: switching } = useSwitchChain()
 
-  const [dstKey, setDstKey] = useState<ChainKey | undefined>(info.routes[0]?.key)
-  const [amountInput, setAmountInput] = useState('')
+  const [dstKey, setDstKey] = useState<ChainKey | undefined>(
+    initialDstKey && info.routes.some((r) => r.key === initialDstKey) ? initialDstKey : info.routes[0]?.key,
+  )
+  const [amountInput, setAmountInput] = useState(initialAmount ?? '')
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
@@ -197,6 +209,7 @@ export function BridgeV1({
     hasDestination: dstKey !== undefined,
     hasPlan: !!planData,
     results: report.results,
+    held: impossible !== undefined,
     label: (c) => GUARD_LABEL(d, c),
     flags: report.warnings,
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
@@ -268,6 +281,15 @@ export function BridgeV1({
   }
 
   const chainMismatch = walletChainId !== undefined && walletChainId !== src.chainId
+  // Reverse: the trusted remote for the chosen destination becomes the source (core/reverse.ts).
+  const reversal = reverseV1(src.key, info.routes.find((r) => r.key === dstKey))
+  const reverseBusy = switching || sendWrite.isPending || approveBusy(approveFlow.phase)
+  const reverseEnabled = !reverseBusy && reversal.ok
+  const reverseTitle = reverseBusy
+    ? d.reverse.busy
+    : reversal.ok
+      ? fmt(d.reverse.go, { from: byKey(reversal.chain).name, to: src.name })
+      : d.reverse[reversal.reason]
   // Connect wallet → Switch to <chain> → Approve <amount> <token> → Send; one impossibility under it.
   const cta: CtaState = !wallet
     ? { kind: 'connect' }
@@ -366,7 +388,23 @@ export function BridgeV1({
       <Panel title={d.ui.to}>
         <div className="space-y-3">
           <Box>
-            <BoxLabel>{d.v1.destination}</BoxLabel>
+            <BoxLabel
+              right={
+                <button
+                  type="button"
+                  className="text-accent-ink hover:underline disabled:cursor-default disabled:text-faint disabled:no-underline"
+                  disabled={!reverseEnabled}
+                  title={reverseTitle}
+                  onClick={() => {
+                    if (reverseEnabled && reversal.ok) onReverse(reversal, amountInput)
+                  }}
+                >
+                  ⇅ {d.reverse.button}
+                </button>
+              }
+            >
+              {d.v1.destination}
+            </BoxLabel>
             <Select value={dstKey ?? ''} onChange={(e) => setDstKey(e.target.value as ChainKey)}>
               {info.routes.map((r) => (
                 <option key={r.key} value={r.key}>
@@ -479,7 +517,7 @@ export function BridgeV1({
 
         <div>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
-          <RouteIndicator indicator={indicator} noneText={dstKey === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
+          <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstKey === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
             <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} />
             <V1Checks results={report.results} />
             {simulation.data?.status === 'reverted' ? <p className="mono text-xs text-warn">{formatRevert(simulation.data.revert)}</p> : null}

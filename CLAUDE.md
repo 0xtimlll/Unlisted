@@ -77,6 +77,7 @@
 
 **Ядро** — `src/core/`: `probe.ts` (детект OFT), `plan.ts`, `guards.ts`, `severity.ts` (что
 держит кнопку), `indicator.ts` (цвет и причины), `approveFlow.ts` (автомат Approve → Send),
+`reverse.ts` (разворот маршрута: контракт другой стороны из peer, затем полный probe заново),
 `recipient.ts`, `quorum.ts` (кросс-проверка двух RPC), `options.ts`, `verify.ts`, `track.ts`,
 `decodeTx.ts`.
 

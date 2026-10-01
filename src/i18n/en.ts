@@ -501,11 +501,22 @@ export const en = {
     chooseDestination: 'Choose the destination network',
     enterAmount: 'Enter an amount to assess the route',
     checking: 'Checking the route…',
+    held: 'Assessed once the transfer is possible',
     ok: 'Route in order',
     nuances: 'Some nuances',
     high: 'High risk',
     details: 'Details',
     dvnWeak: 'Only one party attests to messages on this route — a weak bridge configuration chosen by the project',
+  },
+  /** The arrow between From and To: reverse the route in one click. */
+  reverse: {
+    go: 'Reverse: {from} → {to}. The contract on {from} is taken from this one’s peer and checked again.',
+    button: 'Reverse',
+    no_destination: 'Choose a destination to reverse the route',
+    unknown_chain: 'The destination is not a network this app serves',
+    no_peer: 'This contract names no peer there, so there is nothing to reverse to',
+    peer_not_address: 'The peer there is not a plain address, so it cannot be reversed automatically',
+    busy: 'A transaction is in progress',
   },
   /** The approve flow under the main button. */
   approve: {
