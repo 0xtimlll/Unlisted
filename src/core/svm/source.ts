@@ -19,6 +19,7 @@ import type { TokenProgram } from './discover'
 import { findMetadata, PROGRAM, pubkeyFromBase58, pubkeyToBase58, pubkeyToHex } from './pubkey'
 import { peerConfigPda } from './plan'
 import type { SvmRpc, SvmAccount } from './rpc'
+import { sanitizeLabel } from '../text'
 
 const TOKEN_PROGRAMS: Record<string, TokenProgram> = { [PROGRAM.token]: 'token', [PROGRAM.token2022]: 'token2022' }
 
@@ -85,6 +86,13 @@ async function readAll(rpc: SvmRpc, oftStore: string, eids: readonly number[]): 
   } catch (e) {
     throw new SvmDiscoverError('not_oft_store', e instanceof LayoutError ? e.message : String(e))
   }
+  // The EVM probe refuses a contract whose endpoint() is not the chain's committed EndpointV2
+  // (core/probe.ts foreign_endpoint); the store's endpoint program is the same fact here. A
+  // program that is not LayerZero's can decode as a perfect store and still do anything it likes
+  // with the accounts the send instruction hands it.
+  if (decoded.endpointProgram !== PROGRAM.lzEndpointV2) {
+    throw new SvmDiscoverError('foreign_endpoint', `${decoded.endpointProgram} is not LayerZero's endpoint program (${PROGRAM.lzEndpointV2})`)
+  }
   const programId = store.owner
   const mint = pubkeyFromBase58(decoded.tokenMint)
   const keys = [decoded.tokenMint, decoded.tokenEscrow, pubkeyToBase58(findMetadata(mint)), ...eids.map((eid) => peerConfigPda(oftStore, programId, eid))]
@@ -143,8 +151,10 @@ export async function probeSvmOft(rpc: SvmRpc, oftStoreInput: string, eids: read
   if (metadata && metadata.owner === PROGRAM.metadata) {
     try {
       const md = decodeTokenMetadata(metadata.data, decoded.tokenMint)
-      if (md.symbol) symbol = md.symbol
-      name = md.name
+      // Written by whoever holds the mint's update authority: shown, never trusted with its layout.
+      const sym = sanitizeLabel(md.symbol)
+      if (sym) symbol = sym
+      name = sanitizeLabel(md.name, 64)
     } catch {
       /* unreadable metadata is not an error — the mint is still the mint */
     }

@@ -24,7 +24,8 @@ export type Vm = 'evm' | 'svm'
  * the destination — legitimately used to fund a token account, so it is allowed up to a cap.
  */
 export const LIMITS: Record<Vm, { maxGas: bigint; maxValue: bigint }> = {
-  evm: { maxGas: 2_000_000n, maxValue: 10n ** 16n }, // 0.01 native
+  // No value at all on EVM: wei delivered to the receiving contract is never what a transfer wants.
+  evm: { maxGas: 2_000_000n, maxValue: 0n },
   svm: { maxGas: 1_400_000n, maxValue: 10_000_000n }, // 0.01 SOL
 }
 
@@ -158,9 +159,13 @@ export function sanitizeOptions(sample: Hex, dstVm: Vm = 'evm'): SanitizedOption
   let gas = 0n
   let value = 0n
   for (const it of decoded.items) {
-    if (it.kind === 'lzReceive' && it.gas <= lim.maxGas && it.value <= lim.maxValue) {
+    if (it.kind === 'lzReceive' && it.gas <= lim.maxGas) {
       gas = it.gas > gas ? it.gas : gas
-      value = it.value > value ? it.value : value
+      // The gas is reusable; a value above the VM's cap is not (0 on EVM: wei handed to the
+      // receiving contract is never what a transfer wants). The option is reported as dropped
+      // while its gas is still taken, so the sample is neither trusted nor thrown away whole.
+      if (it.value <= lim.maxValue) value = it.value > value ? it.value : value
+      else dropped.push(it)
     } else if (it.kind === 'ordered') {
       // harmless, but not needed for an OFT transfer; drop silently
     } else {

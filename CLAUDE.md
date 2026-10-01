@@ -101,8 +101,14 @@
 
 **Белый список** — `scripts/check-whitelist.mjs`, часть `npm test`. Запрещено везде в `src/`:
 `eval`, `new Function`, `dangerouslySetInnerHTML`, любые подписи сообщений (`signMessage`,
-`signTypedData`, `personal_sign`, `permit`), `sendTransaction` / `sendRawTransaction` (сырой calldata),
-`signAllTransactions`, ручная сборка Solana-инструкций, SPL-делегаты и `setAuthority`.
+`signTypedData*`, `eth_sign*`, `personal_sign`, `permit`), всё семейство сырого calldata
+(`sendTransaction*` в любом регистре, `sendRawTransaction`, `sendEncodedTransaction`,
+`writeContracts`, `eth_send*`, `wallet_sendCalls`, `.request(`), `signAllTransactions`, ручная
+сборка Solana-инструкций, SPL-делегаты и `setAuthority`. `functionName` обязан быть строковым
+литералом **внутри скобок самого write-вызова** (не «в 12 строках ниже»), комментарии вырезаются
+целыми (код после `/* … */` на той же строке — код), `signTransaction` разрешён только в двух файлах
+Solana-стека, `public/theme.js` проверяется на отсутствие сети и DOM-записи. Сам гейт покрыт тестом
+на фикстурах (`tests/core/checkWhitelist.test.ts`, через `CHECK_WHITELIST_ROOT`).
 
 **Scoped-категории**: write-примитив разрешён только в своём модуле — `transfer` в `wormhole-ntt/`,
 `ccipSend` в `ccip/`, `sendFrom` в `lz-v1/`, а `retryPayload` / `retryMessage` / `commitVerification` /
@@ -126,7 +132,19 @@ guard'ов, флаги, DVN, доля адаптера) — в свёрнуто�
 
 **Guard'ы** — `src/core/guards.ts`, 22 штуки, от `g1Chain` до `g22Risk`. Ключевые: `g11NoApprove`
 (нет unlimited approve), `g15ExecutorGas`, `g19RecipientVm`, `g20SvmSend` (отказ, если svm-destination не опознан),
-`g21FeeCeiling`, `g22Risk`.
+`g21FeeCeiling`, `g22Risk`. Порядок внутри guard 3 важен: **хвост получателя проверяется до
+заметки о двойнике** — заметка красит индикатор и не имеет права снимать единственный обязательный
+ввод. Симуляцию держат только блоки (`preOk` = `ok || isNoteCode`): заметка не должна оставлять Send
+серым без причины.
+
+**Solana как источник.** Программа, которую вызывает `send`, — та, что владеет OFT Store, то есть
+факт с цепочки, а не из списка; поэтому store обязан называть endpoint-программу LayerZero
+(`PROGRAM.lzEndpointV2`, иначе `foreign_endpoint`, как `foreign_endpoint` у EVM-probe), а dry run
+спрашивается не только «прошёл ли», но и **что списал**: `simulateTransaction` с `accounts`
+возвращает пост-состояние ATA отправителя и кошелька, `judgeSvmDebit` требует ровно `amountLD` по
+токену и не больше `nativeFee + комиссия + запас на rent` по SOL. Расхождение — `debit_mismatch`,
+блок (инвариант сборки). Destination-сторона Solana читается с каждого URL отдельно
+(`rpc.single`), расхождение — `rpc_mismatch`, один оператор — флаг `not_cross_checked`.
 
 **Независимая проверка получателя.** `selfCheck` каждого протокола **не переиспользует функции
 кодирования** — это отдельный декодер, читающий адрес ровно так, как его прочтёт контракт на
@@ -141,6 +159,11 @@ destination. Для v1: у `bytes` длина обязана быть ровно
 провал симуляции — `simulation_failed` — предупреждение веса `loss` с декодированной причиной реверта
 в тексте (`formatRevert`), потому что часто это сбой RPC, а не свойство перевода. Недоступный RPC —
 отдельный код `simulation_unavailable`, тоже предупреждение: «не проверено» — не «упадёт».
+
+**Текст извне.** Всё, что пришло из RPC, контракта, программы или чужого события (причины ревертов,
+логи Solana, Metaplex symbol/name, `destinationChain` Axelar), проходит `core/text.sanitizeText` до
+экрана: bidi-управляющие, zero-width и BOM вырезаются. Ключи из импортируемого файла адресной книги
+никогда не становятся свойствами объекта с прототипом (`Object.create(null)` + `Object.hasOwn`).
 
 **Подтверждение получателя.** UI **никогда** не показывает последние символы адреса рядом с полем,
 где просит их ввести: значение, выведенное из того же поля, превращает проверку в «умеет ли
@@ -192,6 +215,26 @@ destination. Для v1: у `bytes` длина обязана быть ровно
 
 DVN сравниваются **по id оператора, а не по адресу** — на двух сетях у одного оператора разные адреса,
 и сравнение по адресу помечало каждый здоровый маршрут как сломанный.
+
+**Что в проверках маршрута берётся из реестра, а не у проверяемого** (правило 3 в действии):
+
+- endpoint destination — `evmByKey(dstChain).endpointV2`, никогда `dstOft.endpoint()`: через него
+  читаются `inboundNonce`, receive-библиотека и от его имени симулируется `lzReceive`. Контракт,
+  у которого `endpoint()` другой, — `fail` в `peers`;
+- комиссия — `EndpointV2.quote` на source для ровно этого пакета (receiver = peer, message =
+  `v2Message`, options = `combineOptionsV2(enforced, extra)`); `quoteSend` выше — `fail` в `peers`
+  («разница остаётся у контракта»), это ловит пару настоящих на вид OFT, существующую ради «комиссии»;
+- история — `OFTReceived` подтверждается `inboundNonce` на реестровом endpoint'е: события при нулевом
+  nonce — `fail` + `history: never`, nonce > 0 без событий в окне — «доставлялось раньше окна»;
+- `recent_changes` при окне короче 7 дней — `unchecked`, а не «изменений нет».
+
+Тот же принцип в Rescue: `PacketSent` берётся только с адреса реестрового EndpointV2, `Packet` /
+`RelayerParams` — только с ULN из `lz-v1/chains.json` (когда он известен), пары RelayerParams→Packet
+собираются по порядку логов, а endpoint назначения для `commitVerification` / `lzReceive` — из реестра.
+
+**Кворум RPC.** Primary в `clientPair` падает назад **только внутри своего оператора**: иначе
+primary с упавшим первым URL тихо отвечал бы с URL secondary, и «два оператора согласны» было бы
+одним оператором дважды.
 
 ## Команды
 

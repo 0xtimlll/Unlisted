@@ -48,6 +48,13 @@ describe('parseAmount', () => {
     }
   })
 
+  it('refuses the thousand-or-one comma, keeps the decimal one', () => {
+    expect(parseAmount('1,5', 18)).toBe(1_500_000_000_000_000_000n)
+    expect(() => parseAmount('1,000', 18)).toThrow(AmountError)
+    expect(() => parseAmount('1,000', 18)).toThrow(/ambiguous/)
+    expect(() => parseAmount('1,000,000', 18)).toThrow(/ambiguous/)
+    expect(() => parseAmount('1,0001', 18)).not.toThrow()
+  })
   it('rejects bad decimals', () => {
     expect(() => parseAmount('1', -1)).toThrow()
     expect(() => parseAmount('1', 1.5)).toThrow()

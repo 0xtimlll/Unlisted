@@ -4,7 +4,7 @@
  * The commit hash shown in the footer comes from the host's env or from git.
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 function commit() {
@@ -24,12 +24,21 @@ function commit() {
  * whatever HTML it finds in this folder, so leftovers can put hashes in the live policy for scripts
  * that are not in the build. One line, and the export is only ever what this build produced.
  */
-const OUT = join(new URL('..', import.meta.url).pathname, 'out')
+const ROOT = new URL('..', import.meta.url).pathname
+const OUT = join(ROOT, 'out')
 rmSync(OUT, { recursive: true, force: true })
+
+// The installed next, by path. `npx next` would resolve — and, when not installed, download and
+// run — whatever package answers to that name, and the build is the one step that must not.
+const NEXT = join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next')
+if (!existsSync(NEXT)) {
+  console.error('build: node_modules/next is not installed — run `npm ci` first')
+  process.exit(1)
+}
 
 const env = { ...process.env, NEXT_PUBLIC_COMMIT: commit(), NEXT_TELEMETRY_DISABLED: '1' }
 const steps = [
-  ['npx', ['next', 'build']],
+  [process.execPath, [NEXT, 'build']],
   // The theme has to be applied before the first paint; React will not emit that script itself.
   [process.execPath, ['scripts/inject-theme.mjs']],
   [process.execPath, ['scripts/gen-headers.mjs']],

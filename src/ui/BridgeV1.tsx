@@ -8,7 +8,7 @@
  * here, and the V2 screen is left exactly as it was.
  */
 import { isNoteCode, isStepCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState , useRef } from 'react'
 import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi'
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
@@ -251,11 +251,15 @@ export function BridgeV1({
   // Not memoised: it reads `guardInput`, which is new every render. A callback kept across renders
   // would judge the guards of the render it was made in, and "at the moment of the click" would be
   // a comment rather than a fact — the other three tabs define theirs the same way.
+  // One wallet prompt per click (a ref: isPending flips only on the next render).
+  const sending = useRef(false)
   const onSend = async () => {
     setTxError('')
     if (!planData || !dstKey) return
+    if (sending.current) return
     // Re-run every guard against the state at the moment of the click, not at the last render.
     if (!runV1Guards(guardInput).canSend) return
+    sending.current = true
     try {
       const hash = await submitV1Send(sendWrite, planData, src.chainId)
       setSent({ txHash: hash, dstKey, at: Date.now() })
@@ -278,6 +282,8 @@ export function BridgeV1({
         return
       }
       setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e))
+    } finally {
+      sending.current = false
     }
   }
 

@@ -9,6 +9,7 @@ import {
   AddressBookError,
   addressEdges,
   applyImport,
+  importable,
   confirmImported,
   ADDRESS_BOOK_VERSION,
   entriesFor,
@@ -390,6 +391,14 @@ describe('a twin in the book is refused until someone confirmed the pair is two 
     expect(p.add[0]!.distinctFrom).toBeUndefined()
     expect(Object.keys(p.twins)).toEqual([p.add[0]!.id])
     expect(applyImport(real(), p).entries).toHaveLength(1)
+  })
+
+  it('an id of `__proto__` in the file is an id, not a walk up the prototype chain', () => {
+    const p = previewImport(file([{ id: '__proto__', label: 'Odd', address: '0x5555555555555555555555555555555555555555', family: 'evm' }, { id: 'constructor', label: 'Odder', address: '0x6666666666666666666666666666666666666666', family: 'evm' }]), { ...EMPTY_BOOK, entries: [] })!
+    expect(p.add.map((e) => e.label)).toEqual(['Odd', 'Odder'])
+    // Neither row has a twin, so neither is held back — and nothing throws on the lookup.
+    expect(importable(p).map((e) => e.label)).toEqual(['Odd', 'Odder'])
+    expect(applyImport({ ...EMPTY_BOOK, entries: [] }, p).entries).toHaveLength(2)
   })
 
   it('two rows of one file that share their ends are twins of each other, and each needs its own answer', () => {

@@ -66,7 +66,6 @@ const DELIBERATE_NOTES = new Set([
   'over_outbound_capacity',
   'peer_back_mismatch',
   'peer_back_unavailable',
-  'received_lt_min',
   'recipient_is_contract',
   'recipient_lookalike',
   'recipient_pda',

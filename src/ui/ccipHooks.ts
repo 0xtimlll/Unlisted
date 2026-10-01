@@ -110,7 +110,7 @@ export type CcipCheckResult = CcipPreview
 
 export function useCcipCheck(plan: CcipPlan | undefined, ready: boolean, customRpc: Partial<Record<ChainKey, string>>) {
   return useQuery({
-    queryKey: ['ccipCheck', plan?.router, plan?.token, plan?.amount.toString(), plan?.recipient, plan?.value.toString()],
+    queryKey: ['ccipCheck', plan?.chain, plan?.router, plan?.token, plan?.sender, plan?.dst.chain, plan?.dst.selector.toString(), plan?.amount.toString(), plan?.recipient, plan?.value.toString()],
     queryFn: () => previewCcipSend(clientFor(plan!.chain, customRpc), plan!, evmByKey(plan!.chain).chainId),
     enabled: !!plan && ready,
     staleTime: 20_000,

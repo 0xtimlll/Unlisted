@@ -13,6 +13,7 @@
  */
 import type { AbiEvent, Address } from 'viem'
 import type { ReadClient } from '../../core/client'
+import { sanitizeText } from '../../core/text'
 
 /** §4 asks for 1–3 seconds for the whole panel, so no single read may sit longer than this. */
 export const READ_TIMEOUT_MS = 2_500
@@ -23,7 +24,8 @@ export type Attempt<T> = { ok: true; value: T } | { ok: false; reason: string }
 
 const shortReason = (e: unknown): string => {
   const m = e instanceof Error ? ((e as { shortMessage?: string }).shortMessage ?? e.message) : String(e)
-  return (m.split('\n')[0] ?? m).slice(0, 160)
+  // Every reason the panel prints passes through here, and a revert string is the contract's text.
+  return sanitizeText(m.split('\n')[0] ?? m, 160)
 }
 
 /** Runs `p` with a deadline. A rejection and a timeout both come back as a reason, never a throw. */

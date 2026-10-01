@@ -33,9 +33,14 @@ export type Pair = {
  */
 export function clientPair(chain: EvmChainDef, customRpc?: string): Pair {
   const primaryUrl = customRpc ?? chain.rpcUrls[0]!
+  const primaryProvider = providerOfUrl(primaryUrl)
+  // The primary falls back only within ITS OWN operator. With every registry URL behind it, a
+  // primary whose first URL was down would quietly answer from a secondary's operator, and the
+  // "two operators agree" below would be one operator agreeing with itself.
+  const primaryUrls = customRpc ? [customRpc] : chain.rpcUrls.filter((u) => providerOfUrl(u) === primaryProvider)
   return {
-    primary: makeReadClient(chain, customRpc ? customRpc : undefined),
-    primaryProvider: providerOfUrl(primaryUrl),
+    primary: makeReadClient({ ...chain, rpcUrls: primaryUrls }),
+    primaryProvider,
     endpointV2: chain.endpointV2,
     secondaries: chain.rpcUrls
       .filter((u) => u !== primaryUrl)

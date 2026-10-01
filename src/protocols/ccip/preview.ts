@@ -10,6 +10,7 @@ import type { ReadClient } from '../../core/client'
 import { decodeRevert, enrichRevert, formatRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
 import { ccipRouterAbi } from './abi'
 import { assembleCcipSendArgs, type CcipPlan } from './plan'
+import { sanitizeText } from '../../core/text'
 
 export type CcipSelfCheck = { ok: true } | { ok: false; mismatches: string[] }
 
@@ -76,7 +77,7 @@ export async function previewCcipSend(client: ReadClient, plan: CcipPlan, chainI
     const data = revertDataFromError(e)
     const looksReverted = /revert/i.test(e instanceof Error ? e.message : String(e))
     if (data === undefined && !looksReverted) {
-      const reason = (e instanceof Error ? e.message : String(e)).split('\n')[0]?.slice(0, 200) ?? ''
+      const reason = sanitizeText((e instanceof Error ? e.message : String(e)).split('\n')[0], 200)
       return { simulation: { ok: false, reason }, selfCheck, gasCostWei: undefined, rpcUnavailable: reason }
     }
     const revert =

@@ -13,6 +13,7 @@ import { hasDangerousOptions, inspectEnforcedOptions, receiveTotals, type Enforc
 import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type SendPlan } from './plan'
 import type { SourceInfo, SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
+import type { SvmDebitCheck } from './svm/plan'
 import type { PeerBackResult } from './verify'
 import { riskWarningCode, type RouteRisk } from '../protocols/lz-risk/risk'
 
@@ -49,6 +50,7 @@ export type GuardCode =
   | 'approve_wrong_spender'
   | 'simulation_missing'
   | 'simulation_failed'
+  | 'debit_mismatch'
   | 'selfcheck_missing'
   | 'selfcheck_failed'
   | 'no_executor_gas'
@@ -125,6 +127,12 @@ export type GuardInput = {
   gasCostWei: bigint | undefined
   approveIntent?: ApproveIntent
   simulation: SimulationResult | undefined
+  /**
+   * Solana source only: what the dry run debited, against the plan (svm/plan.ts judgeSvmDebit).
+   * The program called is whatever owns the store, so this is the one check that holds it to the
+   * numbers on screen. Absent on EVM, where the calldata itself fixes the amounts.
+   */
+  svmDebit?: SvmDebitCheck | undefined
   selfCheck: SelfCheckResult | undefined
   flags: readonly SuspiciousFlag[]
   /** Result of checkPeerBack() for plan.dstEid, once known. */
@@ -202,18 +210,19 @@ export function g2Peer(i: GuardInput): GuardResult {
 export function g3Recipient(i: GuardInput): GuardResult {
   if (!i.plan) return fail(3, 'plan_missing')
   if (!isBytes32(i.plan.recipient)) return fail(3, 'recipient_invalid')
-  // A look-alike of a saved address is refused before anything else about the recipient is
-  // considered: there is nothing to confirm when the address is already wrong.
-  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
   // From Solana the recipient is an EVM address: it can never be "my wallet", so it is always custom.
   // No wallet to compare against counts as "differs": this guard must not depend on guard 1 having
   // already failed to be safe. NTT and CCIP write the same line the same way.
   const differsFromWallet =
     i.plan.vm === 'svm' || i.walletAddress === undefined || !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress))
   if (differsFromWallet) {
-    // Recipient differs from wallet: must be flagged as custom AND confirmed.
+    // Recipient differs from wallet: must be flagged as custom AND confirmed. The tail is owed
+    // BEFORE the twin is noted: a look-alike is a note for the indicator, and a note must never
+    // lift the one input that is still required.
     if (!i.recipientIsCustom || !i.customRecipientConfirmed) return fail(3, 'recipient_unconfirmed')
   }
+  // A look-alike of a saved address: the shape of an address swap, said in red (core/indicator.ts).
+  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
   return ok(3)
 }
 
@@ -331,6 +340,9 @@ export function g12Spender(i: GuardInput): GuardResult {
 export function g13Simulation(i: GuardInput): GuardResult {
   if (!i.simulation) return fail(13, 'simulation_missing')
   if (!i.simulation.ok) return fail(13, 'simulation_failed', i.simulation.reason)
+  // A run that succeeds but takes more than the plan says is not a success: it is a program doing
+  // something the screen does not show, and that is a block, not a colour.
+  if (i.svmDebit && !i.svmDebit.ok) return fail(13, 'debit_mismatch', i.svmDebit.reason)
   return ok(13)
 }
 

@@ -140,7 +140,7 @@ export type NttCheckResult = NttPreview
  */
 export function useNttCheck(plan: NttPlan | undefined, ready: boolean, customRpc: Partial<Record<ChainKey, string>>) {
   return useQuery({
-    queryKey: ['nttCheck', plan?.manager, plan?.amount.toString(), plan?.recipient, plan?.value.toString()],
+    queryKey: ['nttCheck', plan?.chain, plan?.manager, plan?.token, plan?.sender, plan?.dst.chain, plan?.dst.wormholeChainId, plan?.amount.toString(), plan?.recipient, plan?.value.toString()],
     queryFn: () => previewNttTransfer(clientFor(plan!.chain, customRpc), plan!, evmByKey(plan!.chain).chainId),
     enabled: !!plan && ready,
     staleTime: 20_000,

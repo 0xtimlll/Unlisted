@@ -107,13 +107,21 @@ export class SvmRpc {
     return BigInt(r.value)
   }
 
-  /** Dry-run of a fully built transaction (base64), signatures not required. */
-  async simulateTransaction(base64Tx: string): Promise<SvmSimulation> {
-    const r = await this.call<{ value: { err: unknown; logs: string[] | null; unitsConsumed?: number } }>('simulateTransaction', [
-      base64Tx,
-      { encoding: 'base64', sigVerify: false, replaceRecentBlockhash: true, commitment: 'confirmed' },
-    ])
-    return { err: r.value.err ?? null, logs: r.value.logs ?? [], unitsConsumed: r.value.unitsConsumed ?? 0 }
+  /**
+   * Dry-run of a fully built transaction (base64), signatures not required. `accounts` asks the
+   * node for the post-state of those accounts, so the caller can see what the run would actually
+   * debit rather than trusting the program it is about to call.
+   */
+  async simulateTransaction(base64Tx: string, accounts?: readonly string[]): Promise<SvmSimulation> {
+    const cfg: Record<string, unknown> = { encoding: 'base64', sigVerify: false, replaceRecentBlockhash: true, commitment: 'confirmed' }
+    if (accounts && accounts.length > 0) cfg['accounts'] = { encoding: 'base64', addresses: [...accounts] }
+    const r = await this.call<{ value: { err: unknown; logs: string[] | null; unitsConsumed?: number; accounts?: RawAccount[] | null } }>('simulateTransaction', [base64Tx, cfg])
+    return {
+      err: r.value.err ?? null,
+      logs: r.value.logs ?? [],
+      unitsConsumed: r.value.unitsConsumed ?? 0,
+      ...(accounts && accounts.length > 0 ? { accounts: (r.value.accounts ?? []).map(toAccount) } : {}),
+    }
   }
 
   /** Recent priority fees (micro-lamports per CU) paid by transactions touching these accounts. */
@@ -135,7 +143,13 @@ export class SvmRpc {
   }
 }
 
-export type SvmSimulation = { err: unknown; logs: string[]; unitsConsumed: number }
+export type SvmSimulation = {
+  err: unknown
+  logs: string[]
+  unitsConsumed: number
+  /** Post-run state of the accounts asked for, in the order asked; absent when none were. */
+  accounts?: (SvmAccount | null)[]
+}
 
 export type SvmCompiledIx = { programIdIndex: number; accounts: number[]; data: string }
 /** The parts of `getTransaction` (json encoding) this app reads. Account indexes span static keys ‖ loaded writable ‖ loaded readonly. */

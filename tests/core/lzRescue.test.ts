@@ -144,6 +144,27 @@ describe('finding the messages in a transaction', () => {
   it('does not invent a message out of a truncated packet', () => {
     expect(findMessages([packetLog('0xdeadbeef')], 'ethereum')).toEqual([])
   })
+
+  it('takes a packet only from the committed EndpointV2 / UltraLightNode — any contract can emit the topic', () => {
+    const v1 = v1Packet({ nonce: 1n, srcV1: ETH_V1, src: SRC_OFT, dstV1: ARB_V1, dst: DST_OFT, payload: V1_PAYLOAD })
+    const v2 = v2Encoded({ nonce: 2n, srcEid: ETH_EID, sender: SRC_OFT, dstEid: ARB_EID, receiver: DST_OFT, guid: GUID, message: V2_MESSAGE })
+    const forged = (log: LogLike): LogLike => ({ ...log, address: SRC_OFT })
+    expect(findMessages([forged(packetLog(v1)), forged(packetSentLog(v2, '0x'))], 'ethereum')).toEqual([])
+    // The genuine ones beside them are still found.
+    expect(findMessages([forged(packetSentLog(v2, '0x')), packetSentLog(v2, '0x')], 'ethereum')).toHaveLength(1)
+  })
+
+  it('pairs each v1 packet with the relayer params emitted just before it, not the last ones seen', () => {
+    const a = v1Packet({ nonce: 1n, srcV1: ETH_V1, src: SRC_OFT, dstV1: ARB_V1, dst: DST_OFT, payload: V1_PAYLOAD })
+    const b = v1Packet({ nonce: 2n, srcV1: ETH_V1, src: SRC_OFT, dstV1: ARB_V1, dst: DST_OFT, payload: V1_PAYLOAD })
+    const pa = encodeAdapterParamsType1(200_000n)
+    const pb = encodeAdapterParamsType1(300_000n)
+    const found = findMessages([relayerParamsLog(pa), packetLog(a), relayerParamsLog(pb), packetLog(b)], 'ethereum')
+    expect(found.map((m) => (m.version === 'v1' ? m.adapterParams : undefined))).toEqual([pa, pb])
+    // A packet with no params of its own gets none — never a neighbour's.
+    const bare = findMessages([relayerParamsLog(pa), packetLog(a), packetLog(b)], 'ethereum')
+    expect(bare.map((m) => (m.version === 'v1' ? m.adapterParams : undefined))).toEqual([pa, undefined])
+  })
 })
 
 describe('a native drop is explained, never executed', () => {

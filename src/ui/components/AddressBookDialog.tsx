@@ -159,7 +159,7 @@ export function AddressBookDialog({
                   // A row that resembles an entry (in the book, or elsewhere in this file) is
                   // imported only with its own "different address" answer — the same question the
                   // add form asks, for the same reason. Nothing is answered on the user's behalf.
-                  const twins = preview.twins[e.id]
+                  const twins = Object.hasOwn(preview.twins, e.id) ? preview.twins[e.id] : undefined
                   const twin = twins?.[0]
                   const confirmed = confirmedTwins.has(e.id)
                   return (

@@ -8,8 +8,9 @@
  */
 import { isNoteCode, isStepCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
+import { encodeFunctionData } from 'viem'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
@@ -26,6 +27,7 @@ import { ccipRouterAbi } from '@/protocols/ccip/abi'
 import { ccipConfig } from '@/protocols/ccip/chains'
 import { ccipApprovePlan, isCcipPending, runCcipGuards, type CcipGuardInput } from '@/protocols/ccip/guards'
 import { assembleCcipSendArgs } from '@/protocols/ccip/plan'
+import { ccipSelfCheck } from '@/protocols/ccip/preview'
 import { ccipTxUrl } from '@/protocols/ccip/track'
 import { fmt, useDict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
@@ -238,7 +240,8 @@ export function CcipApp({
   }
   const pre = runCcipGuards(baseInput)
   // 14 (the fee ceiling) is a note, and the notes must not gate the simulation.
-  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok)
+  // Only a BLOCK holds the simulation back; a note is the indicator's business.
+  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok || isNoteCode(r.code))
   const check = useCcipCheck(planData, preOk, stored.customRpc)
   // `guardInput` is what the click re-runs, so it carries everything the render judged.
   const guardInput: CcipGuardInput = {
@@ -291,13 +294,23 @@ export function CcipApp({
   }
 
   const sendWrite = useWriteContract()
+  // One wallet prompt per click (a ref: isPending flips only on the next render).
+  const sending = useRef(false)
   const onSend = () => {
     setTxError('')
     const p = planData
     if (!p || !evmSrc || !cfg) return
+    if (sending.current) return
     if (!runCcipGuards(guardInput).canSend) return
     if (p.router.toLowerCase() !== cfg.router.toLowerCase()) return
     const [selector, message] = assembleCcipSendArgs(p)
+    // The same self-check the simulation ran, on the exact args that go to the wallet.
+    const sc = ccipSelfCheck(p, encodeFunctionData({ abi: ccipRouterAbi, functionName: 'ccipSend', args: [selector, message] }))
+    if (!sc.ok) {
+      setTxError(d.guard.selfcheck_failed)
+      return
+    }
+    sending.current = true
     sendWrite.writeContract(
       {
         address: p.router,
@@ -323,6 +336,9 @@ export function CcipApp({
           )
         },
         onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)),
+        onSettled: () => {
+          sending.current = false
+        },
       },
     )
   }

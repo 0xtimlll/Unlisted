@@ -98,11 +98,15 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'adapter_params_forbidden',
   'adapter_params_missing',
   'not_multiple_of_rate',
+  // OFTCore._debitView reverts with SlippageExceeded when the quoted receive is below the minimum.
+  'received_lt_min',
   'approve_amount_mismatch',
   'approve_forbidden',
   'approve_wrong_spender',
   'approve_wrong_token',
   'selfcheck_failed',
+  // Solana: the dry run debits something the plan does not name.
+  'debit_mismatch',
   'dangerous_options',
   'dangerous_adapter_params',
   'message_not_plain',

@@ -9,11 +9,12 @@ import type { Hex } from 'viem'
 import type { SelfCheckResult, SimulationResult } from '@/core/guards'
 import type { Recipient } from '@/core/recipient'
 import type { SvmDecodeResult } from '@/core/svm/decode'
-import type { SvmSendPlan } from '@/core/svm/plan'
+import type { SvmDebitCheck, SvmSendPlan } from '@/core/svm/plan'
 import type { SvmSendContext, SvmSigner } from '@/core/svm/send'
 import type { SvmSourceInfo } from '@/core/svm/source'
 import type { SuspiciousFlag } from '@/core/types'
 import { svmRpcUrls } from '@/core/svm/urls'
+import { sanitizeText } from '@/core/text'
 import { useDebounced, shortError } from './hooks'
 
 export type SvmProbe = { info: SvmSourceInfo; flags: SuspiciousFlag[] }
@@ -131,7 +132,7 @@ export function useSvmPlan(p: SvmPlanParams) {
   })
 }
 
-export type SvmCheckResult = { simulation: SimulationResult; selfCheck: SelfCheckResult; gasCostWei: bigint }
+export type SvmCheckResult = { simulation: SimulationResult; selfCheck: SelfCheckResult; gasCostWei: bigint; debit: SvmDebitCheck | undefined }
 
 /**
  * §6.13 + §6.14 for Solana: assemble the exact transaction, decode it back (SDK-free) and dry-run
@@ -141,17 +142,38 @@ export function useSvmCheck(ctx: SvmSendContext | undefined, plan: SvmSendPlan |
   return useQuery({
     queryKey: ['svmCheck', plan?.oftStore, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions, plan?.computeUnitLimit, plan?.computeUnitPrice.toString()],
     queryFn: async (): Promise<SvmCheckResult> => {
-      const [{ assembleSvmTransaction, simulateSvm, svmTxFeeLamports }, { selfCheckSvm }] = await Promise.all([import('@/core/svm/send'), import('@/core/svm/plan')])
+      const [{ assembleSvmTransaction, simulateSvm, svmTxFeeLamports }, { selfCheckSvm, judgeSvmDebit }, { decodeTokenAccount }] = await Promise.all([
+        import('@/core/svm/send'),
+        import('@/core/svm/plan'),
+        import('@/core/svm/layouts'),
+      ])
       const { tx, view } = await assembleSvmTransaction(ctx!, plan!)
       const selfCheck = selfCheckSvm(plan!, view)
       let simulation: SimulationResult
+      let debit: SvmDebitCheck | undefined
       try {
-        const sim = await simulateSvm(ctx!, tx)
-        simulation = sim.err === null ? { ok: true } : { ok: false, reason: describeSimError(sim.err, sim.logs) }
+        // The program called is whatever owns the store, so the dry run is also asked what it
+        // DOES: the sender's token account and wallet before, and as the node leaves them after.
+        const watched = [plan!.senderAta, plan!.sender]
+        const before = await ctx!.rpc.getMultipleAccounts(watched)
+        const sim = await simulateSvm(ctx!, tx, watched)
+        if (sim.err !== null) {
+          simulation = { ok: false, reason: describeSimError(sim.err, sim.logs) }
+        } else {
+          simulation = { ok: true }
+          const tokenAmount = (a: { data: Uint8Array } | null | undefined) => (a ? decodeTokenAccount(a.data).amount : 0n)
+          debit = judgeSvmDebit({
+            plan: plan!,
+            tokenBefore: tokenAmount(before[0]),
+            tokenAfter: sim.accounts ? tokenAmount(sim.accounts[0]) : undefined,
+            lamportsBefore: before[1]?.lamports ?? 0n,
+            lamportsAfter: sim.accounts ? (sim.accounts[1]?.lamports ?? 0n) : undefined,
+          })
+        }
       } catch (e) {
         simulation = { ok: false, reason: shortError(e) }
       }
-      return { simulation, selfCheck, gasCostWei: svmTxFeeLamports(plan!) }
+      return { simulation, selfCheck, gasCostWei: svmTxFeeLamports(plan!), debit }
     },
     enabled: !!ctx && !!plan && ready,
     staleTime: 20_000,
@@ -160,8 +182,9 @@ export function useSvmCheck(ctx: SvmSendContext | undefined, plan: SvmSendPlan |
 }
 
 function describeSimError(err: unknown, logs: string[]): string {
+  // Program logs are text the program chose; same rule as a revert string (core/text.ts).
   const last = [...logs].reverse().find((l) => /Error|failed|insufficient/i.test(l))
-  return `${JSON.stringify(err)}${last ? ` — ${last}` : ''}`.slice(0, 200)
+  return sanitizeText(`${JSON.stringify(err)}${last ? ` — ${last}` : ''}`, 200)
 }
 
 /** The send itself: sign in the wallet, submit through the SDK builder (core/svm/send.ts). */

@@ -8,8 +8,9 @@
  */
 import { isNoteCode, isStepCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
+import { encodeFunctionData } from 'viem'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
@@ -24,7 +25,7 @@ import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAf
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { nttManagerAbi } from '@/protocols/wormhole-ntt/abi'
 import { isNttPending, nttApprovePlan, runNttGuards, type NttGuardInput } from '@/protocols/wormhole-ntt/guards'
-import { assembleNttTransferArgs } from '@/protocols/wormhole-ntt/plan'
+import { assembleNttTransferArgs, nttSelfCheck } from '@/protocols/wormhole-ntt/plan'
 import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { fmt, useDict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
@@ -234,7 +235,8 @@ export function NttApp({
   }
   const pre = runNttGuards(baseInput)
   // 14 (the fee ceiling) is a note, and the notes must not gate the simulation.
-  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok)
+  // Only a BLOCK holds the simulation back; a note is the indicator's business.
+  const preOk = pre.results.filter((r) => r.id !== 8 && r.id !== 9 && r.id !== 12 && r.id !== 13 && r.id !== 14).every((r) => r.ok || isNoteCode(r.code))
   const check = useNttCheck(planData, preOk, stored.customRpc)
   // `guardInput` is what the click re-runs, so it carries everything the render judged.
   const guardInput: NttGuardInput = {
@@ -287,13 +289,23 @@ export function NttApp({
   }
 
   const sendWrite = useWriteContract()
+  // One wallet prompt per click (a ref: isPending flips only on the next render).
+  const sending = useRef(false)
   const onSend = () => {
     setTxError('')
     const p = planData
     if (!p || !evmSrc || !verified) return
+    if (sending.current) return
     if (!runNttGuards(guardInput).canSend) return
     if (p.manager !== verified.manager) return
     const a = assembleNttTransferArgs(p)
+    // The same self-check the simulation ran, on the exact args that go to the wallet.
+    const sc = nttSelfCheck(p, encodeFunctionData({ abi: nttManagerAbi, functionName: 'transfer', args: [a[0], a[1], a[2], a[3], a[4], a[5]] }))
+    if (!sc.ok) {
+      setTxError(d.guard.selfcheck_failed)
+      return
+    }
+    sending.current = true
     sendWrite.writeContract(
       {
         address: p.manager,
@@ -320,6 +332,9 @@ export function NttApp({
           )
         },
         onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)),
+        onSettled: () => {
+          sending.current = false
+        },
       },
     )
   }

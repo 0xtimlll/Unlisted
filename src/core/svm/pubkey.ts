@@ -18,6 +18,13 @@ export const PROGRAM = {
   lookupTable: 'AddressLookupTab1e1111111111111111111111111',
   /** Metaplex Token Metadata: the on-chain name/symbol registry for SPL mints. */
   metadata: 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s',
+  /**
+   * LayerZero EndpointV2 on Solana mainnet — the Solana counterpart of `endpointV2` in the EVM
+   * registry. Read back on 2026-10-01 from two operators (api.mainnet-beta, publicnode): an
+   * executable account under BPFLoaderUpgradeab1e. An OFT Store that names any other endpoint
+   * program is not a LayerZero OFT, whatever else it decodes as.
+   */
+  lzEndpointV2: '76y77prsiCMvXMjuoZ5VRrhG5qYBrUMYTE5WgHqgjEn6',
 } as const
 
 export type Pubkey = Uint8Array & { readonly length: 32 }

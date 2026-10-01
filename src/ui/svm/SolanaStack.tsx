@@ -8,6 +8,7 @@ import { WalletProvider, useWallet } from '@solana/wallet-adapter-react'
 import { WalletReadyState } from '@solana/wallet-adapter-base'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SvmWallet } from './context'
+import { shortError } from '../hooks'
 
 const STORAGE_KEY = 'unlisted:solana-wallet'
 
@@ -30,7 +31,7 @@ function Bridge({ onState }: { onState: (s: SvmWallet) => void }) {
   useEffect(() => {
     if (pending.current && w.wallet?.adapter.name === pending.current && !w.connected && !w.connecting) {
       pending.current = null
-      w.connect().catch((e: unknown) => setError(e instanceof Error ? e.message.slice(0, 120) : String(e)))
+      w.connect().catch((e: unknown) => setError(shortError(e)))
     }
   }, [w])
 

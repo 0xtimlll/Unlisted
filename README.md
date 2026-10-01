@@ -211,6 +211,16 @@ a CCIP transfer have no runner, so their chip is coloured by their own tab's che
 details say so — **"the eight route checks do not assess this route"** — so an OK on one tab cannot
 be mistaken for an OK the other tab never gave.
 
+**The destination's endpoint is the registry's, never the contract's claim.** The far-side contract is
+reached through the source's `peers()`, so everything it says — its `endpoint()`, its events — is the
+examined party's own word. The nonce, the receive library and the simulated `msg.sender` all come
+from the committed EndpointV2 of the destination chain; a contract wired to anything else fails the
+peers check. Two more things are read where the deployer cannot write them: the **fee** is checked
+against `EndpointV2.quote` for this exact packet, and an OFT whose `quoteSend` asks for more is red
+with the difference named — that is what a pair of real-looking OFTs built to skim a "fee" looks like;
+and **history** is the endpoint's `inboundNonce`, so a contract that logs deliveries the endpoint
+never made is red, not "delivered yesterday".
+
 **An adapter is judged by what its deployer cannot write.** An OFTAdapter is a lockbox the real
 token knows nothing about, so its own `peers()` and `token()` prove nothing. Two numbers are read
 from contracts the deployer does not control — the share of the token's supply the adapter holds
@@ -329,17 +339,18 @@ Every event signature, error signature, chain id and selector used for this come
 
 ## Security model
 
-**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign five things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the LayerZero v1 OFT's `sendFrom`, the NttManager `transfer`, the CCIP Router's `ccipSend`, the four rescue calls above, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code: it confines the Solana SDK and the single submit call to one file, allows `transfer` and `ccipSend` only inside their own protocol modules and the one screen each that submits them, allows `sendFrom` only inside the v1 module (the screen hands it the wallet writer and never names the function), permits `lzReceive` and `nonblockingLzReceive` to be named only inside the risk module — which is separately asserted to contain no write primitive at all, because it simulates a destination credit and must never submit one — confines the four rescue calls to the rescue module and refuses any amount written into it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
+**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign five things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the LayerZero v1 OFT's `sendFrom`, the NttManager `transfer`, the CCIP Router's `ccipSend`, the four rescue calls above, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code — including the raw-transaction family under every name (`sendTransaction*`, `writeContracts`, `eth_send*`, `wallet_sendCalls`, a raw `provider.request`), a `functionName` that is not a string literal inside the write call's own parentheses, and code hidden after a comment on the same line; the gate itself is unit-tested against fixtures. It confines the Solana SDK and the single submit call to one file, allows `transfer` and `ccipSend` only inside their own protocol modules and the one screen each that submits them, allows `sendFrom` only inside the v1 module (the screen hands it the wallet writer and never names the function), permits `lzReceive` and `nonblockingLzReceive` to be named only inside the risk module — which is separately asserted to contain no write primitive at all, because it simulates a destination credit and must never submit one — confines the four rescue calls to the rescue module and refuses any amount written into it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
 
-**What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee).
+**What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee). On Solana the program called is whatever owns the OFT Store — a fact read from the chain, not a list — so the store must name LayerZero's own endpoint program, and the dry run is asked not only whether it passes but **what it debits**: the post-run state of your token account and wallet is read back from the node, and a run that takes anything other than exactly the amount from the token account, or more SOL than the fee, the quoted LayerZero fee and a small rent allowance, holds the button.
 
 **It checks the bridge, not just the form.**
 - The destination-side peer must name your contract back — a look-alike adapter can point at the real token, but the real bridge will never point at the fake.
-- Contract facts are read from two independent RPC providers; if they disagree, nothing is sent.
+- Contract facts are read from two independent RPC providers; if they disagree, nothing is sent. The primary client falls back only within its own operator, so a cross-check can never be one operator agreeing with itself.
 - Options copied from a sample transaction are stripped down to a receive-gas hint; `nativeDrop` and `compose` payloads (a way to route your fee to a stranger) are dropped and shown in red.
 - **The options the contract enforces are read too**, and printed in full on the review screen. `extraOptions` is the field this app fills in itself; `enforcedOptions` is the one the OFT appends to every send and you pay for — an enforced `nativeDrop` quietly routes native coin to an address the contract chose, on every transfer. It is decoded, named and warned about rather than refused, because a legitimate OFT may enforce something unexpected and a working route should not be blocked over it.
 - **The fee has a ceiling.** A quote cannot be checked against anything off-chain — `quoteSend` is whatever the contract, or whatever RPC answered for it, chose to return, and `msg.value` follows it. Each chain carries a limit an order of magnitude above what these routes actually cost; above it the route indicator turns yellow and names the number, so it is read before it is paid.
-- **A token does not get to choose how its own name is drawn.** Symbols and names are stripped of bidi overrides, isolates, zero-width characters and the BOM, so `USDC<RLO>toor` cannot render as `USDCroot` and an invisible space cannot clone a symbol you trust. Ordinary non-ASCII is kept and flagged instead — honest tokens use it.
+- **A token does not get to choose how its own name is drawn.** Symbols and names — on EVM and on Solana (Metaplex) — revert reasons, program logs and foreign events' strings are stripped of bidi overrides, isolates, zero-width characters and the BOM, so `USDC<RLO>toor` cannot render as `USDCroot` and an invisible space cannot clone a symbol you trust. Ordinary non-ASCII is kept and flagged instead — honest tokens use it.
+- **An amount is never guessed.** `1,5` is one and a half; `1,000` is refused with the ask to use a dot, because it is a thousand to half the world and one to a parser, and a thousand-fold mistake in the amount field is not a case to guess.
 - For lock/unlock adapters the app shows how much the adapter holds and flags an empty one.
 - Slippage is capped at 5%. Sending to an address other than your own wallet requires an explicit switch and re-typing the address's last characters.
 
@@ -364,7 +375,7 @@ intentional, which invariants must never weaken, and what is known and left open
 ```sh
 npm ci                  # `ignore-scripts` is on: no dependency runs code while installing
 npm run dev             # http://localhost:3000
-npm test                # write-whitelist check + unit tests
+npm test                # write-whitelist check + unit tests (the whitelist gate is itself tested against fixtures)
 npm run audit           # npm audit against the reviewed exception list
 npm run build           # static export to out/ + security headers
 npm start               # serve out/ with the same headers as production

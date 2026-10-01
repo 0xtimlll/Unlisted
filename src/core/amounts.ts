@@ -4,7 +4,7 @@
 
 export class AmountError extends Error {
   constructor(
-    public readonly code: 'empty' | 'invalid' | 'negative' | 'too_many_decimals',
+    public readonly code: 'empty' | 'invalid' | 'negative' | 'too_many_decimals' | 'ambiguous',
     message?: string,
   ) {
     super(message ?? code)
@@ -27,7 +27,12 @@ export function parseAmount(input: string, decimals: number): bigint {
   let s = input.trim()
   if (s === '') throw new AmountError('empty')
   if (s.startsWith('-')) throw new AmountError('negative')
-  s = s.replace(/[\s_]/g, '').replace(',', '.')
+  s = s.replace(/[\s_]/g, '')
+  // A comma is a decimal separator here ("1,5"). But "1,000" is a thousand to half the world and
+  // exactly one to this parser, and a thousand-fold mistake in the one field that sets the amount
+  // is not a case to guess: it is refused with the ask to use a dot. Two commas are not a number.
+  if ((s.match(/,/g) ?? []).length > 1 || /,\d{3}$/.test(s)) throw new AmountError('ambiguous')
+  s = s.replace(',', '.')
   if (s.startsWith('.')) s = '0' + s
   if (s.endsWith('.')) s = s.slice(0, -1)
   const m = AMOUNT_RE.exec(s)

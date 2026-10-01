@@ -156,7 +156,7 @@ export function useCheck(
   const client = useReadClient(src)
   return useQuery({
     queryKey: [
-      'check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions,
+      'check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.amounts.minAmountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions,
       approve ? `${approve.token}:${approve.spender}:${approve.amount}` : '', token ?? '',
     ],
     queryFn: async (): Promise<CheckResult> => {
@@ -337,23 +337,58 @@ export function isUserRejection(e: unknown): boolean {
  * everything that depends on the mint is then unknown, so the UI warns and lets the user decide
  * rather than refusing a route the EVM side's own quote may well prove is fine.
  */
-export type SvmDestination =
+export type SvmDestination = (
   | { recognised: true; info: SvmOftInfo; peerBack: PeerBackResult }
   | { recognised: false; store: SvmUnknownStore; peerBack: PeerBackResult }
+) & {
+  /** A second, independent operator read the same accounts (core/quorum.ts discipline, Solana form). */
+  crossChecked: boolean
+}
 
-/** §4.2 discovery from the raw bytes32 peer, plus the svm form of guard 17. */
+/** bigint-safe structural equality for two discovery results. */
+function sameJson(a: unknown, b: unknown): boolean {
+  const r = (_k: string, v: unknown) => (typeof v === 'bigint' ? `${v}n` : v)
+  return JSON.stringify(a, r) === JSON.stringify(b, r)
+}
+
+/**
+ * §4.2 discovery from the raw bytes32 peer, plus the svm form of guard 17.
+ *
+ * Every URL is asked on its own (`rpc.single`), the first answer is used and the others must
+ * match it byte for byte — the same discipline the source-side probe follows. A failover client
+ * would have answered from whichever URL was up and called that a cross-check.
+ */
 export function useSvmDestination(enabled: boolean, peer: Hex | undefined, srcEid: number, srcOft: Address | undefined, customRpc: string | undefined) {
   return useQuery({
     queryKey: ['svmDest', peer, srcEid, srcOft, customRpc ?? ''],
     queryFn: async (): Promise<SvmDestination> => {
-      const [{ SvmRpc }, { discoverSvmOft, checkPeerBackSvm, checkPeerBackUnknown }] = await Promise.all([
-        import('@/core/svm/rpc'),
+      const [{ SvmRpc, SvmDiscoverError }, { discoverSvmOft, checkPeerBackSvm, checkPeerBackUnknown }, { providerOfUrl }] = await Promise.all([
+        import('@/core/svm/rpc').then(async (m) => ({ ...m, ...(await import('@/core/svm/errors')) })),
         import('@/core/svm/discover'),
+        import('@/core/chains'),
       ])
       const rpc = new SvmRpc(svmRpcUrls(customRpc))
-      const found = await discoverSvmOft(rpc, peer!, srcEid)
-      if (!found.recognised) return { recognised: false, store: found.store, peerBack: checkPeerBackUnknown(found.store, srcOft!) }
-      return { recognised: true, info: found.info, peerBack: checkPeerBackSvm(found.info, srcOft!) }
+      const views = await Promise.allSettled(rpc.urls.map((u) => discoverSvmOft(rpc.single(u), peer!, srcEid)))
+      const firstIdx = views.findIndex((v) => v.status === 'fulfilled')
+      const first = views[firstIdx]
+      if (!first || first.status !== 'fulfilled') {
+        const e = (views[0] as PromiseRejectedResult | undefined)?.reason
+        throw e instanceof Error ? e : new Error(String(e))
+      }
+      const usedProvider = providerOfUrl(rpc.urls[firstIdx] ?? '')
+      let crossChecked = false
+      views.forEach((v, i) => {
+        if (i === firstIdx) return
+        if (v.status === 'fulfilled') {
+          if (!sameJson(v.value, first.value)) throw new SvmDiscoverError('rpc_mismatch', 'RPC providers disagree about the Solana destination')
+          if (providerOfUrl(rpc.urls[i] ?? '') !== usedProvider) crossChecked = true
+        } else if (v.reason instanceof SvmDiscoverError && v.reason.code === 'store_missing') {
+          throw new SvmDiscoverError('rpc_mismatch', 'another RPC: store_missing')
+        }
+      })
+      const found = first.value
+      if (!found.recognised) return { recognised: false, store: found.store, peerBack: checkPeerBackUnknown(found.store, srcOft!), crossChecked }
+      return { recognised: true, info: found.info, peerBack: checkPeerBackSvm(found.info, srcOft!), crossChecked }
     },
     enabled: enabled && !!peer && !!srcOft,
     staleTime: 60_000,

@@ -46,7 +46,25 @@ const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi
  * a compromised dependency, a bad plugin — would be granted permission to run by this script,
  * automatically and silently. An unrecognised inline script fails the build instead.
  */
-const ALLOWED_INLINE = /^\s*(\(self\.__next_f=self\.__next_f\|\|\[\]\)|self\.__next_f)\.push\(/
+const INLINE_PREFIX = /^\s*(?:\(self\.__next_f=self\.__next_f\|\|\[\]\)|self\.__next_f)\.push\(/
+
+/**
+ * The WHOLE body has to be the bootstrap: the prefix above, one JSON array of numbers and strings,
+ * the closing paren and nothing else. A prefix test alone would have accepted
+ * `self.__next_f.push([0]); <anything>` — the very injection this check exists to refuse.
+ */
+function isAllowedInline(body) {
+  const m = INLINE_PREFIX.exec(body)
+  if (!m) return false
+  const rest = body.slice(m[0].length).trimEnd().replace(/;$/, '').trimEnd()
+  if (!rest.endsWith(')')) return false
+  try {
+    const arg = JSON.parse(rest.slice(0, -1))
+    return Array.isArray(arg) && arg.every((x) => typeof x === 'number' || typeof x === 'string')
+  } catch {
+    return false
+  }
+}
 
 const hashes = new Set()
 const rejected = []
@@ -58,7 +76,7 @@ for (const f of htmlFiles(OUT)) {
     const body = m[2] ?? ''
     if (/type=["'](application\/json|application\/ld\+json)["']/i.test(attrs)) continue // data, not code
     if (body.trim() === '') continue
-    if (!ALLOWED_INLINE.test(body)) {
+    if (!isAllowedInline(body)) {
       rejected.push(`${f.slice(OUT.length + 1)}: ${body.trim().slice(0, 120)}`)
       continue
     }
@@ -87,6 +105,19 @@ const WALLETCONNECT = process.env.NEXT_PUBLIC_WC_PROJECT_ID
     ]
   : []
 const extra = (process.env.CSP_CONNECT_EXTRA ?? '').split(/\s+/).filter(Boolean)
+for (const e of extra) {
+  let u
+  try {
+    u = new URL(e)
+  } catch {
+    u = undefined
+  }
+  // Exactly an https origin: no wildcard, no scheme-only source, no path that a later edit widens.
+  if (!u || u.protocol !== 'https:' || u.origin !== e || e.includes('*')) {
+    console.error(`gen-headers: CSP_CONNECT_EXTRA entry is not an https origin: ${JSON.stringify(e)}`)
+    process.exit(1)
+  }
+}
 // Registry hosts + known RPC providers (wildcards) — the same list validateRpcUrl() enforces.
 const connect = ["'self'", ...cspConnectSources(), LZ_SCAN_API, WORMHOLESCAN_API, new URL(SOURCIFY_SERVER).origin, ...WALLETCONNECT, ...extra]
 

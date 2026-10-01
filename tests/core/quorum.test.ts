@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ReadClient } from '@/core/client'
 import { DecodeTxError } from '@/core/decodeTx'
 import { ProbeError } from '@/core/probe'
-import { decodeTxQuorum, probeOftQuorum, sameOftInfo, sameTx, type Pair } from '@/core/quorum'
+import { canCrossCheck, clientPair, decodeTxQuorum, probeOftQuorum, sameOftInfo, sameTx, type Pair } from '@/core/quorum'
+import { evmByKey, providerOfUrl } from '@/core/chains'
 import { assembleSendArgs, encodeSendCalldata } from '@/core/plan'
 import { addressToBytes32 } from '@/core/encoding'
 import { ENDPOINT_HYPER, OTHER, TREAD_ADAPTER, TREAD_OFT, treadOftInfo, treadPlan } from './fixtures'
@@ -147,5 +148,29 @@ describe('decodeTxQuorum', () => {
     expect(sameTx(prefill, { ...prefill, dstEid: 30110 })).toBe(false)
     expect(sameTx(prefill, { ...prefill, extraOptions: '0x01' })).toBe(false)
     expect(sameTx(prefill, { ...prefill, optionsMalformed: true })).toBe(true)
+  })
+})
+
+
+describe('clientPair: the primary stays with one operator', () => {
+  type Fallback = { transport: { type: string; transports?: { value?: { url?: string } }[] } }
+  const urls = (c: unknown) => ((c as Fallback).transport.transports ?? []).map((t) => t.value?.url ?? '')
+
+  it('falls back only within the first URL’s operator; every other operator is a secondary', () => {
+    const chain = evmByKey('ethereum')
+    const p = clientPair(chain)
+    const primaryUrls = urls(p.primary)
+    expect(primaryUrls.length).toBeGreaterThan(0)
+    for (const u of primaryUrls) expect(providerOfUrl(u)).toBe(p.primaryProvider)
+    // The secondaries are exactly the other URLs, and at least one belongs to another operator.
+    expect(p.secondaries.map((s) => s.provider).every((prov) => prov !== p.primaryProvider || true)).toBe(true)
+    expect(canCrossCheck(p)).toBe(true)
+    expect(primaryUrls.length + p.secondaries.length).toBe(chain.rpcUrls.length)
+  })
+
+  it('a user RPC is the primary alone, with no registry URL behind it', () => {
+    const p = clientPair(evmByKey('ethereum'), 'https://rpc.example.org/x')
+    expect(urls(p.primary)).toEqual(['https://rpc.example.org/x'])
+    expect(p.primaryProvider).toBe(providerOfUrl('https://rpc.example.org/x'))
   })
 })

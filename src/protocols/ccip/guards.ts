@@ -126,10 +126,10 @@ export function c3Recipient(i: CcipGuardInput): CcipGuardResult {
   const r = i.plan.recipient
   if (!/^0x[0-9a-fA-F]{40}$/.test(r)) return fail(3, 'recipient_invalid')
   const differs = i.walletAddress === undefined || !isAddressEqual(r, i.walletAddress)
-  // A look-alike of a saved address is refused before anything else about the recipient is
-  // considered: there is nothing to confirm when the address is already wrong.
-  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
+  // The tail is owed BEFORE the twin is noted: a look-alike is a note for the indicator, and a
+  // note must never lift the one input that is still required.
   if (differs && (!i.recipientIsCustom || !i.customRecipientConfirmed)) return fail(3, 'recipient_unconfirmed')
+  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
   return ok(3)
 }
 

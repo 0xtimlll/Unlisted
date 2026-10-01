@@ -19,6 +19,7 @@ import { erc20Abi, oftAbi } from '../abi'
 import type { ReadClient } from '../client'
 import type { SendArgs } from '../plan'
 import { decodeRevert, enrichRevert, formatRevert, revertDataFromError, type DecodedRevert } from './revert'
+import { sanitizeText } from '../text'
 
 export type SimStep = 'approve' | 'send'
 
@@ -129,5 +130,6 @@ function looksLikeRevert(e: unknown): boolean {
 
 function firstLine(e: unknown): string {
   const anyE = e as { shortMessage?: string; details?: string; message?: string }
-  return (anyE.shortMessage ?? anyE.details ?? anyE.message ?? String(e)).split('\n')[0]?.slice(0, 200) ?? ''
+  // An RPC's error text is a string somebody else chose, shown next to the amount (core/text.ts).
+  return sanitizeText((anyE.shortMessage ?? anyE.details ?? anyE.message ?? String(e)).split('\n')[0], 200)
 }

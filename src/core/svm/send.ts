@@ -241,9 +241,9 @@ export function viewOf(tx: Transaction, tables: AddressLookupTableInput[]): SvmT
   }
 }
 
-export async function simulateSvm(ctx: SvmSendContext, tx: Transaction): Promise<SvmSimulation> {
+export async function simulateSvm(ctx: SvmSendContext, tx: Transaction, accounts?: readonly string[]): Promise<SvmSimulation> {
   const bytes = ctx.umi.transactions.serialize(tx)
-  return ctx.rpc.simulateTransaction(base64.deserialize(bytes)[0])
+  return ctx.rpc.simulateTransaction(base64.deserialize(bytes)[0], accounts)
 }
 
 /**

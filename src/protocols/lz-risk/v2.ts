@@ -18,9 +18,10 @@
  */
 import { encodeFunctionData, encodePacked, keccak256, parseAbi, type Address, type Hex } from 'viem'
 import { erc20Abi, oftAbi } from '../../core/abi'
-import { byEid, type ChainKey } from '../../core/chains'
+import { byEid, evmByKey, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
 import { sameAddress } from '../../core/encoding'
+import { sanitizeText } from '../../core/text'
 import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
 import { lockedBps, type AdapterStanding } from './adapters'
@@ -43,6 +44,11 @@ const v2Abi = parseAbi([
   'function getUlnConfig(address _oapp, uint32 _remoteEid) view returns (UlnConfig)',
   'function lzReceive(Origin _origin, bytes32 _guid, bytes _message, address _executor, bytes _extraData) payable',
   'function paused() view returns (bool)',
+  // ILayerZeroEndpointV2.quote: what the ENDPOINT charges for this exact packet. OFTCore._quote
+  // returns this number unchanged; an OFT whose quoteSend asks for more keeps the difference.
+  'struct MessagingParams { uint32 dstEid; bytes32 receiver; bytes message; bytes options; bool payInLzToken; }',
+  'struct MessagingFee { uint256 nativeFee; uint256 lzTokenFee; }',
+  'function quote(MessagingParams _params, address _sender) view returns (MessagingFee)',
   'event OFTReceived(bytes32 indexed guid, uint32 srcEid, address indexed toAddress, uint256 amountReceivedLD)',
   'event OFTSent(bytes32 indexed guid, uint32 dstEid, address indexed fromAddress, uint256 amountSentLD, uint256 amountReceivedLD)',
   'event PeerSet(uint32 eid, bytes32 peer)',
@@ -60,6 +66,34 @@ export type V2RiskContext = {
 }
 
 type Outcome = { state: CheckState; extra?: Partial<RiskInput> }
+
+/**
+ * The destination's EndpointV2, from the committed registry — never from `dstOft.endpoint()`.
+ *
+ * CLAUDE.md rule 3: the destination contract is reached through the source's `peers()`, so
+ * everything it says, its endpoint included, is the examined party's own claim. Asking a fake
+ * endpoint for `inboundNonce`, reading the receive library from it and simulating the credit
+ * "from" it would let one deployer write both halves of every check. The registry address is the
+ * one thing here the deployer cannot write, so the nonce, the libraries and the simulated
+ * `msg.sender` all come from it, and a destination wired to anything else fails on its own terms.
+ */
+function registryEndpoint(c: V2RiskContext): Address {
+  return evmByKey(c.dstChain).endpointV2
+}
+
+/**
+ * OAppOptionsType3.combineOptions, read here rather than imported (this module must not depend on
+ * the encoder whose output it judges): the enforced blob alone when nothing extra was given, the
+ * extra blob alone when nothing is enforced, otherwise enforced ++ extra minus its 2-byte type.
+ */
+export function combineOptionsV2(enforced: Hex, extra: Hex): Hex {
+  const e = enforced.slice(2)
+  const x = extra.slice(2)
+  if (e.length === 0) return extra
+  if (x.length === 0) return enforced
+  if (!x.startsWith('0003')) return extra
+  return `0x${e}${x.slice(4)}` as Hex
+}
 
 /** OFTMsgCodec.encode with no compose payload: sendTo ++ amountSD, 40 bytes. */
 export function v2Message(plan: EvmSendPlan, conversionRate: bigint): Hex {
@@ -81,17 +115,43 @@ async function checkPeers(c: V2RiskContext): Promise<Outcome> {
   if (back.value.toLowerCase() !== ours) {
     return { state: { status: 'fail', reason: `the destination names ${back.value} as its peer for this chain, not this contract` } }
   }
-  return { state: { status: 'pass' } }
+  // A destination wired to some other endpoint can never be delivered to by LayerZero's: the real
+  // endpoint's lzReceive call would fail OAppReceiver's `msg.sender == endpoint`.
+  const dstEndpoint = await attempt(c.dstClient.readContract({ address: c.dstOft, abi: oftAbi, functionName: 'endpoint' }), undefined, 'destination endpoint')
+  if (dstEndpoint.ok && !sameAddress(dstEndpoint.value, registryEndpoint(c))) {
+    return {
+      state: { status: 'fail', reason: `the destination contract is wired to ${dstEndpoint.value}, not to LayerZero's endpoint on ${c.dstChain} (${registryEndpoint(c)})` },
+    }
+  }
+  // The fee. OFTCore returns the endpoint's quote unchanged, so a quoteSend above it is money the
+  // contract keeps: a pair of real-looking OFTs whose only purpose is the "fee" passes every other
+  // check here. The endpoint is the committed one, asked on the source chain for this exact packet.
+  const options = combineOptionsV2(c.info.enforced[c.plan.dstEid] ?? '0x', c.plan.extraOptions)
+  const endpointFee = await attempt(
+    c.srcClient.readContract({
+      address: c.info.endpoint,
+      abi: v2Abi,
+      functionName: 'quote',
+      args: [{ dstEid: c.plan.dstEid, receiver: route.peer, message: v2Message(c.plan, c.info.conversionRate), options, payInLzToken: false }, c.info.oft],
+    }),
+    undefined,
+    'endpoint quote',
+  )
+  if (!endpointFee.ok) return { state: { status: 'pass', note: `peers match; the fee could not be checked against the endpoint (${endpointFee.reason})` } }
+  if (c.plan.quote.nativeFee > endpointFee.value.nativeFee) {
+    return {
+      state: {
+        status: 'fail',
+        reason: `the contract charges ${c.plan.quote.nativeFee} wei for a message the endpoint prices at ${endpointFee.value.nativeFee} — the difference stays with the contract`,
+      },
+    }
+  }
+  return { state: { status: 'pass', note: 'peers match; the fee is the endpoint’s own quote' } }
 }
 
 /** 2. The nonces are level, or the gap is young enough to be traffic rather than a stoppage. */
 async function checkPath(c: V2RiskContext): Promise<Outcome> {
-  const dstEndpoint = await attempt(
-    c.dstClient.readContract({ address: c.dstOft, abi: oftAbi, functionName: 'endpoint' }),
-    undefined,
-    'destination endpoint',
-  )
-  if (!dstEndpoint.ok) return { state: { status: 'unchecked', reason: dstEndpoint.reason } }
+  const dstEndpoint = registryEndpoint(c)
   const peerBytes32 = `0x${'0'.repeat(24)}${c.info.oft.slice(2).toLowerCase()}` as Hex
   const dstBytes32 = `0x${'0'.repeat(24)}${c.dstOft.slice(2).toLowerCase()}` as Hex
 
@@ -102,7 +162,7 @@ async function checkPath(c: V2RiskContext): Promise<Outcome> {
       'outbound nonce',
     ),
     attempt(
-      c.dstClient.readContract({ address: dstEndpoint.value, abi: v2Abi, functionName: 'inboundNonce', args: [c.dstOft, c.plan.srcEid, peerBytes32] }),
+      c.dstClient.readContract({ address: dstEndpoint, abi: v2Abi, functionName: 'inboundNonce', args: [c.dstOft, c.plan.srcEid, peerBytes32] }),
       undefined,
       'inbound nonce',
     ),
@@ -136,11 +196,7 @@ async function checkPath(c: V2RiskContext): Promise<Outcome> {
 
 /** 3. The ULN configs agree, and the DVNs are ones LayerZero has not deprecated. */
 async function checkConfig(c: V2RiskContext): Promise<Outcome> {
-  const dstEndpoint = await attempt(
-    c.dstClient.readContract({ address: c.dstOft, abi: oftAbi, functionName: 'endpoint' }),
-    undefined,
-    'destination endpoint',
-  )
+  const dstEndpoint = registryEndpoint(c)
   const sendLib = await attempt(
     c.srcClient.readContract({ address: c.info.endpoint, abi: v2Abi, functionName: 'getSendLibrary', args: [c.info.oft, c.plan.dstEid] }),
     undefined,
@@ -161,15 +217,9 @@ async function checkConfig(c: V2RiskContext): Promise<Outcome> {
     return { state: { status: 'fail', reason: `deprecated DVN on the send side: ${names}` }, extra: { deprecatedVerifier: true } }
   }
 
-  // The receive side, read on the destination's own chain and its own library.
-  if (!dstEndpoint.ok) {
-    return {
-      state: { status: 'unchecked', reason: dstEndpoint.reason },
-      extra: { unknownDvnSet: verdict.unknown.length > 0 },
-    }
-  }
+  // The receive side, read on the destination's own chain from the registry's endpoint.
   const recvLib = await attempt(
-    c.dstClient.readContract({ address: dstEndpoint.value, abi: v2Abi, functionName: 'getReceiveLibrary', args: [c.dstOft, c.plan.srcEid] }),
+    c.dstClient.readContract({ address: dstEndpoint, abi: v2Abi, functionName: 'getReceiveLibrary', args: [c.dstOft, c.plan.srcEid] }),
     undefined,
     'receive library',
   )
@@ -267,15 +317,10 @@ export function compareUlnShape(a: Uln, b: Uln, srcChain: ChainKey, dstChain: Ch
 
 /** 4. Execute the credit on the destination OApp, called from its endpoint. */
 async function checkDeliverySim(c: V2RiskContext): Promise<Outcome> {
-  const dstEndpoint = await attempt(
-    c.dstClient.readContract({ address: c.dstOft, abi: oftAbi, functionName: 'endpoint' }),
-    undefined,
-    'destination endpoint',
-  )
-  if (!dstEndpoint.ok) return { state: { status: 'unchecked', reason: dstEndpoint.reason } }
+  const dstEndpoint = registryEndpoint(c)
   const peerBytes32 = `0x${'0'.repeat(24)}${c.info.oft.slice(2).toLowerCase()}` as Hex
   const nonce = await attempt(
-    c.dstClient.readContract({ address: dstEndpoint.value, abi: v2Abi, functionName: 'inboundNonce', args: [c.dstOft, c.plan.srcEid, peerBytes32] }),
+    c.dstClient.readContract({ address: dstEndpoint, abi: v2Abi, functionName: 'inboundNonce', args: [c.dstOft, c.plan.srcEid, peerBytes32] }),
     undefined,
     'inbound nonce',
   )
@@ -290,7 +335,7 @@ async function checkDeliverySim(c: V2RiskContext): Promise<Outcome> {
     functionName: 'lzReceive',
     args: [origin, guid, v2Message(c.plan, c.info.conversionRate), c.dstOft, '0x'],
   })
-  const call = { account: dstEndpoint.value, to: c.dstOft, data } as const
+  const call = { account: dstEndpoint, to: c.dstOft, data } as const
   const sim = await attempt(c.dstClient.call(call), undefined, 'destination credit')
   if (!sim.ok) {
     return isTransportFailure(sim.reason)
@@ -373,11 +418,38 @@ async function checkLimits(c: V2RiskContext): Promise<Outcome> {
 
 /** 7. Has anything ever arrived on this route? */
 async function checkHistory(c: V2RiskContext): Promise<Outcome> {
-  const scan = await scanNewest(c.dstClient, { address: c.dstOft, event: pickEvent(v2Abi, 'OFTReceived') })
+  // OFTReceived is the destination contract's own event, and emitting one costs nothing. The
+  // endpoint's inboundNonce for this exact (receiver, srcEid, sender) is the fact: zero there
+  // means nothing has ever been delivered on this route, whatever the contract's logs say.
+  const peerBytes32 = `0x${'0'.repeat(24)}${c.info.oft.slice(2).toLowerCase()}` as Hex
+  const [scan, nonce] = await Promise.all([
+    scanNewest(c.dstClient, { address: c.dstOft, event: pickEvent(v2Abi, 'OFTReceived') }),
+    attempt(
+      c.dstClient.readContract({ address: registryEndpoint(c), abi: v2Abi, functionName: 'inboundNonce', args: [c.dstOft, c.plan.srcEid, peerBytes32] }),
+      undefined,
+      'inbound nonce',
+    ),
+  ])
+  if (scan.status === 'found' && nonce.ok && nonce.value === 0n) {
+    return {
+      state: { status: 'fail', reason: 'the destination contract logs deliveries the endpoint never made — nothing has been delivered on this route' },
+      extra: { history: { kind: 'never' } },
+    }
+  }
   if (scan.status === 'unavailable') {
+    if (nonce.ok && nonce.value > 0n) {
+      return { state: { status: 'pass', note: `the endpoint has delivered ${nonce.value} message(s) on this route; when, could not be read` }, extra: { history: { kind: 'unknown', reason: scan.reason } } }
+    }
     return { state: { status: 'unchecked', reason: scan.reason }, extra: { history: { kind: 'unknown', reason: scan.reason } } }
   }
   if (scan.status === 'none') {
+    if (nonce.ok && nonce.value > 0n) {
+      const days = await windowDays(c.dstClient, scan.window)
+      return {
+        state: { status: 'pass', note: `the endpoint has delivered ${nonce.value} message(s) on this route, none in the window searched` },
+        extra: { history: days.ok ? { kind: 'none_in_window', days: days.value } : { kind: 'unknown', reason: days.reason } },
+      }
+    }
     const days = await windowDays(c.dstClient, scan.window)
     if (!days.ok) {
       return {
@@ -403,7 +475,14 @@ async function checkHistory(c: V2RiskContext): Promise<Outcome> {
 async function checkRecentChanges(c: V2RiskContext): Promise<Outcome> {
   const scan = await scanNewest(c.srcClient, { address: c.info.oft, event: pickEvent(v2Abi, 'PeerSet') })
   if (scan.status === 'unavailable') return { state: { status: 'unchecked', reason: scan.reason } }
-  if (scan.status === 'none') return { state: { status: 'pass', note: 'no peer change in the window searched' } }
+  if (scan.status === 'none') {
+    // The rule is "changed within 7 days"; a window that reaches back less than that cannot say
+    // it was not, and a provider that serves 2 000 blocks is a few hours on most chains.
+    const days = await windowDays(c.srcClient, scan.window)
+    if (!days.ok) return { state: { status: 'unchecked', reason: `no change found, but the window's length could not be measured: ${days.reason}` } }
+    if (days.value < 7) return { state: { status: 'unchecked', reason: `the window searched covers only ${Math.max(1, Math.floor(days.value * 24))} hour(s), less than the 7 days this check is about` } }
+    return { state: { status: 'pass', note: `no peer change in the last ${Math.floor(days.value)} days` } }
+  }
   const age = await daysSinceBlock(c.srcClient, scan.value.blockNumber)
   if (!age.ok) return { state: { status: 'unchecked', reason: age.reason } }
   return age.value <= 7
@@ -467,7 +546,7 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
       try {
         return [id, await p]
       } catch (e) {
-        return [id, { state: { status: 'unchecked', reason: e instanceof Error ? e.message.slice(0, 160) : String(e) } }]
+        return [id, { state: { status: 'unchecked', reason: sanitizeText(e instanceof Error ? e.message : String(e), 160) } }]
       }
     }),
   )

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { isBlockingCode } from '@/core/severity'
 import { encodeFunctionData, type Hex } from 'viem'
 import { oftAbi } from '@/core/abi'
 import { addressToBytes32, ZERO_ADDRESS, ZERO_BYTES32 } from '@/core/encoding'
@@ -182,8 +183,14 @@ describe('3. recipient', () => {
     // Without the flag this exact input passes; the flag alone is what refuses it.
     expect(code(g3Recipient(goodInput(confirmed)))).toBe('ok')
     expect(code(g3Recipient(goodInput({ ...confirmed, recipientLookalike: true })))).toBe('recipient_lookalike')
-    // It outranks the confirmation: there is nothing to confirm when the address is already wrong.
-    expect(code(g3Recipient(goodInput({ plan, recipientLookalike: true })))).toBe('recipient_lookalike')
+    // The tail is owed FIRST: a twin is a note for the indicator, and a note never lifts the one
+    // input still required. Before this order a look-alike skipped the 6-character confirmation.
+    expect(code(g3Recipient(goodInput({ plan, recipientLookalike: true })))).toBe('recipient_unconfirmed')
+  })
+  it('13. a Solana dry run that debits more than the plan says is a block', () => {
+    expect(code(g13Simulation(goodInput({ simulation: { ok: true }, svmDebit: { ok: true } })))).toBe('ok')
+    expect(code(g13Simulation(goodInput({ simulation: { ok: true }, svmDebit: { ok: false, reason: 'takes 2, plan says 1' } })))).toBe('debit_mismatch')
+    expect(isBlockingCode('debit_mismatch')).toBe(true)
   })
   it('invalid (non-bytes32) recipient fails', () => {
     const plan = { ...treadPlan(), recipient: '0x123' as never }

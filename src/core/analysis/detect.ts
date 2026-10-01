@@ -7,6 +7,7 @@
  */
 import { decodeEventLog, encodeEventTopics, getAddress, parseAbi, type Address, type Hex } from 'viem'
 import type { ChainKey } from '../chains'
+import { sanitizeText } from '../text'
 import { decodePacket, PacketError, type LzPacket } from '../lz/packet'
 import { LZ_TOPICS, lzEventsAbi } from '../lz/events'
 import { CCIP_TOPICS, ccipEventsAbi, ccipRamp2EventsAbi } from '../../protocols/ccip/abi'
@@ -226,13 +227,13 @@ export function detectFindings(tx: TxLike, chain: ChainKey): Finding[] {
     }
     if (t0 === FOREIGN_TOPICS.InterchainTransfer.toLowerCase()) {
       const d = tryDecode(() => decodeEventLog({ abi: foreignEventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: 'InterchainTransfer' }))
-      out.push({ kind: 'foreign', protocol: 'axelar-its', emitter, vars: { destination: d?.args.destinationChain ?? '' } })
+      out.push({ kind: 'foreign', protocol: 'axelar-its', emitter, vars: { destination: sanitizeText(d?.args.destinationChain, 64) } })
       continue
     }
     if (t0 === FOREIGN_TOPICS.ContractCall.toLowerCase() || t0 === FOREIGN_TOPICS.ContractCallWithToken.toLowerCase()) {
       const name = t0 === FOREIGN_TOPICS.ContractCall.toLowerCase() ? 'ContractCall' : 'ContractCallWithToken'
       const d = tryDecode(() => decodeEventLog({ abi: foreignEventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: name }))
-      out.push({ kind: 'foreign', protocol: 'axelar', emitter, vars: { destination: d?.args.destinationChain ?? '' } })
+      out.push({ kind: 'foreign', protocol: 'axelar', emitter, vars: { destination: sanitizeText(d?.args.destinationChain, 64) } })
       continue
     }
     if (t0 === FOREIGN_TOPICS.DepositForBurn.toLowerCase()) {

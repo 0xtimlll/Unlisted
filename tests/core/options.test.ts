@@ -82,16 +82,18 @@ describe('sanitizeOptions — the sample-tx attack', () => {
     expect(hasDangerousOptions(s.options)).toBe(false)
     expect(hasDangerousOptions(sample)).toBe(true)
   })
-  it('drops compose, DVN and unknown options; a small receive value is kept within the EVM cap', () => {
+  it('drops compose, DVN and unknown options; on EVM no receive value survives, however small', () => {
     const sample = t3(exec(1, u128(100000n) + u128(1n)), exec(3, u16(0) + u128(50000n)), `0200030000aa`, exec(9, 'ff'))
     const s = sanitizeOptions(sample)
+    expect(LIMITS.evm.maxValue).toBe(0n)
     expect(s.gas).toBe(100000n)
-    expect(s.value).toBe(1n)
-    expect(s.dropped.map((d) => d.kind)).toEqual(['lzCompose', 'dvn', 'unknown'])
+    expect(s.value).toBe(0n)
+    expect(s.dropped.map((d) => d.kind)).toEqual(['lzReceive', 'lzCompose', 'dvn', 'unknown'])
   })
-  it('EVM: a receive value above 0.01 native is dropped like a native drop', () => {
+  it('EVM: a receive value above the cap is dropped, the gas beside it is kept', () => {
     const s = sanitizeOptions(t3(exec(1, u128(100000n) + u128(LIMITS.evm.maxValue + 1n))))
-    expect(s.options).toBe('0x')
+    expect(s.options).toBe(encodeLzReceive(100000n, 0n))
+    expect(s.value).toBe(0n)
     expect(s.dropped).toHaveLength(1)
   })
   it('drops absurd gas (fee inflation)', () => {
@@ -140,7 +142,7 @@ describe('Solana (svm) options', () => {
     expect(sanitizeOptions(t3(exec(1, u128(1_400_000n))), 'svm').gas).toBe(1_400_000n)
     expect(sanitizeOptions(t3(exec(1, u128(1_400_001n))), 'svm').dropped).toHaveLength(1)
     expect(sanitizeOptions(t3(exec(1, u128(100n) + u128(10_000_000n))), 'svm').value).toBe(10_000_000n)
-    expect(sanitizeOptions(t3(exec(1, u128(100n) + u128(10_000_001n))), 'svm').options).toBe('0x')
+    expect(sanitizeOptions(t3(exec(1, u128(100n) + u128(10_000_001n))), 'svm').options).toBe(encodeLzReceive(100n, 0n))
     expect(hasDangerousOptions(t3(exec(1, u128(100n) + u128(10_000_000n))), 'svm')).toBe(false)
     expect(hasDangerousOptions(t3(exec(1, u128(100n) + u128(10_000_001n))), 'svm')).toBe(true)
     expect(hasDangerousOptions(t3(exec(1, u128(2_000_000n))), 'svm')).toBe(true) // fine on EVM, over the CU limit on svm

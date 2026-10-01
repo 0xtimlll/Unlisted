@@ -467,7 +467,9 @@ export function previewImport(raw: unknown, book: AddressBook, now: number = Dat
   const marked = dedupeIds(add, new Set(book.entries.map((e) => e.id))).map((e) => ({ ...e, imported: true as const }))
   // Twins are looked for in the book AND among the other rows: two rows of one file that share
   // their ends would otherwise land as an unvouched pair and refuse each other at send time.
-  const twins: Record<string, AddressBookEntry[]> = {}
+  // Keyed by ids that came out of a FILE: a null-prototype object, so an id of `__proto__` or
+  // `constructor` is a key like any other and not a walk up the prototype chain.
+  const twins: Record<string, AddressBookEntry[]> = Object.create(null) as Record<string, AddressBookEntry[]>
   for (const e of marked) {
     const t = twinsOf([...book.entries, ...marked], e.family, e.address)
     if (t.length > 0) twins[e.id] = t
@@ -477,7 +479,7 @@ export function previewImport(raw: unknown, book: AddressBook, now: number = Dat
 
 /** The rows of a preview that `applyImport` would bring in, given these confirmations. */
 export function importable(preview: ImportPreview, confirmedTwins: ReadonlySet<string> = new Set()): AddressBookEntry[] {
-  return preview.add.filter((e) => !(e.id in preview.twins) || confirmedTwins.has(e.id))
+  return preview.add.filter((e) => !Object.hasOwn(preview.twins, e.id) || confirmedTwins.has(e.id))
 }
 
 /**
@@ -489,7 +491,7 @@ export function importable(preview: ImportPreview, confirmedTwins: ReadonlySet<s
  */
 export function applyImport(book: AddressBook, preview: ImportPreview, confirmedTwins: ReadonlySet<string> = new Set()): AddressBook {
   const rows = importable(preview, confirmedTwins).map((e) => {
-    const t = preview.twins[e.id]
+    const t = Object.hasOwn(preview.twins, e.id) ? preview.twins[e.id] : undefined
     return t ? { ...e, distinctFrom: t.map((x) => x.address) } : e
   })
   return { ...book, entries: [...book.entries, ...rows].slice(0, MAX_ENTRIES) }

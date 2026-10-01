@@ -7,6 +7,7 @@ import { type Address, type Hex } from 'viem'
 import { oftAbi } from './abi'
 import type { ReadClient } from './client'
 import { addressToBytes32, isBytes32, peerToAddress } from './encoding'
+import { sanitizeText } from './text'
 
 export type PeerBackResult =
   | { status: 'ok' }
@@ -27,7 +28,7 @@ export async function checkPeerBack(dstClient: ReadClient, peer: Hex, srcEid: nu
   try {
     theirPeer = await dstClient.readContract({ address: peerAddress, abi: oftAbi, functionName: 'peers', args: [srcEid] })
   } catch (e) {
-    return { status: 'unavailable', reason: e instanceof Error ? e.message.split('\n')[0] ?? '' : String(e) }
+    return { status: 'unavailable', reason: sanitizeText(e instanceof Error ? e.message.split('\n')[0] : String(e), 200) }
   }
   return theirPeer.toLowerCase() === ours.toLowerCase() ? { status: 'ok' } : { status: 'mismatch', theirPeer }
 }

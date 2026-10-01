@@ -11,7 +11,7 @@
  * the payload against the destination's own hash and builds a call, and it refuses on its own terms.
  */
 import { getAddress, keccak256, type Address, type Hex } from 'viem'
-import { byEid, byKey, isEvm, type ChainKey } from '../../core/chains'
+import { byEid, byKey, evmByKey, isEvm, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
 import { decodePacket, PacketError, type LzPacket } from '../../core/lz/packet'
 import { LZ_TOPICS } from '../../core/lz/events'
@@ -98,23 +98,38 @@ function decodeV1Packet(payload: Hex): Omit<Extract<FoundMessage, { version: 'v1
  */
 export function findMessages(logs: readonly LogLike[], srcChain: ChainKey): FoundMessage[] {
   const out: FoundMessage[] = []
-  // The adapter params belong to the v1 packet emitted alongside them in the same transaction.
-  let adapterParams: Hex | undefined
-  for (const log of logs) {
-    const t0 = (log.topics[0] ?? '').toLowerCase()
-    if (t0 === RELAYER_PARAMS_TOPIC.toLowerCase()) {
-      try {
-        const d = decodeEventLog({ abi: ulnRescueAbi, eventName: 'RelayerParams', data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]] })
-        adapterParams = d.args.adapterParams
-      } catch {
-        /* an unreadable params blob is simply not reported */
-      }
-    }
-  }
+  const src = byKey(srcChain)
+  if (!isEvm(src)) return out
+  // Only the committed contracts' logs are packets. Any contract can emit an event with
+  // PacketSent's topic and a payload of its choosing; the EndpointV2 and the UltraLightNode are
+  // the ones that recorded what was actually sent. A v1 chain whose ULN the table does not know
+  // cannot be filtered, so its Packet logs are taken as found — the destination's own hash still
+  // decides whether anything is done with them (actions.ts).
+  const endpointV2 = src.endpointV2.toLowerCase()
+  const uln = lzV1(srcChain)?.uln?.toLowerCase()
+  const fromUln = (log: LogLike) => uln === undefined || log.address.toLowerCase() === uln
+  // UltraLightNodeV2.send emits RelayerParams, then Packet, per message. Each Packet takes the
+  // RelayerParams emitted just before it and no other: two sends in one transaction must not
+  // share the last blob seen.
+  let pendingParams: Hex | undefined
   for (const log of logs) {
     const t0 = (log.topics[0] ?? '').toLowerCase()
 
+    if (t0 === RELAYER_PARAMS_TOPIC.toLowerCase()) {
+      if (!fromUln(log)) continue
+      try {
+        const d = decodeEventLog({ abi: ulnRescueAbi, eventName: 'RelayerParams', data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]] })
+        pendingParams = d.args.adapterParams
+      } catch {
+        pendingParams = undefined /* an unreadable params blob is simply not reported */
+      }
+      continue
+    }
+
     if (t0 === PACKET_V1_TOPIC.toLowerCase()) {
+      if (!fromUln(log)) continue
+      const adapterParams = pendingParams
+      pendingParams = undefined
       try {
         const d = decodeEventLog({ abi: ulnRescueAbi, eventName: 'Packet', data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]] })
         const p = decodeV1Packet(d.args.payload)
@@ -129,6 +144,7 @@ export function findMessages(logs: readonly LogLike[], srcChain: ChainKey): Foun
     }
 
     if (t0 === LZ_TOPICS.PacketSent.toLowerCase()) {
+      if (log.address.toLowerCase() !== endpointV2) continue
       try {
         const d = decodeEventLog({
           abi: endpointV2RescueAbi,
@@ -277,15 +293,11 @@ export async function diagnose(m: FoundMessage, dstClient: ReadClient): Promise<
   if (!m.dstOApp) {
     return { message: m, state: { kind: 'unknown', reason: 'the packet’s receiver is not an EVM address' }, needsNativeDrop, dstEndpoint: undefined }
   }
-  const endpointRead = await attempt(
-    dstClient.readContract({ address: m.dstOApp, abi: oappEndpointAbi, functionName: 'endpoint' }),
-    undefined,
-    'destination endpoint',
-  )
-  if (!endpointRead.ok) {
-    return { message: m, state: { kind: 'unknown', reason: endpointRead.reason }, needsNativeDrop, dstEndpoint: undefined }
-  }
-  const dstEndpoint = getAddress(endpointRead.value)
+  // The committed EndpointV2 of the destination chain. Not `dstOApp.endpoint()`: the receiver is
+  // whatever the packet names, and a rescue that read its endpoint from it would commit and
+  // execute against a contract of the receiver's choosing. Every hash below is read from the real
+  // endpoint, and actions.ts sends to it and nothing else.
+  const dstEndpoint = evmByKey(m.dstChain!).endpointV2
   const origin = { srcEid: m.packet.srcEid, sender: m.packet.sender, nonce: m.packet.nonce } as const
 
   const [held, lazy, verifiable] = await Promise.all([
@@ -344,11 +356,6 @@ export async function diagnose(m: FoundMessage, dstClient: ReadClient): Promise<
 }
 
 export const ZERO_HASH: Hex = `0x${'0'.repeat(64)}`
-
-/** IOAppCore's endpoint getter — the one address a V2 rescue reads from the receiver itself. */
-const oappEndpointAbi = [
-  { type: 'function', name: 'endpoint', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },
-] as const
 
 /**
  * Have the DVNs signed this packet without anyone committing it?

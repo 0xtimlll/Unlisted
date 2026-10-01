@@ -24,6 +24,7 @@ import { encodeAbiParameters, encodeFunctionData, encodePacked, parseAbi, type A
 import { erc20Abi } from '../../core/abi'
 import type { ReadClient } from '../../core/client'
 import { sameAddress } from '../../core/encoding'
+import { sanitizeText } from '../../core/text'
 import { endpointV1Abi, isUnverifiedStandard, lzAppAbi, oftV1Abi, PT_SEND, type V1Wire } from '../lz-v1/abi'
 import { lzV1 } from '../lz-v1/chains'
 import type { OftV1Info } from '../lz-v1/detect'
@@ -411,9 +412,13 @@ async function checkRecentChanges(c: V1RiskContext): Promise<Outcome> {
   const found = scans.filter((s) => s.status === 'found') as Extract<(typeof scans)[number], { status: 'found' }>[]
   if (found.length === 0) {
     const unavailable = scans.find((s) => s.status === 'unavailable')
-    return unavailable && unavailable.status === 'unavailable'
-      ? { state: { status: 'unchecked', reason: unavailable.reason } }
-      : { state: { status: 'pass', note: 'no configuration change in the window searched' } }
+    if (unavailable && unavailable.status === 'unavailable') return { state: { status: 'unchecked', reason: unavailable.reason } }
+    // The rule is "changed within 7 days"; a window shorter than that cannot say it was not.
+    const none = scans.find((s) => s.status === 'none')
+    const days = none && none.status === 'none' ? await windowDays(c.srcClient, none.window) : undefined
+    if (!days || !days.ok) return { state: { status: 'unchecked', reason: `no change found, but the window's length could not be measured${days && !days.ok ? `: ${days.reason}` : ''}` } }
+    if (days.value < 7) return { state: { status: 'unchecked', reason: `the window searched covers only ${Math.max(1, Math.floor(days.value * 24))} hour(s), less than the 7 days this check is about` } }
+    return { state: { status: 'pass', note: `no configuration change in the last ${Math.floor(days.value)} days` } }
   }
   const newest = found.reduce((a, b) => (b.value.blockNumber > a.value.blockNumber ? b : a))
   const age = await daysSinceBlock(c.srcClient, newest.value.blockNumber)
@@ -479,7 +484,7 @@ export async function assessV1Route(c: V1RiskContext): Promise<V1Assessment> {
         return [id, await p]
       } catch (e) {
         // A check must not be able to take the panel down with it.
-        return [id, { state: { status: 'unchecked', reason: e instanceof Error ? e.message.slice(0, 160) : String(e) } }]
+        return [id, { state: { status: 'unchecked', reason: sanitizeText(e instanceof Error ? e.message : String(e), 160) } }]
       }
     }),
   )

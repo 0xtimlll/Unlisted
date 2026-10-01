@@ -10,6 +10,7 @@ import type { ReadClient } from '../../core/client'
 import { decodeRevert, enrichRevert, formatRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
 import { nttManagerAbi } from './abi'
 import { assembleNttTransferArgs, nttSelfCheck, type NttPlan, type NttSelfCheck } from './plan'
+import { sanitizeText } from '../../core/text'
 
 export type NttPreview = {
   simulation: { ok: true } | { ok: false; reason: string }
@@ -45,7 +46,7 @@ export async function previewNttTransfer(client: ReadClient, plan: NttPlan, chai
     const data = revertDataFromError(e)
     const looksReverted = /revert/i.test(e instanceof Error ? e.message : String(e))
     if (data === undefined && !looksReverted) {
-      const reason = (e instanceof Error ? e.message : String(e)).split('\n')[0]?.slice(0, 200) ?? ''
+      const reason = sanitizeText((e instanceof Error ? e.message : String(e)).split('\n')[0], 200)
       return { simulation: { ok: false, reason }, selfCheck, gasCostWei: undefined, rpcUnavailable: reason }
     }
     const revert =

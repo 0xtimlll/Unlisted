@@ -174,10 +174,10 @@ export function v1g3Recipient(i: V1GuardInput): V1GuardResult {
   if (!/^0x[0-9a-fA-F]{40}$/.test(i.plan.recipient)) return fail(3, 'recipient_invalid')
   // No wallet to compare against counts as "differs" — this guard must be safe on its own.
   const differs = i.walletAddress === undefined || !isAddressEqual(i.plan.recipient, i.walletAddress)
-  // A look-alike of a saved address is refused before anything else about the recipient is
-  // considered: there is nothing to confirm when the address is already wrong.
-  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
+  // The tail is owed BEFORE the twin is noted: a look-alike is a note for the indicator, and a
+  // note must never lift the one input that is still required.
   if (differs && (!i.recipientIsCustom || !i.customRecipientConfirmed)) return fail(3, 'recipient_unconfirmed')
+  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
   return ok(3)
 }
 

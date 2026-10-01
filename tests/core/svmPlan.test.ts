@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { sha256 } from '@noble/hashes/sha2'
 import { addressToBytes32 } from '@/core/encoding'
-import { g1Chain, g3Recipient, g4RecipientNotContract, g7Fee, g12Spender, runGuards, type GuardInput } from '@/core/guards'
+import { g1Chain, g3Recipient, g4RecipientNotContract, g7Fee, g12Spender, g13Simulation, runGuards, type GuardInput } from '@/core/guards'
 import { planFee } from '@/core/plan'
 import { svmTxFee } from '@/core/svm/fees'
 import { decodeLookupTable, decodeTokenMetadata } from '@/core/svm/layouts'
@@ -9,6 +9,7 @@ import {
   COMPUTE_BUDGET_PROGRAM, decodeComputeBudget, decodeSvmSendData, encodeSvmSendData, eventAuthorityPda, expectedSendAccounts, peerConfigPda, SEND_DISCRIMINATOR,
   selfCheckSvm, svmSendDataFor, type SvmSendPlan, type SvmTxView,
 } from '@/core/svm/plan'
+import { judgeSvmDebit, SVM_RENT_ALLOWANCE_LAMPORTS } from '@/core/svm/plan'
 import { pubkeyFromBase58 } from '@/core/svm/pubkey'
 
 import { ESCROW, HYPER_EID, MINT, PENGU_HYPER, penguPlan, penguSource, PROGRAM, RECIPIENT, SENDER, STORE } from './svmFixtures'
@@ -225,5 +226,41 @@ describe('layouts', () => {
     expect(() => decodeTokenMetadata(data, ESCROW)).toThrow(/different mint/)
     data[0] = 1
     expect(() => decodeTokenMetadata(data, MINT)).toThrow(/MetadataV1/)
+  })
+})
+
+
+describe('judgeSvmDebit: the dry run is held to the numbers on screen', () => {
+  const plan = penguPlan()
+  const fee = svmTxFee(plan.computeUnitLimit, plan.computeUnitPrice)
+  const base = { plan, tokenBefore: 10n * plan.amounts.amountLD, lamportsBefore: 10n ** 9n }
+
+  it('exactly amountLD of the token and at most fee + buffer + rent of SOL is fine', () => {
+    expect(judgeSvmDebit({ ...base, tokenAfter: base.tokenBefore - plan.amounts.amountLD, lamportsAfter: base.lamportsBefore - plan.value - fee })).toEqual({ ok: true })
+    expect(judgeSvmDebit({ ...base, tokenAfter: base.tokenBefore - plan.amounts.amountLD, lamportsAfter: base.lamportsBefore - plan.value - fee - SVM_RENT_ALLOWANCE_LAMPORTS })).toEqual({ ok: true })
+  })
+
+  it('a token debit that is not the amount — more, less, or the whole account — is refused', () => {
+    for (const after of [0n, base.tokenBefore - plan.amounts.amountLD - 1n, base.tokenBefore - plan.amounts.amountLD + 1n]) {
+      const v = judgeSvmDebit({ ...base, tokenAfter: after, lamportsAfter: base.lamportsBefore - plan.value - fee })
+      expect(v.ok, `${after}`).toBe(false)
+      expect(!v.ok && v.reason).toMatch(/token units/)
+    }
+  })
+
+  it('SOL leaving the wallet beyond the fee, the buffer and the rent allowance is refused', () => {
+    const v = judgeSvmDebit({ ...base, tokenAfter: base.tokenBefore - plan.amounts.amountLD, lamportsAfter: base.lamportsBefore - plan.value - fee - SVM_RENT_ALLOWANCE_LAMPORTS - 1n })
+    expect(v.ok).toBe(false)
+    expect(!v.ok && v.reason).toMatch(/lamports/)
+  })
+
+  it('a node that returned no post-state is "not checked", never a pass', () => {
+    expect(judgeSvmDebit({ ...base, tokenAfter: undefined, lamportsAfter: undefined }).ok).toBe(false)
+  })
+
+  it('guard 13 turns a refused debit into the block debit_mismatch', () => {
+    const i = { simulation: { ok: true }, svmDebit: { ok: false, reason: 'x' } } as unknown as GuardInput
+    const r = g13Simulation(i)
+    expect(!r.ok && r.code).toBe('debit_mismatch')
   })
 })

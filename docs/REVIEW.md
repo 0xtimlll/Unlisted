@@ -19,7 +19,7 @@ Chainlink CCIP и Status / Rescue для застрявших сообщений
 ```sh
 npm ci                 # ignore-scripts включён: зависимости ничего не исполняют при установке
 npm run dev            # http://localhost:3000, вкладки на /bridge, /ntt, /ccip, /rescue
-npm test               # белый список write-примитивов + юнит-тесты (869 тестов, 39 файлов)
+npm test               # белый список write-примитивов + юнит-тесты (940 тестов, 44 файла)
 npm run typecheck
 npm run lint
 npm run build          # out/ + заголовки безопасности; CI делает то же самое
@@ -52,7 +52,9 @@ npm run test:integration   # живые публичные RPC и форк на 
 | spender — проверенный контракт маршрута, не ввод пользователя и не ответ API | `approvePlan` в каждом протоколе + сверка в `onApprove` каждой вкладки |
 | никакого approve при `approvalRequired === false` | guard 11 |
 | `refundAddress` = подключённый кошелёк | guard 1 (`plan.sender == wallet`) |
-| получатель закодирован так, как его прочтёт сеть назначения | self-check: `core/guards.selfCheck`, `lz-v1/selfcheck.ts`, `core/svm` |
+| получатель закодирован так, как его прочтёт сеть назначения | self-check: `core/guards.selfCheck`, `lz-v1/selfcheck.ts`, `core/svm`; на NTT и CCIP self-check повторяется в момент клика |
+| Solana: dry run списывает ровно `amountLD` и не больше комиссии + fee + rent по SOL | `core/svm/plan.judgeSvmDebit`, guard 13 (`debit_mismatch`) |
+| адреса протокола в проверках маршрута и в Rescue — из реестра, не из `endpoint()` проверяемого контракта | `lz-risk/v2.registryEndpoint`, `lz-rescue/diagnose.ts` |
 | guard'ы перепроверяются в момент клика | `onApprove` / `onSend` каждой вкладки, тест в `severityGate.test.ts` |
 
 ## Карта кода
@@ -67,11 +69,12 @@ npm run test:integration   # живые публичные RPC и форк на 
 | `src/core/reverse.ts` | разворот маршрута: контракт другой стороны берётся из peer и проверяется заново с нуля |
 | `src/core/guards.ts` | 22 guard'а LayerZero V2 (и Solana) |
 | `src/protocols/lz-v1/` | LayerZero v1: три wire-стандарта, свой self-check, `send.ts` — единственное место `sendFrom` |
-| `src/protocols/lz-risk/` | восемь read-only проверок маршрута; write-примитивов нет по построению |
+| `src/protocols/lz-risk/` | восемь read-only проверок маршрута; write-примитивов нет по построению; endpoint назначения, комиссия (`EndpointV2.quote`) и история (`inboundNonce`) — из реестра, не со слов проверяемого контракта |
 | `src/protocols/wormhole-ntt/` | NTT: проверка менеджера (`verify.ts`), guard'ы, план |
 | `src/protocols/ccip/` | CCIP: router и registry из закоммиченного конфига, guard'ы, план |
 | `src/protocols/lz-rescue/` | Rescue: четыре действия, `keccak256(payload)` сверяется с хешем в сети |
-| `src/core/svm/` | Solana на `@layerzerolabs/oft-v2-solana-sdk` |
+| `src/core/svm/` | Solana на `@layerzerolabs/oft-v2-solana-sdk`; `plan.judgeSvmDebit` — что dry run реально списал против плана (блок `debit_mismatch`) |
+| `scripts/check-whitelist.mjs`, `tests/core/checkWhitelist.test.ts` | гейт write-примитивов и его тест на фикстурах |
 | `src/ui/` | экраны вкладок (`BridgeApp`, `BridgeV1`, `NttApp`, `CcipApp`, `RescueApp`) и компоненты |
 | `functions/_middleware.js` | пароль на весь сайт на краю Cloudflare |
 

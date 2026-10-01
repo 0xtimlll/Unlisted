@@ -65,8 +65,11 @@ export async function onRequest(context) {
 
   let supplied = ''
   try {
-    // "user:password" — the user part is ignored; only the password matters.
-    const decoded = atob(header.slice(6))
+    // "user:password" — the user part is ignored; only the password matters. The challenge
+    // declares charset="UTF-8", so the bytes are decoded as UTF-8: atob() alone yields one
+    // character per byte, and a password with anything outside ASCII would never match.
+    const bytes = Uint8Array.from(atob(header.slice(6)), (c) => c.charCodeAt(0))
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     supplied = decoded.slice(decoded.indexOf(':') + 1)
   } catch {
     return unauthorized()

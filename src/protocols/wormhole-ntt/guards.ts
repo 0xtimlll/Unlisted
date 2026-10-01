@@ -141,10 +141,10 @@ export function n3Recipient(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(3, 'plan_missing')
   if (!isBytes32(i.plan.recipient)) return fail(3, 'recipient_invalid')
   const differs = i.walletAddress === undefined || !sameAddress(i.plan.recipient, addressToBytes32(i.walletAddress))
-  // A look-alike of a saved address is refused before anything else about the recipient is
-  // considered: there is nothing to confirm when the address is already wrong.
-  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
+  // The tail is owed BEFORE the twin is noted: a look-alike is a note for the indicator, and a
+  // note must never lift the one input that is still required.
   if (differs && (!i.recipientIsCustom || !i.customRecipientConfirmed)) return fail(3, 'recipient_unconfirmed')
+  if (i.recipientLookalike) return fail(3, 'recipient_lookalike')
   return ok(3)
 }
 

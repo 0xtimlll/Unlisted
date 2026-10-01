@@ -1,6 +1,6 @@
 'use client'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { encodeFunctionData, type Address, type Hash } from 'viem'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
 import { oftAbi } from '@/core/abi'
@@ -49,7 +49,7 @@ import { ProbeV1Error } from '@/protocols/lz-v1/detect'
 import { useV2RouteRisk } from './riskHooks'
 import { RiskChecks, RiskNotAssessed } from './components/RiskPanel'
 import { RouteIndicator } from './components/RouteIndicator'
-import { shownFailures, waitsOnlyForApprove } from '@/core/severity'
+import { isNoteCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 
 const EMPTY_DEST: DestinationState = {
   dstEid: undefined,
@@ -421,8 +421,10 @@ export function BridgeApp({
     if (svmDestUnknown) f.push(scanDelivered ? 'svm_store_unrecognised_delivered' : 'svm_store_unrecognised')
     if (svmRecipient.data?.class === 'missing') f.push('svm_recipient_not_activated')
     if (!stored.customRpc['solana']) f.push('svm_single_provider')
+    // One operator's word about the Solana side (ui/hooks.ts useSvmDestination), said like the EVM probe says it.
+    else if (svmDest.data && !svmDest.data.crossChecked) f.push('not_cross_checked')
     return f
-  }, [dstVm, svmDestInfo, svmDestUnknown, scanDelivered, svmRecipient.data, stored.customRpc])
+  }, [dstVm, svmDestInfo, svmDestUnknown, scanDelivered, svmRecipient.data, stored.customRpc, svmDest.data])
 
   // §5.1 Solana destination: extraOptions are derived from the contract's enforced options and
   // the recipient's token-account state, never typed by hand (a sample tx only contributes a hint).
@@ -503,7 +505,10 @@ export function BridgeApp({
     [svmSource, wallet, walletChainId, evmSrc?.chainId, svmWallet.address, info, planData, recipientIsCustom, recipientConfirmed, tokenBalance, nativeBalance, allowance.data, flags, svmFlags, peerBack, svmRecipient.data?.class, dstVm, svmDest.data, svmDestUnknown, bookVerdict],
   )
   const pre = runGuards(baseInput)
-  const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok)
+  // Only a BLOCK holds the simulation back. A note (a red recipient, a peer that does not point
+  // back) is the indicator's business, and a simulation that never runs would leave Send grey
+  // with nothing to say while Approve stayed open.
+  const preOk = pre.results.filter((r) => PRE_IDS.has(r.id)).every((r) => r.ok || isNoteCode(r.code))
   const pendingApprove =
     approveIntent && info?.vm === 'evm' ? { token: info.token, spender: approveIntent.spender, amount: approveIntent.amount } : undefined
   const evmCheck = useCheck(evmSrc, evmPlan.data, preOk && !svmSource, pendingApprove, info?.vm === 'evm' ? info.token : undefined)
@@ -531,6 +536,7 @@ export function BridgeApp({
     ...baseInput,
     gasCostWei: check.data?.gasCostWei,
     simulation,
+    svmDebit: svmSource ? svmCheck.data?.debit : undefined,
     selfCheck: check.data?.selfCheck,
     risk: risk.data?.risk,
     riskError,
@@ -588,20 +594,28 @@ export function BridgeApp({
     setSent({ txHash, dstEid, startedAt: Date.now(), srcChain: src.key, restored: false })
     setStored(pushHistory(stored, { srcChain: src.key, protocol: 'lz-oft', dstEid, oft, txHash, at: Date.now() }))
   }
+  // One wallet prompt per click. A ref rather than the mutation's isPending: that flips on the
+  // next render, and a double click lands before it.
+  const sendInFlight = useRef(false)
   const onSend = () => {
     setTxError('')
     const p = planData
     if (!p || !info) return
+    if (sendInFlight.current) return
     const fresh = runGuards(fullInput)
     if (!fresh.canSend) return
     if (p.vm === 'svm') {
       // The transaction is rebuilt from the plan and decoded back right before signing (core/svm/send.ts).
       if (!svmCtx.data || !svmWallet.signer || svmWallet.address !== p.sender) return
+      sendInFlight.current = true
       svmSend.mutate(
         { ctx: svmCtx.data, plan: p, signer: svmWallet.signer },
         {
           onSuccess: (sig) => recordSent(sig, p.dstEid, p.oftStore),
           onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : `${d.errors.svm_send_failed} ${shortError(e)}`),
+          onSettled: () => {
+            sendInFlight.current = false
+          },
         },
       )
       return
@@ -615,6 +629,7 @@ export function BridgeApp({
       setTxError(d.guard.selfcheck_failed)
       return
     }
+    sendInFlight.current = true
     sendWrite.writeContract(
       {
         address: p.oft,
@@ -627,6 +642,9 @@ export function BridgeApp({
       {
         onSuccess: (hash) => recordSent(hash, p.dstEid, p.oft),
         onError: (e) => setTxError(isUserRejection(e) ? d.errors.wallet_rejected : shortError(e)),
+        onSettled: () => {
+          sendInFlight.current = false
+        },
       },
     )
   }

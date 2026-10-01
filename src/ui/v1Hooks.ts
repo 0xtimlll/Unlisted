@@ -106,7 +106,7 @@ export function useV1Simulation(plan: V1SendPlan | undefined, allowance: bigint 
   const src = plan ? byKey(plan.chain) : undefined
   const client = useMemo(() => (src && isEvm(src) ? makeReadClient(src, customRpc) : undefined), [src, customRpc])
   return useQuery<V1Simulation>({
-    queryKey: ['v1sim', plan?.chain, plan?.oft, plan?.dst.key, plan?.amounts.amountLD.toString(), plan?.recipient, plan?.value.toString(), (allowance ?? 0n).toString()],
+    queryKey: ['v1sim', plan?.chain, plan?.oft, plan?.sender, plan?.dst.key, plan?.amounts.amountLD.toString(), plan?.amounts.minAmountLD?.toString(), plan?.adapterParams, plan?.recipient, plan?.value.toString(), (allowance ?? 0n).toString()],
     queryFn: () => simulateV1Send(client as ReadClient, plan!),
     enabled: !!client && !!plan,
     staleTime: 15_000,

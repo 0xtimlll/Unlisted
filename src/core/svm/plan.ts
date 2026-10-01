@@ -10,6 +10,7 @@ import type { AmountBreakdown, SendQuote } from '../plan'
 import type { SelfCheckResult } from '../guards'
 import { findProgramAddress, PROGRAM, pubkeyFromBase58, pubkeyFromHex, pubkeyToBase58, pubkeyToHex, u32be, utf8 } from './pubkey'
 import type { TokenProgram } from './discover'
+import { svmTxFee } from './fees'
 
 /**
  * LayerZero's mainnet address lookup table. A `send` references ~50 accounts; without the table the
@@ -60,6 +61,47 @@ export type SvmSendPlan = {
   computeUnitPrice: bigint
   /** base58 address lookup table the transaction must use. */
   lookupTable: string
+}
+
+/** What a dry run would take from the sender, against what the plan says it may. */
+export type SvmDebitCheck = { ok: true } | { ok: false; reason: string }
+
+/**
+ * Lamports the run may take beyond the quoted fee: the transaction fee itself plus room for the
+ * rent of an account the program has to create on a first send (a nonce or a payload PDA is
+ * around 0.002 SOL). Anything above this is SOL leaving the wallet for a reason the plan does
+ * not name.
+ */
+export const SVM_RENT_ALLOWANCE_LAMPORTS = 5_000_000n
+
+/**
+ * The debit check. The program the instruction calls is whatever owns the store — a fact read
+ * from the chain, not from a list — so the plan's numbers are the only thing it is held to:
+ *
+ *   - the sender's token account loses EXACTLY amountLD (an adapter escrows it, a native OFT burns it);
+ *   - the wallet loses at most nativeFee + the transaction fee + the rent allowance.
+ *
+ * Both are read back from the node's post-run account state, not from the program's logs.
+ * `undefined` for a post-state means the node did not return it; that is "not checked", said so.
+ */
+export function judgeSvmDebit(p: {
+  plan: Pick<SvmSendPlan, 'amounts' | 'value' | 'computeUnitLimit' | 'computeUnitPrice'>
+  tokenBefore: bigint
+  tokenAfter: bigint | undefined
+  lamportsBefore: bigint
+  lamportsAfter: bigint | undefined
+}): SvmDebitCheck {
+  if (p.tokenAfter === undefined || p.lamportsAfter === undefined) return { ok: false, reason: 'the node returned no post-run account state' }
+  const tokenDebit = p.tokenBefore - p.tokenAfter
+  if (tokenDebit !== p.plan.amounts.amountLD) {
+    return { ok: false, reason: `the run takes ${tokenDebit} token units, the plan says ${p.plan.amounts.amountLD}` }
+  }
+  const allowed = p.plan.value + svmTxFee(p.plan.computeUnitLimit, p.plan.computeUnitPrice) + SVM_RENT_ALLOWANCE_LAMPORTS
+  const lamportDebit = p.lamportsBefore - p.lamportsAfter
+  if (lamportDebit > allowed) {
+    return { ok: false, reason: `the run takes ${lamportDebit} lamports, more than the ${allowed} the plan allows` }
+  }
+  return { ok: true }
 }
 
 /** Anchor: sha256("global:send")[0..8]. */

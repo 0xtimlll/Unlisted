@@ -11,7 +11,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
-const ROOT = new URL('..', import.meta.url).pathname
+// CHECK_WHITELIST_ROOT points the gate at a fixture tree (tests/core/checkWhitelist.test.ts); unset, it is this repo.
+const ROOT = process.env.CHECK_WHITELIST_ROOT ? process.env.CHECK_WHITELIST_ROOT.replace(/\/?$/, '/') : new URL('..', import.meta.url).pathname
 const SRC = join(ROOT, 'src')
 const WHITELIST = new Set(['approve', 'send'])
 
@@ -64,14 +65,21 @@ const FORBIDDEN = [
   /new\s+Function\s*\(/,
   /dangerouslySetInnerHTML/,
   /\bsignMessage\b/,
-  /\bsignTypedData\b/,
+  /\bsignTypedData\w*/, // signTypedData, signTypedDataAsync, signTypedData_v4, useSignTypedData
+  /\beth_sign\w*/, // eth_sign, eth_signTypedData*, eth_signTransaction
+  /\beth_send\w*/, // eth_sendTransaction, eth_sendRawTransaction
+  /\bwallet_sendCalls\b|\bwallet_sign\w*/, // EIP-5792 batches and any wallet_* signature method
+  /\.request\s*\(/, // a raw provider request: every chain read here goes through viem's typed client
   /\bsignAllTransactions\b/, // Solana: never batch-sign; one transaction, shown on screen, per click
   /\bsignIn\b/, // Solana "sign in with" — a message signature
   /\beth_sign\b/,
   /\bpersonal_sign\b/,
   /\bpermit\s*\(/i,
-  /\bsendTransaction\b/, // raw tx = arbitrary calldata; we only use writeContract
+  /sendTransaction\w*/i, // sendTransaction, sendTransactionAsync, useSendTransaction, sendTransactionSync: raw calldata
   /\bsendRawTransaction\b/, // Solana raw submit (web3.js Connection) — only the builder path below may submit
+  /\bsendEncodedTransaction\b/, // Solana: the same, base64
+  /\bwriteContracts\b|\buseWriteContracts\b/, // EIP-5792 batch of calls: a list is not one literal functionName
+  /\bprepareTransactionRequest\b|\bsignAndSendTransaction\b/,
   /\bsendAndConfirm\b/, // umi: confirms over WebSocket; the app confirms by polling instead (see core/svm/send.ts)
   /new\s+TransactionInstruction\s*\(/, // Solana: instructions come from the SDK, never assembled from config/network data
   /\btransactionBuilder\s*\(\s*\[/, // umi: a builder seeded with hand-made instructions
@@ -80,8 +88,20 @@ const FORBIDDEN = [
   /\bcloseAccount\b|\bcreateCloseAccountInstruction\b/,
   /\bcreateTransferInstruction\b|\bcreateTransferCheckedInstruction\b|\btransferChecked\b/, // direct SPL transfers
   /\bfromSecretKey\b|\bfromSeed\b|\bgenerateSigner\b|\bcreateSignerFromKeypair\b|\bKeypair\b/, // no key material, ever
+  /(?<![.\w])functionName\s*:(?!\s*['"])/, // a functionName that is not a string literal is a name chosen at runtime
+  /(?<![.\w])functionName\s*[,}]/, // the shorthand `{ functionName }`: same thing (`x.functionName` is a read of a decoded call)
   /import\s*\(\s*['"]https?:/,
   /<script[^>]+src=['"]https?:/i,
+]
+
+/**
+ * Forbidden everywhere but in the named files. `signTransaction` is the wallet-adapter method umi's
+ * identity plugin calls when builder.send() signs: the type that names it (core/svm/send.ts) and the
+ * screen that hands the wallet over (ui/svm/SolanaStack.tsx) are the only places it may be spelled.
+ * Anywhere else it would be the app signing a transaction it then broadcasts by some other path.
+ */
+const SCOPED_FORBIDDEN = [
+  { re: /\bsignTransaction\w*/, allow: /^src\/(core\/svm\/send\.ts|ui\/svm\/SolanaStack\.tsx)$/ },
 ]
 
 // Write/simulate CALL sites: every occurrence must sit next to a whitelisted functionName.
@@ -96,7 +116,9 @@ const SVM_FILE = 'src/core/svm/send.ts'
 // `oft` here is the SDK namespace (a standalone identifier), not a property like `info.oft`.
 const SVM_SDK_CALL = /(?<![.\w])oft\.(send|quote|quoteOft)\s*\(/g
 const SVM_SDK_OTHER = /(?<![.\w])oft\.(?!send\b|quote\b|quoteOft\b|accounts\b)[A-Za-z]+\s*\(/g // initOft, setPeerConfig, withdrawFee, …
-const SVM_SUBMIT = /\.send\s*\(\s*umi\s*[,)]/g // builder.send(umi, …) — not oft.send(umi.rpc, …)
+// builder.send(<identifier>, …): any variable name, so renaming `umi` cannot hide a second submit.
+// oft.send(umi.rpc, …) has a dot after the identifier and is counted separately as the SDK call.
+const SVM_SUBMIT = /\.send\s*\(\s*[A-Za-z_$][\w$]*\s*[,)]/g
 const SVM_SDK_IMPORT = /@layerzerolabs\/oft-v2-solana-sdk|@metaplex-foundation\/umi(?!\/serializers)|@solana\/web3\.js/
 
 function walk(dir, out = []) {
@@ -109,12 +131,45 @@ function walk(dir, out = []) {
   return out
 }
 
-/** Blank out comment-only lines (keeps line numbers). Code inside comments is not code. */
+/**
+ * Blank out comments (keeps line numbers). Code inside comments is not code — but code AFTER a
+ * comment on the same line is, so only whole-line `//` comments go, and a block comment is
+ * removed from an opening `/*` at the start of a line up to its own `*\/`, never the rest of the
+ * line after it. The earlier rule blanked any line that merely BEGAN with `/*` or `*`, so
+ * `/* note *\/ writeContract(...)` was invisible to every check below.
+ */
 function stripCommentLines(text) {
+  const blanks = (s) => s.replace(/[^\n]/g, '')
   return text
+    .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, blanks)
     .split('\n')
-    .map((l) => (/^\s*(\/\/|\/\*|\*)/.test(l) ? '' : l))
+    .map((l) => (/^\s*\/\//.test(l) ? '' : l))
     .join('\n')
+}
+
+/**
+ * The text of one call: from its opening paren to the matching close. Quotes and template strings
+ * are skipped so a paren inside a string does not end the call early; an unbalanced call runs to
+ * the end of the file, which can only make the check stricter.
+ */
+function callBody(text, openParenIdx) {
+  let depth = 0
+  let quote = null
+  for (let i = openParenIdx; i < text.length; i++) {
+    const ch = text[i]
+    if (quote) {
+      if (ch === '\\') i++
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch
+    else if (ch === '(') depth++
+    else if (ch === ')') {
+      depth--
+      if (depth === 0) return text.slice(openParenIdx, i + 1)
+    }
+  }
+  return text.slice(openParenIdx)
 }
 
 const errors = []
@@ -129,14 +184,18 @@ for (const file of walk(SRC)) {
     for (const re of FORBIDDEN) {
       if (re.test(line)) errors.push(`${rel}:${idx + 1}: forbidden pattern ${re}`)
     }
+    for (const { re, allow } of SCOPED_FORBIDDEN) {
+      if (re.test(line) && !allow.test(rel)) errors.push(`${rel}:${idx + 1}: forbidden outside ${allow.source}: ${re}`)
+    }
   })
 
-  // Every write call must be followed (within 12 lines) by a whitelisted functionName.
+  // Every write call must carry a whitelisted functionName INSIDE its own parentheses. A window
+  // of lines after the call would also have seen a read's functionName a few lines down.
   let m
   WRITE_CALL.lastIndex = 0
   while ((m = WRITE_CALL.exec(text)) !== null) {
     const lineNo = text.slice(0, m.index).split('\n').length
-    const window = lines.slice(lineNo - 1, lineNo + 12).join('\n')
+    const window = callBody(text, m.index + m[0].length - 1)
     const names = [...window.matchAll(FUNCTION_NAME)].map((x) => x[1])
     if (names.length === 0) {
       errors.push(`${rel}:${lineNo}: ${m[1]} without a literal functionName nearby`)
@@ -186,6 +245,8 @@ for (const file of walk(SRC)) {
       'localChainId', 'paused',
       'getAppConfig', 'defaultAppConfig',
       'inboundNonce', 'outboundNonce', 'getReceiveLibrary',
+      // ILayerZeroEndpointV2.quote: the endpoint's own price for a packet, against the OFT's quoteSend.
+      'quote',
       // §5 rescue, read-only side. See src/protocols/lz-rescue/abi.ts for the source of each.
       'storedPayload', 'failedMessages', 'lazyInboundNonce', 'inboundPayloadHash', 'verifiable',
       'initializable', 'hashLookup',
@@ -274,6 +335,18 @@ for (const file of walk(SRC)) {
   const abi = readFileSync(join(SRC, 'core/abi.ts'), 'utf8')
   if (/function\s+transfer\s*\(/.test(abi)) {
     errors.push('src/core/abi.ts: declares a `transfer` function — the shared ERC-20 ABI must never have one')
+  }
+}
+
+/**
+ * public/theme.js runs before anything else on every page and is the one script the CSP allows by
+ * origin rather than by hash. It reads one localStorage key and toggles a class; it must never
+ * grow a network call, a dynamic import or a DOM write that could carry text.
+ */
+{
+  const theme = readFileSync(join(ROOT, 'public', 'theme.js'), 'utf8')
+  for (const re of [/\bfetch\s*\(/, /XMLHttpRequest/, /\bimport\s*\(/, /\bimportScripts\b/, /document\.write/, /innerHTML|outerHTML|insertAdjacentHTML/, /\beval\s*\(/, /new\s+Function\s*\(/, /\bWebSocket\b|\bnavigator\.sendBeacon\b/, /createElement\s*\(\s*['"]script/i, /location\s*(\.href|\.assign|\.replace|=)/]) {
+    if (re.test(theme)) errors.push(`public/theme.js: forbidden pattern ${re}`)
   }
 }
 
