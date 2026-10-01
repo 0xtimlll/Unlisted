@@ -1,8 +1,8 @@
 'use client'
 /**
  * The welcome screen at /. The bridge is already mounted underneath it (the root layout owns it),
- * so this is only a sheet of glass over a running app: leaving is a dissolve and a change of
- * address, never a reload, and whatever was connected stays connected.
+ * so this is only a blurred sheet over a running app with one card on it: leaving is a dissolve
+ * and a change of address, never a reload, and whatever was connected stays connected.
  *
  * It exists only on this route. /bridge is served without it, which is what makes that address
  * one to bookmark and reload.
@@ -12,15 +12,11 @@ import { useEffect, useRef, useState } from 'react'
 import { tabPath } from '@/core/protocols'
 import { useDict } from '@/i18n'
 import { loadLastTab } from '../tabs'
-import { GithubIcon } from './icons'
+import { InfoIcon, WarningIcon } from './icons'
 import { Button } from './ui'
 
 /** Kept in step with the dissolve in globals.css. */
 const OUT_MS = 400
-
-/** Build-time, public, and the same two values the footer uses. Absent ones simply do not render. */
-const REPO = process.env['NEXT_PUBLIC_REPO_URL'] ?? ''
-const DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? ''
 
 /** The id of the wrapper the root layout puts around the app. */
 const APP_ID = 'app-root'
@@ -84,9 +80,7 @@ export function SplashOverlay() {
         return
       }
       if (e.key !== 'Enter') return
-      // Enter belongs to whatever is focused, when that is something Enter already activates:
-      // otherwise the GitHub link below could be tabbed to but never opened, because this
-      // listener would preventDefault() it and open the bridge instead.
+      // Enter belongs to whatever is focused, when that is something Enter already activates.
       if ((e.target as HTMLElement | null)?.closest('a[href], button')) return
       e.preventDefault()
       enter()
@@ -96,47 +90,28 @@ export function SplashOverlay() {
   })
 
   return (
-    <div
-      ref={frame}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="splash-title"
-      className={`splash fixed inset-0 z-[100] flex flex-col items-center justify-center gap-8 outline-none ${leaving ? 'splash-leaving' : ''}`}
-    >
-      <span id="splash-title" className="relative text-[56px] font-black leading-none tracking-tight text-ink">
-        {d.app.title}
-      </span>
-      {/* The bridge's own call-to-action button, unchanged — same component, same variant. */}
-      <div className="relative w-[300px]">
-        <Button variant="cta" onClick={enter}>
-          {d.splash.start}
-        </Button>
-      </div>
-
-      {/*
-        * Where the app comes from, at the foot of the glass. It is an <a>, not a Button, so it
-        * keeps a real link's middle-click and context menu — but it wears the secondary Button's
-        * shape and hover exactly, and a translucent fill so it sits ON the glass instead of
-        * punching a plate through it.
-        *
-        * `absolute` keeps it out of the centred column: the wordmark and the call to action stay
-        * optically centred on the screen whether or not these two lines are there.
-        */}
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-3 px-4 pb-9">
-        {REPO ? (
-          <a
-            href={REPO}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={d.splash.source}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-line bg-surface/60 px-4 text-sm font-medium text-ink transition hover:border-ink/25 hover:bg-surface-2/80 outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
-          >
-            <GithubIcon className="h-[17px] w-[17px]" />
-            {d.splash.sourceLabel}
-          </a>
-        ) : null}
-        {DOMAIN ? <span className="mono text-xs tracking-wide text-faint">{DOMAIN}</span> : null}
+    <div ref={frame} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="splash-title" className={`splash fixed inset-0 z-[100] flex items-center justify-center p-6 outline-none ${leaving ? 'splash-leaving' : ''}`}>
+      <div className={`flex w-full max-w-[440px] flex-col rounded-dialog bg-surface shadow-lg ${leaving ? 'animate-exit' : 'animate-enter'}`}>
+        <div className="flex flex-col gap-2 px-6 pb-0 pt-10 text-center">
+          <h2 id="splash-title" className="text-3xl font-semibold leading-9 text-ink">
+            {d.app.title}
+          </h2>
+          <p className="text-xs font-semibold text-muted">{d.splash.subtitle}</p>
+        </div>
+        <div className="flex flex-col gap-6 p-6">
+          <div className="flex items-start gap-3">
+            <InfoIcon className="mt-0.5 h-6 w-6 shrink-0 text-ink" />
+            <p className="text-sm leading-6 text-ink">{d.splash.how}</p>
+          </div>
+          <div className="flex items-start gap-3">
+            <WarningIcon className="mt-0.5 h-6 w-6 shrink-0 text-ink" />
+            <p className="text-sm leading-6 text-ink">{d.footer.disclaimer}</p>
+          </div>
+          {/* The bridge's own call-to-action button, in its "ready" tone. */}
+          <Button variant="cta" data-tone="primary" className="h-12" onClick={enter}>
+            {d.splash.start}
+          </Button>
+        </div>
       </div>
     </div>
   )

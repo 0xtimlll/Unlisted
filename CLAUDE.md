@@ -127,8 +127,27 @@ approve — `core/approveFlow.ts` + `ui/useApproveFlow.ts`: симуляция p
 всех четырёх вкладках через `components/Review.Cta`.
 
 **Индикатор маршрута** — одна плашка `components/RouteIndicator.tsx`: шарик + подпись, причины в
-подсказке при наведении, для красного одна строка видна сразу, всё подробное (8 проверок, список
-guard'ов, флаги, DVN, доля адаптера) — в свёрнутом «Details». Серый до выбора сети и до суммы.
+подсказке при наведении, для красного одна строка видна сразу, всё подробное (причины цвета —
+`IndicatorReasons`, 8 проверок, список guard'ов, флаги, DVN, доля адаптера) — в свёрнутой секции
+«Details» (`components/Layout.PanelFold`) правой карточки. Серый до выбора сети и до суммы.
+
+**Внешний вид (редизайн 2026-10-02 по мотивам lz.superbridge.app).** Только токены из
+`src/app/globals.css`: страница `#0a0a0a`, карточка `surface #161616`, плашки внутри `surface-2
+#1d1d1d`, линии `#272727`, текст `#f2f2f2` / `muted #757575`; радиусы `shell` 28 / `card` 20 /
+`dialog` 32; переходы 150ms `cubic-bezier(.4,0,.2,1)`, hover — scale 1.05 у таблеток, 1.03 у CTA и
+карточек сетей, 1.02 у строк From/To. Светлая тема — та же лестница серых в обратную сторону, класс
+`.dark` на `<html>`. Шрифт один — Roboto Mono (`public/fonts`, OFL, self-host, `font-src 'self'`):
+текст 400, заголовки/кнопки/подписи 600. Иконки — Phosphor (`components/icons.tsx`, генерируются из
+опубликованных SVG, лицензия в `public/icons-ATTRIBUTION.md`), логотипы сетей — SVG из web3icons
+(`public/chains`, `ATTRIBUTION.md` там же), фирменный цвет каждой сети — `src/ui/brand.ts`, плитка —
+`components/ChainIcon.tsx`. Примитивы — `components/ui.tsx` (`Button` с вариантами и `data-tone`,
+`Modal`/`useDismiss` с анимацией ухода, `Group`/`SettingRow`, `Shell`/`Box`), раскладка —
+`components/Layout.tsx` (две карточки по 576px). Форма собрана из `components/FromTo.tsx`
+(`FromToRow` → `NetworkDialog`, `AmountPanel`, `RecipientPanel`) и `components/TokenStep.tsx`; шапка —
+`Header.tsx` + `Menu.tsx` (адресная книга, тема, настройки, GitHub) + `WalletsDialog.tsx` (правая
+панель: EVM через RainbowKit, Solana через `svm/SvmWalletButton.SvmWalletPicker`). CTA стоит под
+карточкой формы, на фоне страницы — внутри карточки таблетка цвета карточки невидима. `next dev` и
+`npm run build` делят `.next` — не запускать одновременно.
 
 **Guard'ы** — `src/core/guards.ts`, 22 штуки, от `g1Chain` до `g22Risk`. Ключевые: `g11NoApprove`
 (нет unlimited approve), `g15ExecutorGas`, `g19RecipientVm`, `g20SvmSend` (отказ, если svm-destination не опознан),
