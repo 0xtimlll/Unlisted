@@ -41,6 +41,12 @@ export function useLinkTarget(tab: TabSlug): AnalysisTarget | null {
   const [target] = useState<AnalysisTarget | null>(() => {
     try {
       if (typeof window === 'undefined') return null
+      // A reload is a fresh start, not a link: the form opens empty and the stale query goes.
+      // Only a page ARRIVED AT with a query — pasted, clicked, typed — fills the form from it.
+      if (isReload()) {
+        if (window.location.search) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash)
+        return null
+      }
       const state = parseLink(window.location.search, tab)
       return (state && linkTarget(state, tab)) ?? null
     } catch {
@@ -48,4 +54,13 @@ export function useLinkTarget(tab: TabSlug): AnalysisTarget | null {
     }
   })
   return target
+}
+
+function isReload(): boolean {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+    return nav?.type === 'reload'
+  } catch {
+    return false
+  }
 }
