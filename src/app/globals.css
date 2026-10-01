@@ -4,66 +4,177 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Two colours and nothing else: Deep Charcoal #1A1A1A and white. Light is charcoal on white,
- * dark is white on charcoal. Every colour in the app comes from a token here — components never
- * name one.
+ * Roboto Mono, self-hosted (public/fonts, OFL 1.1). One family for everything: body text at 400,
+ * headings, buttons and labels at 600.
+ */
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url('/fonts/roboto-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Roboto Mono';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url('/fonts/roboto-mono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/*
+ * Greys in steps, and one typeface. The page is near-black; the outer card sits one step above it,
+ * the panels inside the card one more, and the small controls inside a panel drop back to the
+ * card's colour so they read as cut-outs. Every colour in the app comes from a token here —
+ * components never name one. Light is the same ladder climbed the other way.
  */
 @theme {
-  /* The colour the whole app is built around. Change it here and everything follows. */
-  --color-charcoal: #1a1a1a;
+  --font-sans: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-page: #ffffff;
+  /* Light theme (the default set; .dark below overrides). */
+  --color-page: #f4f4f4;
+  /* The outer card. */
   --color-surface: #ffffff;
-  --color-surface-2: #f2f2f2;
-  --color-line: #d7d7d7;
-  --color-ink: var(--color-charcoal);
-  --color-muted: rgb(26 26 26 / 0.62);
-  --color-faint: rgb(26 26 26 / 0.4);
-  --color-accent: var(--color-charcoal);
-  --color-accent-hover: #3a3a3a;
-  --color-accent-soft: #ededed;
-  --color-accent-ink: var(--color-charcoal);
-  /* The floating header panel: one step off the page. */
-  --color-raised: #f4f4f5;
+  /* Panels inside the card. */
+  --color-surface-2: #efefef;
+  /* Hairlines and separators. */
+  --color-line: #e2e2e2;
+  --color-ink: #0a0a0a;
+  --color-muted: #6f6f6f;
+  --color-faint: #9c9c9c;
+  /* The filled button: ink on the page's colour. */
+  --color-accent: #0a0a0a;
+  --color-accent-hover: #262626;
+  --color-accent-soft: #efefef;
+  --color-accent-ink: #0a0a0a;
+  /* The header's own controls: the card colour. */
+  --color-raised: #ffffff;
   /* Text that sits on a solid ok/warn/danger fill. */
   --color-solid-ink: #ffffff;
-  /* The wash behind a dialog. */
-  --color-scrim: rgb(26 26 26 / 0.45);
+  /* The wash behind a dialog (the blur does most of the work). */
+  --color-scrim: rgb(0 0 0 / 0.2);
   --color-ok: #15803d;
   --color-warn: #a16207;
   --color-danger: #b91c1c;
-  --radius-card: 16px;
 
-  /*
-   * Desktop type scale. Tailwind's defaults (12/14/16px) are meant for phones too and read small
-   * on a Mac; every size is bumped one step so the whole app follows without touching components.
-   */
-  --text-xs: 13px;
-  --text-xs--line-height: 1.45;
-  --text-sm: 15px;
-  --text-sm--line-height: 1.5;
-  --text-base: 16px;
-  --text-base--line-height: 1.55;
-  --text-lg: 18px;
-  --text-lg--line-height: 1.45;
+  /* Panels inside the card. */
+  --radius-card: 20px;
+  /* The outer card. */
+  --radius-shell: 28px;
+  /* Dialogs and sheets. */
+  --radius-dialog: 32px;
+
+  --ease-ui: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --animate-enter: ui-enter 150ms var(--ease-ui) both;
+  --animate-exit: ui-exit 150ms var(--ease-ui) both;
+  --animate-fade-in: ui-fade-in 150ms var(--ease-ui) both;
+  --animate-fade-out: ui-fade-out 150ms var(--ease-ui) both;
+  --animate-sheet-in: ui-sheet-in 500ms var(--ease-sheet) both;
+  --animate-sheet-out: ui-sheet-out 400ms var(--ease-sheet) both;
+  --animate-scrim-in: ui-fade-in 500ms var(--ease-sheet) both;
+  --animate-scrim-out: ui-fade-out 300ms var(--ease-sheet) both;
+  --animate-card-in: ui-card-in 350ms var(--ease-ui) both;
+  --animate-wiggle: ui-wiggle 2s ease-in-out infinite;
+
+  @keyframes ui-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes ui-exit {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+  @keyframes ui-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes ui-fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes ui-sheet-in {
+    from {
+      transform: translate3d(100%, 0, 0);
+    }
+    to {
+      transform: translate3d(0, 0, 0);
+    }
+  }
+  @keyframes ui-sheet-out {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(100%, 0, 0);
+    }
+  }
+  @keyframes ui-card-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 12px, 0) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+  @keyframes ui-wiggle {
+    0%,
+    50%,
+    100% {
+      transform: rotate(0deg);
+    }
+    10%,
+    30% {
+      transform: rotate(-2deg);
+    }
+    20%,
+    40% {
+      transform: rotate(2deg);
+    }
+  }
 }
 
 .dark {
-  --color-page: var(--color-charcoal);
-  --color-surface: var(--color-charcoal);
-  --color-surface-2: #242424;
-  --color-line: rgb(255 255 255 / 0.14);
-  --color-ink: #fafafa;
-  --color-muted: rgb(255 255 255 / 0.62);
-  --color-faint: rgb(255 255 255 / 0.38);
-  --color-accent: #fafafa;
-  --color-accent-hover: #e4e4e7;
-  --color-accent-soft: rgb(255 255 255 / 0.1);
-  --color-accent-ink: #fafafa;
-  --color-solid-ink: var(--color-charcoal);
-  /* White at 5% over the page. */
-  --color-raised: #242424;
-  --color-scrim: rgb(0 0 0 / 0.55);
+  --color-page: #0a0a0a;
+  --color-surface: #161616;
+  --color-surface-2: #1d1d1d;
+  --color-line: #272727;
+  --color-ink: #f2f2f2;
+  --color-muted: #757575;
+  --color-faint: #5a5a5a;
+  --color-accent: #f2f2f2;
+  --color-accent-hover: #ffffff;
+  --color-accent-soft: #1d1d1d;
+  --color-accent-ink: #f2f2f2;
+  --color-raised: #161616;
+  --color-solid-ink: #0a0a0a;
+  --color-scrim: rgb(0 0 0 / 0.3);
   --color-ok: #4ade80;
   --color-warn: #fbbf24;
   --color-danger: #f87171;
@@ -73,23 +184,14 @@ html,
 body {
   background: var(--color-page);
   color: var(--color-ink);
-  /* System fonts only — no third-party font hosts (§7). */
-  font-family:
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
 /*
  * Switching the theme repaints every colour at once. The transition is attached only while the
- * switch is in flight (ui/components/ThemeToggle.tsx adds the class for the length of it), so
- * nothing else in the app ever animates a colour it did not ask to animate.
+ * switch is in flight (ui/components/Menu.tsx adds the class for the length of it), so nothing
+ * else in the app ever animates a colour it did not ask to animate.
  */
 .theme-switching *,
 .theme-switching *::before,
@@ -104,7 +206,7 @@ body {
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
@@ -123,208 +225,88 @@ input.amount::-webkit-inner-spin-button {
   margin: 0;
 }
 input.amount::placeholder {
-  color: var(--color-faint);
+  color: var(--color-muted);
+}
+
+/* Native selects draw their own arrow; ours is drawn by the component. */
+select.bare {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* Scrollbars inside dialogs and lists: thin and quiet. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
 }
 
 :root {
-  --rk-radii-modal: 20px;
+  --rk-radii-modal: 32px;
+  --rk-radii-actionButton: 9999px;
+  --rk-radii-connectButton: 9999px;
+  --rk-radii-menuButton: 16px;
 }
 
 /*
- * The splash over the bridge (ui/components/SplashOverlay.tsx). The whole screen is the glass:
- * `backdrop-filter` blurs the bridge that is already painted underneath, so the bridge itself is
- * never filtered — its sticky column and its wallet portals behave the same once it is gone.
- *
- * The material follows 4-glass-reference.jpg: enough blur that what is behind becomes soft shapes
- * rather than a haze, a fill that is darker at the bottom than at the top, one lit hairline along
- * the top edge, a deep shadow under it and a trace of grain so the blur does not read as plastic.
- * The highlight takes its colour from the theme's ink, so it is warm gold on dark and neutral on
- * light.
- *
- * Nothing above this element may animate its own opacity: an ancestor with an opacity other than
- * 1 is a backdrop root, and the blur would then have an empty backdrop to work on.
+ * The welcome screen at / (ui/components/SplashOverlay.tsx): the bridge is already painted
+ * underneath, and this sheet blurs it the way every dialog does, with the welcome card on top.
+ * Nothing above this element may animate its own opacity: an ancestor with an opacity other
+ * than 1 is a backdrop root, and the blur would then have an empty backdrop to work on.
  */
 .splash {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--color-page) 52%, transparent),
-    color-mix(in srgb, var(--color-page) 74%, transparent)
-  );
-  -webkit-backdrop-filter: blur(26px) saturate(150%);
-  backdrop-filter: blur(26px) saturate(150%);
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--color-ink) 14%, transparent),
-    0 40px 120px rgb(0 0 0 / 0.4);
+  background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(40px);
   transition:
     opacity 400ms ease,
     -webkit-backdrop-filter 400ms ease,
     backdrop-filter 400ms ease;
 }
 
-/* The lit top edge: brightest in the middle, gone at the corners. */
-.splash::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--color-ink) 42%, transparent) 28%,
-    color-mix(in srgb, var(--color-ink) 42%, transparent) 72%,
-    transparent
-  );
-}
-
-/* Grain. Static SVG noise, no texture file and no request: enough to break up the blur. */
-.splash::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.045;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 /* On the way out the glass clears as it fades, so the bridge sharpens instead of being uncovered. */
 .splash-leaving {
   pointer-events: none;
   opacity: 0;
-  -webkit-backdrop-filter: blur(0) saturate(100%);
-  backdrop-filter: blur(0) saturate(100%);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .splash {
-    transition-duration: 1ms;
-  }
+  -webkit-backdrop-filter: blur(0);
+  backdrop-filter: blur(0);
 }
 
 /* Where the browser cannot blur a backdrop at all, the sheet covers instead of frosting: the
  * bridge behind must never be readable through the splash. */
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .splash {
+  .splash,
+  .overlay {
     background: color-mix(in srgb, var(--color-page) 94%, transparent);
   }
 }
 
-/*
- * The theme switch (2-theme-toggle.gif): a hairline capsule with a knob that overhangs it top and
- * bottom and lands with a spring. The knob is Deep Charcoal in both themes — on gold when the
- * dark theme is on, on white when it is off.
- */
-.toggle {
-  position: relative;
-  display: inline-flex;
-  height: 30px;
-  width: 58px;
-  flex-shrink: 0;
-  align-items: center;
-  border-radius: 999px;
-  border: 1px solid var(--color-line);
-  background: var(--color-surface);
+/* The wash behind every dialog: a heavy blur over the page, barely any tint. */
+.overlay {
+  background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(40px);
 }
 
-.toggle[data-on='true'] {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-}
-
-/*
- * The knob keeps its own spring while the theme repaints. The blanket rule above replaces the
- * `transition` of everything on the page for those 300ms, and without this the knob would jump
- * the moment it is asked to travel — which is the one moment it has to travel.
- */
-.theme-switching .toggle-knob {
-  transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-}
-
-.theme-switching .toggle-icon {
-  transition:
-    opacity 260ms ease,
-    transform 260ms ease !important;
-}
-
-.toggle-knob {
-  position: absolute;
-  left: -1px;
-  height: 34px;
-  width: 34px;
-  transform: translateX(0);
-  transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.toggle[data-on='true'] .toggle-knob {
-  transform: translateX(25px);
-}
-
-.toggle-knob-inner {
-  display: flex;
-  height: 100%;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--color-charcoal);
-  color: var(--color-ink);
-  box-shadow:
-    0 3px 8px rgb(0 0 0 / 0.3),
-    0 1px 2px rgb(0 0 0 / 0.25);
-}
-
-/* Light theme: no gold anywhere, so the glyph inside the knob is the page itself. */
-:root:not(.dark) .toggle-knob-inner {
-  color: var(--color-page);
-}
-
-/* Squash on the way out, stretch on the way back — on the inner element, so the travel above
- * stays a plain transform transition. */
-.toggle[data-anim='true'] .toggle-knob-inner {
-  animation: knob-squash 380ms ease-out;
-}
-
-@keyframes knob-squash {
-  0% {
-    transform: scale(1, 1);
-  }
-  35% {
-    transform: scale(1.16, 0.88);
-  }
-  70% {
-    transform: scale(0.94, 1.06);
-  }
-  100% {
-    transform: scale(1, 1);
-  }
-}
-
-.toggle-icon {
-  position: absolute;
-  transition:
-    opacity 260ms ease,
-    transform 260ms ease;
-}
-
-.toggle[data-on='true'] .toggle-icon-sun,
-.toggle[data-on='false'] .toggle-icon-moon {
-  opacity: 0;
-  transform: scale(0.6) rotate(-40deg);
-}
-
-.toggle[data-on='true'] .toggle-icon-moon,
-.toggle[data-on='false'] .toggle-icon-sun {
-  opacity: 1;
-  transform: none;
+/* The wash behind the wallets sheet: a lighter blur, the page stays legible. */
+.overlay-light {
+  background: var(--color-scrim);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toggle-knob,
-  .toggle-icon {
+  .splash {
     transition-duration: 1ms;
   }
-
-  .toggle[data-anim='true'] .toggle-knob-inner {
-    animation: none;
+  .animate-enter,
+  .animate-exit,
+  .animate-fade-in,
+  .animate-fade-out,
+  .animate-sheet-in,
+  .animate-sheet-out,
+  .animate-scrim-in,
+  .animate-scrim-out,
+  .animate-card-in {
+    animation-duration: 1ms !important;
   }
 }

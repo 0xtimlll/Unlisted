@@ -1,63 +1,88 @@
 'use client'
-/** In-house primitives in the Relay-like visual language (§1: no UI kits). */
+/**
+ * In-house primitives (no UI kits). The visual language: pills for every button, grey panels in
+ * steps (page → card → panel → control), 150ms ease transitions and a small scale on hover.
+ */
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { CaretDownIcon, CloseIcon } from './icons'
 
 const focus = 'outline-none focus-visible:ring-2 focus-visible:ring-ink/30'
 
-export function Button({
-  variant = 'secondary',
-  className = '',
-  ...p
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'cta' | 'primary' | 'secondary' | 'ghost' | 'danger' | 'pill' }) {
+export type ButtonVariant = 'primary' | 'secondary' | 'muted' | 'ghost' | 'danger' | 'pill' | 'cta'
+
+/**
+ * Buttons. `primary` is the filled pill (ink on page), `secondary` the card-coloured pill that sits
+ * on a panel, `muted` the panel-coloured pill that sits on the card, `pill` a small one of those,
+ * `ghost` text only. `cta` is the big one under the form: card-coloured by default, filled when
+ * `data-tone="primary"` (Approve / Send ready to go), half-transparent when disabled — a disabled
+ * button is a plain fact, not a warning.
+ */
+export function Button({ variant = 'secondary', className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   const v =
     variant === 'cta'
-      ? 'h-11 w-full rounded-xl bg-accent text-[15px] font-bold uppercase italic tracking-wide text-page hover:bg-accent-hover disabled:bg-surface-2 disabled:text-faint disabled:opacity-100'
+      ? 'h-14 w-full rounded-full px-4 text-sm font-semibold shadow-sm bg-surface text-ink data-[tone=primary]:bg-accent data-[tone=primary]:text-page enabled:hover:scale-[1.03] disabled:opacity-50'
       : variant === 'primary'
-        ? 'h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-page hover:bg-accent-hover'
+        ? 'h-10 rounded-full bg-accent px-5 text-sm font-semibold text-page enabled:hover:scale-105 disabled:opacity-50'
         : variant === 'danger'
-          ? 'h-10 rounded-xl bg-danger px-4 text-sm font-semibold text-solid-ink hover:opacity-90'
+          ? 'h-10 rounded-full bg-danger px-4 text-sm font-semibold text-solid-ink enabled:hover:scale-105 disabled:opacity-50'
           : variant === 'ghost'
-            ? 'h-9 rounded-lg px-3 text-sm text-muted hover:bg-surface-2 hover:text-ink'
+            ? 'h-9 rounded-full px-3 text-sm text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50'
             : variant === 'pill'
-              ? 'h-9 rounded-full bg-surface-2 px-3 text-sm font-medium text-ink hover:bg-line'
-              : 'h-10 rounded-xl border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-2'
-  return <button type="button" {...p} className={`inline-flex items-center justify-center gap-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${focus} ${v} ${className}`} />
+              ? 'h-7 rounded-full bg-surface px-2.5 text-xs font-semibold text-ink enabled:hover:scale-105 disabled:opacity-50'
+              : variant === 'muted'
+                ? 'h-10 rounded-full bg-surface-2 px-5 text-sm font-semibold text-ink enabled:hover:scale-105 disabled:opacity-50'
+                : 'h-10 rounded-full bg-surface px-5 text-sm font-semibold text-ink enabled:hover:scale-105 disabled:opacity-50'
+  return <button type="button" {...p} className={`inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap transition disabled:cursor-not-allowed ${focus} ${v} ${className}`} />
 }
 
 /**
- * A square icon button for the header. Desktop-sized on purpose: the hit area is 40x40 and the
- * glyph ~21px, because the old 36x28 ghost buttons were nearly unhittable on a Mac trackpad.
- * `label` is both the accessible name and the tooltip.
- *
- * Nothing is drawn around it on hover — no plate, no border, no shadow. Whatever the icon itself
- * does on hover is the whole of it. The keyboard ring stays, quietly.
+ * A round icon button. `md` is the header's 40px pill, `sm` the 32px one above a card. The glyph
+ * is muted and brightens on hover; the pill itself grows a little, like every other pill.
  */
-export function IconButton({ label, children, className = '', ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+export function IconButton({
+  label,
+  size = 'md',
+  tone = 'surface',
+  children,
+  className = '',
+  ...p
+}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; size?: 'md' | 'sm'; tone?: 'surface' | 'muted' | 'bare' }) {
+  const s = size === 'md' ? 'h-10 w-10 [&_svg]:h-6 [&_svg]:w-6' : 'h-8 w-9 [&_svg]:h-5 [&_svg]:w-5'
+  const t = tone === 'bare' ? 'text-muted hover:text-ink' : tone === 'muted' ? 'bg-surface-2 text-ink shadow-sm' : 'bg-surface text-muted shadow-sm hover:text-ink'
   return (
-    <button
-      type="button"
-      {...p}
-      aria-label={label}
-      title={label}
-      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[21px] leading-none text-muted transition hover:text-ink outline-none focus-visible:ring-1 focus-visible:ring-ink/25 ${className}`}
-    >
-      <span aria-hidden>{children}</span>
+    <button type="button" {...p} aria-label={label} title={label} className={`group inline-flex shrink-0 items-center justify-center rounded-full transition hover:scale-105 ${focus} ${s} ${t} ${className}`}>
+      <span aria-hidden className="inline-flex items-center justify-center">
+        {children}
+      </span>
     </button>
   )
 }
 
-export function Input({ className = '', ...p }: InputHTMLAttributes<HTMLInputElement>) {
+/** The round close button in a dialog's corner. */
+export function CloseButton({ onClick, label }: { onClick: () => void; label: string }) {
+  return (
+    <IconButton label={label} tone="muted" onClick={onClick}>
+      <CloseIcon className="!h-3.5 !w-3.5" />
+    </IconButton>
+  )
+}
+
+/**
+ * Text inputs. On the card they are panel-coloured; on a panel (`tone="surface"`) card-coloured,
+ * so the field always reads as a cut-out in whatever it sits on.
+ */
+export function Input({ className = '', tone = 'muted', ...p }: InputHTMLAttributes<HTMLInputElement> & { tone?: 'muted' | 'surface' }) {
   return (
     <input
       {...p}
       spellCheck={false}
       autoComplete="off"
-      className={`h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink placeholder:text-faint ${focus} focus-visible:border-accent-ink disabled:opacity-50 ${className}`}
+      className={`h-10 w-full rounded-xl px-4 text-sm text-ink placeholder:text-muted ${tone === 'surface' ? 'bg-surface' : 'bg-surface-2'} ${focus} disabled:opacity-50 ${className}`}
     />
   )
 }
 
-/** Big Relay-style amount field. */
+/** The big amount field: 36px, no chrome, the caret is the only decoration. */
 export function AmountInput({ className = '', ...p }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -65,141 +90,52 @@ export function AmountInput({ className = '', ...p }: InputHTMLAttributes<HTMLIn
       inputMode="decimal"
       spellCheck={false}
       autoComplete="off"
-      className={`amount tnum w-full min-w-0 bg-transparent text-[32px] font-bold leading-none text-ink outline-none disabled:opacity-60 ${className}`}
+      className={`amount tnum w-full min-w-0 bg-transparent text-4xl leading-none text-ink outline-none disabled:opacity-60 ${className}`}
     />
   )
 }
 
-export function Select({ className = '', ...p }: SelectHTMLAttributes<HTMLSelectElement>) {
+/** A select in a dark rounded frame, our own chevron. */
+export function Select({ className = '', wrapClassName = '', ...p }: SelectHTMLAttributes<HTMLSelectElement> & { wrapClassName?: string }) {
   return (
-    <select
-      {...p}
-      className={`h-10 rounded-xl border border-line bg-surface px-3 text-sm text-ink ${focus} ${className}`}
-    />
+    <span className={`relative inline-flex ${wrapClassName}`}>
+      <select {...p} className={`bare h-10 w-full rounded-[14px] border border-line bg-surface py-2 pl-3 pr-9 text-sm text-ink ${focus} disabled:opacity-50 ${className}`} />
+      <CaretDownIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink" />
+    </span>
   )
 }
 
-export type PillOption = { value: string; label: string; sub?: string; icon?: ReactNode }
-
-/**
- * Pill-shaped chain selector with a custom dropdown (icons in the list), plus a hidden
- * native <select> kept in sync for keyboard users, screen readers and tests.
- */
-export function PillSelect({
-  label,
-  sub,
-  icon,
-  options,
-  value,
-  onSelect,
-  className = '',
-  ...p
-}: Omit<SelectHTMLAttributes<HTMLSelectElement>, 'value' | 'onChange'> & {
-  label: string
-  sub?: string
-  icon?: ReactNode
-  options: PillOption[]
-  value: string
-  onSelect: (v: string) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    document.addEventListener('keydown', esc)
-    return () => {
-      document.removeEventListener('mousedown', close)
-      document.removeEventListener('keydown', esc)
-    }
-  }, [open])
-
-  return (
-    <div ref={ref} className={`relative shrink-0 ${className}`}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={`relative inline-flex h-[50px] w-full items-center gap-2.5 rounded-full bg-surface-2 pl-2.5 pr-9 text-left hover:bg-line ${focus}`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        {icon ?? <span className="h-8 w-8 shrink-0 rounded-full border-2 border-dashed border-line" aria-hidden />}
-        <span className="flex flex-col leading-tight">
-          <span className="whitespace-nowrap text-[15px] font-semibold text-ink">{label}</span>
-          {sub ? <span className="text-xs text-muted">{sub}</span> : null}
-        </span>
-        <span className={`pointer-events-none absolute right-3 text-muted transition ${open ? 'rotate-90' : ''}`}>›</span>
-      </button>
-      {open ? (
-        <ul role="listbox" className="absolute right-0 z-20 mt-1.5 max-h-72 w-56 overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-xl">
-          {options.map((o) => (
-            <li key={o.value} role="option" aria-selected={o.value === value}>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelect(o.value)
-                  setOpen(false)
-                }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left hover:bg-surface-2 ${o.value === value ? 'bg-surface-2' : ''}`}
-              >
-                {o.icon ?? <span className="h-7 w-7 shrink-0" />}
-                <span className="flex flex-col leading-tight">
-                  <span className="text-sm font-semibold text-ink">{o.label}</span>
-                  {o.sub ? <span className="text-xs text-muted">{o.sub}</span> : null}
-                </span>
-                {o.value === value ? <span className="ml-auto text-ink">✓</span> : null}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {/* Mirror for assistive tech and automation; visually hidden but focusable. */}
-      <select {...p} value={value} onChange={(e) => onSelect(e.target.value)} className="sr-only" tabIndex={-1}>
-        <option value="">—</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
-
-/** Deterministic two-letter badge; monochrome, no remote images. */
+/** Deterministic two-letter badge for a token; monochrome, no remote images. */
 export function ChainDot({ name, size = 32 }: { name: string; size?: number }) {
   const initials = name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase()
   return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full bg-ink font-bold text-page"
-      style={{ width: size, height: size, fontSize: size * 0.36 }}
-      aria-hidden
-    >
+    <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-page" style={{ width: size, height: size, fontSize: size * 0.36 }} aria-hidden>
       {initials}
     </span>
   )
 }
 
-/** The white boxes inside the bridge card ("Sell"/"Buy" style). */
-export function Box({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-card border border-line bg-surface p-4 ${className}`}>{children}</section>
+/** The outer card: one step above the page, the form or the preview lives in it. */
+export function Shell({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <section className={`flex w-full flex-col gap-3 rounded-shell bg-surface p-5 shadow-sm ${className}`}>{children}</section>
 }
 
-export function BoxLabel({ children, right }: { children: ReactNode; right?: ReactNode }) {
+/** A panel inside the card: one more step up. */
+export function Box({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-card bg-surface-2 p-4 ${className}`}>{children}</div>
+}
+
+/** The small grey heading over a panel or a group. */
+export function BoxLabel({ children, right, className = '' }: { children: ReactNode; right?: ReactNode; className?: string }) {
   return (
-    <div className="mb-2 flex items-center justify-between text-sm text-muted">
+    <div className={`mb-2 flex items-center justify-between gap-2 text-xs font-semibold text-muted ${className}`}>
       <span>{children}</span>
-      {right ? <span>{right}</span> : null}
+      {right ? <span className="font-normal">{right}</span> : null}
     </div>
   )
 }
 
+/** A label/value row in a panel. */
 export function Row({ label, children, mono = false }: { label: ReactNode; children: ReactNode; mono?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5 text-sm">
@@ -210,30 +146,29 @@ export function Row({ label, children, mono = false }: { label: ReactNode; child
 }
 
 export function Alert({ kind, children }: { kind: 'error' | 'warn' | 'info' | 'ok'; children: ReactNode }) {
-  const c =
-    kind === 'error'
-      ? 'border-danger/30 bg-danger/10 text-danger'
-      : kind === 'warn'
-        ? 'border-warn/30 bg-warn/10 text-warn'
-        : kind === 'ok'
-          ? 'border-ok/30 bg-ok/10 text-ok'
-          : 'border-accent-ink/30 bg-accent-soft/50 text-accent-ink'
-  return <div className={`rounded-xl border px-3 py-2 text-sm ${c}`}>{children}</div>
+  const c = kind === 'error' ? 'text-danger' : kind === 'warn' ? 'text-warn' : kind === 'ok' ? 'text-ok' : 'text-ink'
+  return <div className={`rounded-xl bg-surface-2 px-3 py-2 text-sm ${c}`}>{children}</div>
 }
 
 export function Spinner() {
   return <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent align-middle" aria-hidden />
 }
 
+/** Keyboard hint, like the ⌘K next to a search field. */
+export function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="rounded-full border-2 border-surface-2 px-2 py-1.5 text-[10px] leading-none text-muted opacity-70">{children}</kbd>
+}
+
+/** A row of pills where one is selected: the active one is a card-coloured pill, the rest are text. */
 export function Tabs<T extends string>({ value, onChange, items }: { value: T; onChange: (v: T) => void; items: { value: T; label: string }[] }) {
   return (
-    <div className="inline-flex rounded-xl bg-surface-2 p-1">
+    <div className="inline-flex items-center gap-1">
       {items.map((it) => (
         <button
           key={it.value}
           type="button"
           onClick={() => onChange(it.value)}
-          className={`h-8 rounded-lg px-3 text-sm font-medium transition ${value === it.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+          className={`h-8 rounded-full px-3 text-xs font-semibold transition hover:scale-105 ${focus} ${value === it.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:bg-surface hover:text-ink'}`}
         >
           {it.label}
         </button>
@@ -244,20 +179,13 @@ export function Tabs<T extends string>({ value, onChange, items }: { value: T; o
 
 /**
  * The protocol tabs in the header. Each tab is a real link to its own page so it can be opened,
- * bookmarked and middle-clicked; in-app clicks are intercepted by the caller (no reload, the
- * wallet stays connected).
+ * bookmarked and middle-clicked; in-app clicks are intercepted by the caller (no reload, the wallet
+ * stays connected). The active tab is a card-coloured pill; the others are grey text that grows a
+ * pill on hover.
  */
-export function LinkTabs<T extends string>({
-  value,
-  items,
-  onSelect,
-}: {
-  value: T
-  items: { value: T; label: string; href: string }[]
-  onSelect: (v: T) => void
-}) {
+export function LinkTabs<T extends string>({ value, items, onSelect }: { value: T; items: { value: T; label: string; href: string }[]; onSelect: (v: T) => void }) {
   return (
-    <nav className="flex items-center gap-1 rounded-2xl bg-surface-2 p-1" aria-label="Protocol">
+    <nav className="flex items-center gap-1" aria-label="Protocol">
       {items.map((it) => {
         const active = it.value === value
         return (
@@ -271,8 +199,8 @@ export function LinkTabs<T extends string>({
               e.preventDefault()
               onSelect(it.value)
             }}
-            className={`inline-flex h-10 items-center rounded-xl px-4 text-[15px] font-semibold transition ${focus} ${
-              active ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+            className={`inline-flex h-10 items-center whitespace-nowrap rounded-full px-5 text-sm font-semibold transition hover:scale-105 ${focus} ${
+              active ? 'bg-raised text-ink shadow-sm' : 'text-muted hover:bg-raised hover:text-ink hover:shadow-sm'
             }`}
           >
             {it.label}
@@ -286,11 +214,106 @@ export function LinkTabs<T extends string>({
 export function Disclosure({ title, open, onToggle, children }: { title: ReactNode; open: boolean; onToggle: () => void; children: ReactNode }) {
   return (
     <div>
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between py-1 text-sm text-muted hover:text-ink">
-        <span>{title}</span>
-        <span className={`transition ${open ? 'rotate-180' : ''}`}>⌄</span>
+      <button type="button" onClick={onToggle} aria-expanded={open} className={`flex w-full items-center justify-between gap-2 rounded-lg py-1 text-sm text-muted transition hover:text-ink ${focus}`}>
+        <span className="min-w-0 text-left">{title}</span>
+        <CaretDownIcon className={`h-3.5 w-3.5 shrink-0 transition ${open ? 'rotate-180' : ''}`} />
       </button>
       {open ? <div className="pt-1">{children}</div> : null}
+    </div>
+  )
+}
+
+/**
+ * How a dialog leaves: the caller asks `dismiss()`, the exit animation plays for `ms`, then
+ * `onClose` runs. Escape does the same. Reduced motion is honoured by the keyframes being cut to
+ * 1ms in globals.css, so the wait is as short as the animation.
+ */
+export function useDismiss(onClose: () => void, ms = 160): { leaving: boolean; dismiss: () => void } {
+  const [leaving, setLeaving] = useState(false)
+  const closing = useRef(false)
+  const dismiss = () => {
+    if (closing.current) return
+    closing.current = true
+    setLeaving(true)
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        dismiss()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [])
+  useEffect(() => {
+    if (!leaving) return
+    const t = window.setTimeout(onClose, ms)
+    return () => window.clearTimeout(t)
+  }, [leaving, onClose, ms])
+  return { leaving, dismiss }
+}
+
+/**
+ * A centred dialog: a heavy blur over the page, a card with a title and a round close button.
+ * `width` is the card's width in px; the body scrolls when it is taller than the window.
+ */
+export function Modal({
+  title,
+  onClose,
+  closeLabel,
+  width = 440,
+  children,
+  headerExtra,
+}: {
+  title: ReactNode
+  onClose: () => void
+  closeLabel: string
+  width?: number
+  children: ReactNode
+  headerExtra?: ReactNode
+}) {
+  const { leaving, dismiss } = useDismiss(onClose)
+  return (
+    <div className={`overlay fixed inset-0 z-50 flex items-center justify-center p-6 ${leaving ? 'animate-fade-out' : 'animate-fade-in'}`} onMouseDown={dismiss}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`scroll-quiet flex max-h-[min(720px,calc(100vh-48px))] w-full flex-col overflow-hidden rounded-dialog bg-surface shadow-lg ${leaving ? 'animate-exit' : 'animate-enter'}`}
+        style={{ maxWidth: width }}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-4 px-6 pb-4 pt-6">
+          <h2 className="pt-1.5 text-xl font-semibold text-ink">{title}</h2>
+          <div className="flex items-center gap-2">
+            {headerExtra}
+            <CloseButton onClick={dismiss} label={closeLabel} />
+          </div>
+        </div>
+        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto px-6 pb-6">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+/** A group of settings rows in a hairline frame, separated by hairlines. */
+export function Group({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`divide-y divide-line rounded-2xl border border-line ${className}`}>{children}</div>
+}
+
+/** One settings row: an icon, a name with an optional note, and the control on the right. */
+export function SettingRow({ icon, title, note, children, align = 'center' }: { icon?: ReactNode; title: ReactNode; note?: ReactNode; children?: ReactNode; align?: 'center' | 'start' }) {
+  return (
+    <div className={`flex gap-4 p-4 ${align === 'start' ? 'items-start' : 'items-center'}`}>
+      <div className={`flex min-w-0 flex-1 gap-2 ${align === 'start' ? 'items-start' : 'items-center'}`}>
+        {icon ? <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-muted [&_svg]:h-5 [&_svg]:w-5">{icon}</span> : null}
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-ink">{title}</div>
+          {note ? <div className="text-xs text-muted">{note}</div> : null}
+        </div>
+      </div>
+      {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
     </div>
   )
 }

@@ -1,74 +1,204 @@
 /**
- * Inline SVG icons. Every one of them draws in `currentColor`, so the colour is whatever the
- * theme has put on the element around it — never a colour of its own.
+ * Inline SVG icons: Phosphor Icons (https://phosphoricons.com, MIT), "bold" and "fill" weights,
+ * on their 256-unit grid. Generated from the published SVGs — one component per glyph, every one
+ * of them drawn in `currentColor`, so the colour is whatever the theme put on the element around
+ * it. Attribution and licence: public/icons-ATTRIBUTION.md.
  */
+import type { SVGProps } from 'react'
 
-/**
- * The settings gear (5-settings-icon.jpg): straight teeth whose corners are rounded by a
- * round-joined stroke, a thick ring, and three cut-outs inside separated by three spokes that
- * meet in the middle. Twelve teeth rather than the reference's sixteen — at the 24px this is
- * drawn at, sixteen close up into a blur.
- */
-const GEAR_TEETH =
-  'M95.5 56.5 L95.5 43.5 L82.7 45.4 L80.6 37.7 L92.7 32.8 L86.2 21.6 L76.0 29.6 L70.4 24.0 L78.4 13.8 L67.2 7.3 L62.3 19.4 L54.6 17.3 L56.5 4.5 L43.5 4.5 L45.4 17.3 L37.7 19.4 L32.8 7.3 L21.6 13.8 L29.6 24.0 L24.0 29.6 L13.8 21.6 L7.3 32.8 L19.4 37.7 L17.3 45.4 L4.5 43.5 L4.5 56.5 L17.3 54.6 L19.4 62.3 L7.3 67.2 L13.8 78.4 L24.0 70.4 L29.6 76.0 L21.6 86.2 L32.8 92.7 L37.7 80.6 L45.4 82.7 L43.5 95.5 L56.5 95.5 L54.6 82.7 L62.3 80.6 L67.2 92.7 L78.4 86.2 L70.4 76.0 L76.0 70.4 L86.2 78.4 L92.7 67.2 L80.6 62.3 L82.7 54.6 Z'
-/** The hole in the middle of the ring, as a second subpath: with evenodd it cuts the ring open. */
-const GEAR_HOLE = 'M50 24 A26 26 0 1 0 50 76 A26 26 0 1 0 50 24 Z'
-/** Where the three spokes point: up, lower-left, lower-right. */
-const SPOKES = [90, 210, 330]
+type IconProps = SVGProps<SVGSVGElement> & { className?: string }
 
-export function GearIcon({ className = '' }: { className?: string }) {
+function Icon({ paths, className = '', ...p }: IconProps & { paths: string[] }) {
   return (
-    <svg viewBox="0 0 100 100" className={className} fill="currentColor" aria-hidden focusable="false">
-      <path d={`${GEAR_TEETH} ${GEAR_HOLE}`} fillRule="evenodd" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-      <g stroke="currentColor" strokeWidth="9" strokeLinecap="round">
-        {SPOKES.map((a) => (
-          <line key={a} x1="50" y1="50" x2={(50 + 29 * Math.cos((a * Math.PI) / 180)).toFixed(1)} y2={(50 - 29 * Math.sin((a * Math.PI) / 180)).toFixed(1)} />
-        ))}
-      </g>
+    <svg viewBox="0 0 256 256" fill="currentColor" className={className} aria-hidden focusable="false" {...p}>
+      {paths.map((path, i) => (
+        <path key={i} d={path} />
+      ))}
     </svg>
   )
 }
 
-export function MoonIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden focusable="false">
-      <path d="M20.7 14.6A8.6 8.6 0 0 1 9.4 3.3a8.9 8.9 0 1 0 11.3 11.3Z" />
-    </svg>
-  )
+/** Phosphor `wallet-fill`. */
+export function WalletIcon(p: IconProps) {
+  return <Icon {...p} paths={["M216,64H56a8,8,0,0,1,0-16H192a8,8,0,0,0,0-16H56A24,24,0,0,0,32,56V184a24,24,0,0,0,24,24H216a16,16,0,0,0,16-16V80A16,16,0,0,0,216,64Zm-36,80a12,12,0,1,1,12-12A12,12,0,0,1,180,144Z"]} />
 }
 
-export function SunIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden focusable="false">
-      <circle cx="12" cy="12" r="4.2" fill="currentColor" stroke="none" />
-      {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => {
-        const r = (a * Math.PI) / 180
-        return <line key={a} x1={(12 + 7 * Math.cos(r)).toFixed(1)} y1={(12 - 7 * Math.sin(r)).toFixed(1)} x2={(12 + 9.4 * Math.cos(r)).toFixed(1)} y2={(12 - 9.4 * Math.sin(r)).toFixed(1)} />
-      })}
-    </svg>
-  )
+/** Phosphor `list-bold`. */
+export function MenuIcon(p: IconProps) {
+  return <Icon {...p} paths={["M228,128a12,12,0,0,1-12,12H40a12,12,0,0,1,0-24H216A12,12,0,0,1,228,128ZM40,76H216a12,12,0,0,0,0-24H40a12,12,0,0,0,0,24ZM216,180H40a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24Z"]} />
 }
 
-/**
- * The GitHub mark, as GitHub's own logo package draws it (16×16 grid, one filled path).
- * Like every icon here it takes its colour from whatever it sits in.
- */
-export function GithubIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} fill="currentColor" aria-hidden focusable="false">
-      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
-    </svg>
-  )
+/** Phosphor `gear-six-fill`. */
+export function GearIcon(p: IconProps) {
+  return <Icon {...p} paths={["M237.94,107.21a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.88,25a8,8,0,0,0-6.47-.6A111.92,111.92,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.07l-.15,33.65-29.83,17a8,8,0,0,0-3.89,5.4,106.47,106.47,0,0,0,0,41.56,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.63a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.12,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.57-.42,112.1,112.1,0,0,0,36.68-20.73,8,8,0,0,0,2.83-6.07l.15-33.65,29.83-17a8,8,0,0,0,3.89-5.4A106.47,106.47,0,0,0,237.94,107.21ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z"]} />
 }
 
-/** Address book: a small contact card. Same 24px grid and stroke weight as the gear. */
-export function BookIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
-      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6.5A1.5 1.5 0 0 1 5 19.5z" />
-      <path d="M5 17h14" />
-      <circle cx="12" cy="9" r="2" />
-      <path d="M9 14c.6-1.2 1.7-1.8 3-1.8s2.4.6 3 1.8" />
-    </svg>
-  )
+/** Phosphor `address-book-fill`. */
+export function BookIcon(p: IconProps) {
+  return <Icon {...p} paths={["M160,112a24,24,0,1,1-24-24A24,24,0,0,1,160,112Zm64-72V216a16,16,0,0,1-16,16H64a16,16,0,0,1-16-16V192H32a8,8,0,0,1,0-16H48V136H32a8,8,0,0,1,0-16H48V80H32a8,8,0,0,1,0-16H48V40A16,16,0,0,1,64,24H208A16,16,0,0,1,224,40ZM190.4,163.2A67.88,67.88,0,0,0,163,141.51a40,40,0,1,0-53.94,0A67.88,67.88,0,0,0,81.6,163.2a8,8,0,1,0,12.8,9.6,52,52,0,0,1,83.2,0,8,8,0,1,0,12.8-9.6Z"]} />
+}
+
+/** Phosphor `sun-fill`. */
+export function SunIcon(p: IconProps) {
+  return <Icon {...p} paths={["M120,40V16a8,8,0,0,1,16,0V40a8,8,0,0,1-16,0Zm8,24a64,64,0,1,0,64,64A64.07,64.07,0,0,0,128,64ZM58.34,69.66A8,8,0,0,0,69.66,58.34l-16-16A8,8,0,0,0,42.34,53.66Zm0,116.68-16,16a8,8,0,0,0,11.32,11.32l16-16a8,8,0,0,0-11.32-11.32ZM192,72a8,8,0,0,0,5.66-2.34l16-16a8,8,0,0,0-11.32-11.32l-16,16A8,8,0,0,0,192,72Zm5.66,114.34a8,8,0,0,0-11.32,11.32l16,16a8,8,0,0,0,11.32-11.32ZM48,128a8,8,0,0,0-8-8H16a8,8,0,0,0,0,16H40A8,8,0,0,0,48,128Zm80,80a8,8,0,0,0-8,8v24a8,8,0,0,0,16,0V216A8,8,0,0,0,128,208Zm112-88H216a8,8,0,0,0,0,16h24a8,8,0,0,0,0-16Z"]} />
+}
+
+/** Phosphor `moon-fill`. */
+export function MoonIcon(p: IconProps) {
+  return <Icon {...p} paths={["M235.54,150.21a104.84,104.84,0,0,1-37,52.91A104,104,0,0,1,32,120,103.09,103.09,0,0,1,52.88,57.48a104.84,104.84,0,0,1,52.91-37,8,8,0,0,1,10,10,88.08,88.08,0,0,0,109.8,109.8,8,8,0,0,1,10,10Z"]} />
+}
+
+/** Phosphor `github-logo-fill`. */
+export function GithubIcon(p: IconProps) {
+  return <Icon {...p} paths={["M216,104v8a56.06,56.06,0,0,1-48.44,55.47A39.8,39.8,0,0,1,176,192v40a8,8,0,0,1-8,8H104a8,8,0,0,1-8-8V216H72a40,40,0,0,1-40-40A24,24,0,0,0,8,152a8,8,0,0,1,0-16,40,40,0,0,1,40,40,24,24,0,0,0,24,24H96v-8a39.8,39.8,0,0,1,8.44-24.53A56.06,56.06,0,0,1,56,112v-8a58.14,58.14,0,0,1,7.69-28.32A59.78,59.78,0,0,1,69.07,28,8,8,0,0,1,76,24a59.75,59.75,0,0,1,48,24h24a59.75,59.75,0,0,1,48-24,8,8,0,0,1,6.93,4,59.74,59.74,0,0,1,5.37,47.68A58,58,0,0,1,216,104Z"]} />
+}
+
+/** Phosphor `magnifying-glass-bold`. */
+export function SearchIcon(p: IconProps) {
+  return <Icon {...p} paths={["M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z"]} />
+}
+
+/** Phosphor `arrows-down-up-bold`. */
+export function SwapIcon(p: IconProps) {
+  return <Icon {...p} paths={["M120.49,167.51a12,12,0,0,1,0,17l-32,32a12,12,0,0,1-17,0l-32-32a12,12,0,1,1,17-17L68,179V48a12,12,0,0,1,24,0V179l11.51-11.52A12,12,0,0,1,120.49,167.51Zm96-96-32-32a12,12,0,0,0-17,0l-32,32a12,12,0,0,0,17,17L164,77V208a12,12,0,0,0,24,0V77l11.51,11.52a12,12,0,0,0,17-17Z"]} />
+}
+
+/** Phosphor `caret-right-bold`. */
+export function CaretRightIcon(p: IconProps) {
+  return <Icon {...p} paths={["M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z"]} />
+}
+
+/** Phosphor `caret-down-bold`. */
+export function CaretDownIcon(p: IconProps) {
+  return <Icon {...p} paths={["M216.49,104.49l-80,80a12,12,0,0,1-17,0l-80-80a12,12,0,0,1,17-17L128,159l71.51-71.52a12,12,0,0,1,17,17Z"]} />
+}
+
+/** Phosphor `x-bold`. */
+export function CloseIcon(p: IconProps) {
+  return <Icon {...p} paths={["M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z"]} />
+}
+
+/** Phosphor `copy-bold`. */
+export function CopyIcon(p: IconProps) {
+  return <Icon {...p} paths={["M216,28H88A12,12,0,0,0,76,40V76H40A12,12,0,0,0,28,88V216a12,12,0,0,0,12,12H168a12,12,0,0,0,12-12V180h36a12,12,0,0,0,12-12V40A12,12,0,0,0,216,28ZM156,204H52V100H156Zm48-48H180V88a12,12,0,0,0-12-12H100V52H204Z"]} />
+}
+
+/** Phosphor `check-bold`. */
+export function CheckIcon(p: IconProps) {
+  return <Icon {...p} paths={["M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z"]} />
+}
+
+/** Phosphor `arrow-square-out-bold`. */
+export function ExternalIcon(p: IconProps) {
+  return <Icon {...p} paths={["M228,104a12,12,0,0,1-24,0V69l-59.51,59.51a12,12,0,0,1-17-17L187,52H152a12,12,0,0,1,0-24h64a12,12,0,0,1,12,12Zm-44,24a12,12,0,0,0-12,12v64H52V84h64a12,12,0,0,0,0-24H48A20,20,0,0,0,28,80V208a20,20,0,0,0,20,20H176a20,20,0,0,0,20-20V140A12,12,0,0,0,184,128Z"]} />
+}
+
+/** Phosphor `clock-counter-clockwise-fill`. */
+export function HistoryIcon(p: IconProps) {
+  return <Icon {...p} paths={["M224,128A96,96,0,0,1,62.11,197.82a8,8,0,1,1,11-11.64A80,80,0,1,0,71.43,71.43C67.9,75,64.58,78.51,61.35,82L77.66,98.34A8,8,0,0,1,72,112H32a8,8,0,0,1-8-8V64a8,8,0,0,1,13.66-5.66L50,70.7c3.22-3.49,6.54-7,10.06-10.55A96,96,0,0,1,224,128ZM128,72a8,8,0,0,0-8,8v48a8,8,0,0,0,3.88,6.86l40,24a8,8,0,1,0,8.24-13.72L136,123.47V80A8,8,0,0,0,128,72Z"]} />
+}
+
+/** Phosphor `plus-bold`. */
+export function PlusIcon(p: IconProps) {
+  return <Icon {...p} paths={["M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"]} />
+}
+
+/** Phosphor `trash-bold`. */
+export function TrashIcon(p: IconProps) {
+  return <Icon {...p} paths={["M216,48H180V36A28,28,0,0,0,152,8H104A28,28,0,0,0,76,36V48H40a12,12,0,0,0,0,24h4V208a20,20,0,0,0,20,20H192a20,20,0,0,0,20-20V72h4a12,12,0,0,0,0-24ZM100,36a4,4,0,0,1,4-4h48a4,4,0,0,1,4,4V48H100Zm88,168H68V72H188ZM116,104v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Zm48,0v64a12,12,0,0,1-24,0V104a12,12,0,0,1,24,0Z"]} />
+}
+
+/** Phosphor `pencil-simple-bold`. */
+export function PencilIcon(p: IconProps) {
+  return <Icon {...p} paths={["M230.14,70.54,185.46,25.85a20,20,0,0,0-28.29,0L33.86,149.17A19.85,19.85,0,0,0,28,163.31V208a20,20,0,0,0,20,20H92.69a19.86,19.86,0,0,0,14.14-5.86L230.14,98.82a20,20,0,0,0,0-28.28ZM91,204H52V165l84-84,39,39ZM192,103,153,64l18.34-18.34,39,39Z"]} />
+}
+
+/** Phosphor `download-simple-bold`. */
+export function DownloadIcon(p: IconProps) {
+  return <Icon {...p} paths={["M228,144v64a12,12,0,0,1-12,12H40a12,12,0,0,1-12-12V144a12,12,0,0,1,24,0v52H204V144a12,12,0,0,1,24,0Zm-108.49,8.49a12,12,0,0,0,17,0l40-40a12,12,0,0,0-17-17L140,115V32a12,12,0,0,0-24,0v83L96.49,95.51a12,12,0,0,0-17,17Z"]} />
+}
+
+/** Phosphor `upload-simple-bold`. */
+export function UploadIcon(p: IconProps) {
+  return <Icon {...p} paths={["M228,144v64a12,12,0,0,1-12,12H40a12,12,0,0,1-12-12V144a12,12,0,0,1,24,0v52H204V144a12,12,0,0,1,24,0ZM96.49,80.49,116,61v83a12,12,0,0,0,24,0V61l19.51,19.52a12,12,0,1,0,17-17l-40-40a12,12,0,0,0-17,0l-40,40a12,12,0,1,0,17,17Z"]} />
+}
+
+/** Phosphor `warning-fill`. */
+export function WarningIcon(p: IconProps) {
+  return <Icon {...p} paths={["M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM120,104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm8,88a12,12,0,1,1,12-12A12,12,0,0,1,128,192Z"]} />
+}
+
+/** Phosphor `info-fill`. */
+export function InfoIcon(p: IconProps) {
+  return <Icon {...p} paths={["M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm-4,48a12,12,0,1,1-12,12A12,12,0,0,1,124,72Zm12,112a16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40a8,8,0,0,1,0,16Z"]} />
+}
+
+/** Phosphor `question-fill`. */
+export function QuestionIcon(p: IconProps) {
+  return <Icon {...p} paths={["M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,168a12,12,0,1,1,12-12A12,12,0,0,1,128,192Zm8-48.72V144a8,8,0,0,1-16,0v-8a8,8,0,0,1,8-8c13.23,0,24-9,24-20s-10.77-20-24-20-24,9-24,20v4a8,8,0,0,1-16,0v-4c0-19.85,17.94-36,40-36s40,16.15,40,36C168,125.38,154.24,139.93,136,143.28Z"]} />
+}
+
+/** Phosphor `hard-drives-fill`. */
+export function DrivesIcon(p: IconProps) {
+  return <Icon {...p} paths={["M208,40H48A16,16,0,0,0,32,56v48a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V56A16,16,0,0,0,208,40ZM180,92a12,12,0,1,1,12-12A12,12,0,0,1,180,92Z","M208,136H48a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V152A16,16,0,0,0,208,136Zm-28,52a12,12,0,1,1,12-12A12,12,0,0,1,180,188Z"]} />
+}
+
+/** Phosphor `plugs-connected-fill`. */
+export function PlugsIcon(p: IconProps) {
+  return <Icon {...p} paths={["M88.57,35A8,8,0,0,1,103.43,29l8,20A8,8,0,0,1,96.57,55ZM29,103.43l20,8A8,8,0,1,0,55,96.57l-20-8A8,8,0,0,0,29,103.43ZM227,152.57l-20-8A8,8,0,1,0,201,159.43l20,8A8,8,0,0,0,227,152.57ZM159.43,201A8,8,0,0,0,144.57,207l8,20A8,8,0,1,0,167.43,221ZM237.91,18.52a8,8,0,0,0-11.5-.18L174,70.75l-5.38-5.38a32,32,0,0,0-45.28,0L106.14,82.54a4,4,0,0,0,0,5.66l61.7,61.66a4,4,0,0,0,5.66,0l16.74-16.74a32.76,32.76,0,0,0,9.81-22.52,31.82,31.82,0,0,0-9.37-23.17l-5.38-5.37,52.2-52.17A8.22,8.22,0,0,0,237.91,18.52ZM85.64,90.34a8,8,0,0,0-11.49.18,8.22,8.22,0,0,0,.41,11.37L80.67,108,65.34,123.31A31.82,31.82,0,0,0,56,146.47,32.75,32.75,0,0,0,65.77,169l5,4.94L18.49,226.13a8.21,8.21,0,0,0-.61,11.1,8,8,0,0,0,11.72.43L82,185.25l5.37,5.38a32.1,32.1,0,0,0,45.29,0L148,175.31l6.34,6.35a8,8,0,0,0,11.32-11.32Z"]} />
+}
+
+/** Phosphor `database-fill`. */
+export function DatabaseIcon(p: IconProps) {
+  return <Icon {...p} paths={["M128,24C74.17,24,32,48.6,32,80v96c0,31.4,42.17,56,96,56s96-24.6,96-56V80C224,48.6,181.83,24,128,24Zm80,104c0,9.62-7.88,19.43-21.61,26.92C170.93,163.35,150.19,168,128,168s-42.93-4.65-58.39-13.08C55.88,147.43,48,137.62,48,128V111.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64Zm-21.61,74.92C170.93,211.35,150.19,216,128,216s-42.93-4.65-58.39-13.08C55.88,195.43,48,185.62,48,176V159.36c17.06,15,46.23,24.64,80,24.64s62.94-9.68,80-24.64V176C208,185.62,200.12,195.43,186.39,202.92Z"]} />
+}
+
+/** Phosphor `shield-check-fill`. */
+export function ShieldIcon(p: IconProps) {
+  return <Icon {...p} paths={["M208,40H48A16,16,0,0,0,32,56v56c0,52.72,25.52,84.67,46.93,102.19,23.06,18.86,46,25.26,47,25.53a8,8,0,0,0,4.2,0c1-.27,23.91-6.67,47-25.53C198.48,196.67,224,164.72,224,112V56A16,16,0,0,0,208,40Zm-34.32,69.66-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35a8,8,0,0,1,11.32,11.32Z"]} />
+}
+
+/** Phosphor `arrow-counter-clockwise-bold`. */
+export function RefreshIcon(p: IconProps) {
+  return <Icon {...p} paths={["M228,128a100,100,0,0,1-98.66,100H128a99.39,99.39,0,0,1-68.62-27.29,12,12,0,0,1,16.48-17.45,76,76,0,1,0-1.57-109c-.13.13-.25.25-.39.37L54.89,92H72a12,12,0,0,1,0,24H24a12,12,0,0,1-12-12V56a12,12,0,0,1,24,0V76.72L57.48,57.06A100,100,0,0,1,228,128Z"]} />
+}
+
+/** Phosphor `sliders-horizontal-bold`. */
+export function SlidersIcon(p: IconProps) {
+  return <Icon {...p} paths={["M40,92H70.06a36,36,0,0,0,67.88,0H216a12,12,0,0,0,0-24H137.94a36,36,0,0,0-67.88,0H40a12,12,0,0,0,0,24Zm64-24A12,12,0,1,1,92,80,12,12,0,0,1,104,68Zm112,96H201.94a36,36,0,0,0-67.88,0H40a12,12,0,0,0,0,24h94.06a36,36,0,0,0,67.88,0H216a12,12,0,0,0,0-24Zm-48,24a12,12,0,1,1,12-12A12,12,0,0,1,168,188Z"]} />
+}
+
+/** Phosphor `power-bold`. */
+export function PowerIcon(p: IconProps) {
+  return <Icon {...p} paths={["M116,128V48a12,12,0,0,1,24,0v80a12,12,0,0,1-24,0Zm66.55-82a12,12,0,0,0-13.1,20.1C191.41,80.37,204,103,204,128a76,76,0,0,1-152,0c0-25,12.59-47.63,34.55-61.95A12,12,0,0,0,73.45,46C44.56,64.78,28,94.69,28,128a100,100,0,0,0,200,0C228,94.69,211.44,64.78,182.55,46Z"]} />
+}
+
+/** Phosphor `link-fill`. */
+export function LinkIcon(p: IconProps) {
+  return <Icon {...p} paths={["M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM115.7,192.49a43.31,43.31,0,0,1-55-66.43l25.37-25.37a43.35,43.35,0,0,1,61.25,0,42.9,42.9,0,0,1,9.95,15.43,8,8,0,1,1-15,5.6A27.33,27.33,0,0,0,97.37,112L72,137.37a27.32,27.32,0,0,0,34.68,41.91,8,8,0,1,1,9,13.21Zm79.61-62.55-25.37,25.37A43,43,0,0,1,139.32,168h0a43.35,43.35,0,0,1-40.53-28.12,8,8,0,1,1,15-5.6A27.35,27.35,0,0,0,139.28,152h0a27.14,27.14,0,0,0,19.32-8L184,118.63a27.32,27.32,0,0,0-34.68-41.91,8,8,0,1,1-9-13.21,43.32,43.32,0,0,1,55,66.43Z"]} />
+}
+
+/** Phosphor `percent-bold`. */
+export function PercentIcon(p: IconProps) {
+  return <Icon {...p} paths={["M208.49,64.47l-144,144a12,12,0,1,1-17-17l144-144a12,12,0,0,1,17,17ZM47.72,104.27A40,40,0,1,1,76,116,39.72,39.72,0,0,1,47.72,104.27ZM60,76a16,16,0,1,0,4.69-11.31A15.87,15.87,0,0,0,60,76ZM220,180a40,40,0,1,1-11.72-28.29A39.71,39.71,0,0,1,220,180Zm-24,0a15.87,15.87,0,0,0-4.69-11.32h0A16,16,0,1,0,196,180Z"]} />
+}
+
+/** Phosphor `globe-fill`. */
+export function GlobeIcon(p: IconProps) {
+  return <Icon {...p} paths={["M128,24h0A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm78.36,64H170.71a135.28,135.28,0,0,0-22.3-45.6A88.29,88.29,0,0,1,206.37,88ZM216,128a87.61,87.61,0,0,1-3.33,24H174.16a157.44,157.44,0,0,0,0-48h38.51A87.61,87.61,0,0,1,216,128ZM128,43a115.27,115.27,0,0,1,26,45H102A115.11,115.11,0,0,1,128,43ZM102,168H154a115.11,115.11,0,0,1-26,45A115.27,115.27,0,0,1,102,168Zm-3.9-16a140.84,140.84,0,0,1,0-48h59.88a140.84,140.84,0,0,1,0,48Zm50.35,61.6a135.28,135.28,0,0,0,22.3-45.6h35.66A88.29,88.29,0,0,1,148.41,213.6Z"]} />
+}
+
+/** Phosphor `arrows-left-right-bold`. */
+export function ArrowsLeftRightIcon(p: IconProps) {
+  return <Icon {...p} paths={["M216.49,184.49l-32,32a12,12,0,0,1-17-17L179,188H48a12,12,0,0,1,0-24H179l-11.52-11.51a12,12,0,0,1,17-17l32,32A12,12,0,0,1,216.49,184.49Zm-145-64a12,12,0,0,0,17-17L77,92H208a12,12,0,0,0,0-24H77L88.49,56.49a12,12,0,0,0-17-17l-32,32a12,12,0,0,0,0,17Z"]} />
+}
+
+/** Phosphor `arrow-up-right-bold`. */
+export function ArrowUpRightIcon(p: IconProps) {
+  return <Icon {...p} paths={["M204,64V168a12,12,0,0,1-24,0V93L72.49,200.49a12,12,0,0,1-17-17L163,76H88a12,12,0,0,1,0-24H192A12,12,0,0,1,204,64Z"]} />
+}
+
+/** Phosphor `eye-bold`. */
+export function EyeIcon(p: IconProps) {
+  return <Icon {...p} paths={["M251,123.13c-.37-.81-9.13-20.26-28.48-39.61C196.63,57.67,164,44,128,44S59.37,57.67,33.51,83.52C14.16,102.87,5.4,122.32,5,123.13a12.08,12.08,0,0,0,0,9.75c.37.82,9.13,20.26,28.49,39.61C59.37,198.34,92,212,128,212s68.63-13.66,94.48-39.51c19.36-19.35,28.12-38.79,28.49-39.61A12.08,12.08,0,0,0,251,123.13Zm-46.06,33C183.47,177.27,157.59,188,128,188s-55.47-10.73-76.91-31.88A130.36,130.36,0,0,1,29.52,128,130.45,130.45,0,0,1,51.09,99.89C72.54,78.73,98.41,68,128,68s55.46,10.73,76.91,31.89A130.36,130.36,0,0,1,226.48,128,130.45,130.45,0,0,1,204.91,156.12ZM128,84a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,84Zm0,64a20,20,0,1,1,20-20A20,20,0,0,1,128,148Z"]} />
 }

@@ -1,26 +1,24 @@
 # Network logos
 
-Official network logos as distributed by [Trust Wallet assets](https://github.com/trustwallet/assets)
-(`blockchains/<chain>/info/logo.png`, MIT-licensed repository), vendored here so the app never loads
-images from third-party hosts. Each logo is a trademark of the respective network and is used solely
-to identify that network.
+Vector marks from [web3icons](https://github.com/0xa3k5/web3icons) (`raw-svgs/networks/`, MIT
+licence), vendored here so the app never loads images from third-party hosts (CSP `img-src 'self'`).
+Each mark is a trademark of the respective network and is used solely to identify that network.
+Unlisted is not affiliated with or endorsed by any of them.
 
-| file | source path |
-|---|---|
-| ethereum.png | blockchains/ethereum/info/logo.png |
-| arbitrum.png | blockchains/arbitrum/info/logo.png |
-| optimism.png | blockchains/optimism/info/logo.png |
-| base.png | blockchains/base/info/logo.png |
-| bsc.png | blockchains/smartchain/info/logo.png |
-| polygon.png | blockchains/polygon/info/logo.png |
-| avalanche.png | blockchains/avalanchec/info/logo.png |
-| hyperevm.png | blockchains/hyperevm/info/logo.png |
-| linea.png | blockchains/linea/info/logo.png |
-| scroll.png | blockchains/scroll/info/logo.png |
-| solana.png | blockchains/solana/info/logo.png |
+The "mono" variants were recoloured (white or near-black) to sit on the network's brand colour, which
+is applied by the tile around them (`src/ui/brand.ts`); the "branded" variants are used as published.
 
-`robinhood.png` is **not** from that set: Trust Wallet assets carries no logo for Robinhood Chain,
-so it is the network's own official mark, supplied by this repository's owner and used — like every
-other logo here — solely to identify the network, self-hosted so nothing is fetched from a third
-party. It is a trademark of Robinhood Markets, Inc.; Unlisted is not affiliated with or endorsed by
-them.
+| file | source | variant |
+|---|---|---|
+| ethereum.svg | networks/branded/ethereum.svg | branded |
+| arbitrum.svg | networks/mono/arbitrum-one.svg | mono, white |
+| optimism.svg | networks/mono/optimism.svg | mono, white |
+| base.svg | networks/mono/base.svg | mono, white |
+| bsc.svg | networks/mono/binance-smart-chain.svg | mono, #0B0E11 |
+| polygon.svg | networks/mono/polygon.svg | mono, white |
+| avalanche.svg | networks/mono/avalanche.svg | mono, white |
+| hyperevm.svg | networks/branded/hyper-evm.svg | branded |
+| linea.svg | networks/mono/linea.svg | mono, #0B0E11 |
+| scroll.svg | networks/mono/scroll.svg | mono, #101010 |
+| robinhood.svg | networks/branded/robinhood.svg | branded |
+| solana.svg | networks/branded/solana.svg | branded |
