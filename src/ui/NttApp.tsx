@@ -21,7 +21,7 @@ import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
-import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
+import { bookConfirms, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { nttManagerAbi } from '@/protocols/wormhole-ntt/abi'
 import { isNttPending, nttApprovePlan, runNttGuards, type NttGuardInput } from '@/protocols/wormhole-ntt/guards'
@@ -29,14 +29,13 @@ import { assembleNttTransferArgs, nttSelfCheck } from '@/protocols/wormhole-ntt/
 import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { fmt, useDict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
-import { ChainIcon } from './components/ChainIcon'
 import { ProtocolBadge } from './components/History'
-import { Panel, TwoColumn } from './components/Layout'
+import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
-import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
+import { Alert, BoxLabel, Button, ChainDot, Row, Shell, Spinner } from './components/ui'
 import { RiskNotAssessed } from './components/RiskPanel'
-import { RouteIndicator } from './components/RouteIndicator'
-import { ReverseArrow } from './components/FromTo'
+import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
+import { AmountPanel, FromToRow, RecipientPanel } from './components/FromTo'
 import { approveBusy } from '@/core/approveFlow'
 import { reverseNtt } from '@/core/reverse'
 import { Cta, type CtaState } from './components/Review'
@@ -75,6 +74,8 @@ export function NttApp({
   const [target, setTarget] = useState<string | null>(null)
   const [dstChain, setDstChain] = useState<ChainKey | undefined>(undefined)
   const [amountInput, setAmountInput] = useState('')
+  // Whether the recipient panel is open — a view state; the recipient itself is the state below.
+  const [recipientOpen, setRecipientOpen] = useState(false)
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
@@ -415,258 +416,229 @@ export function NttApp({
   }
 
   // ---- render ---------------------------------------------------------------------
+  const tokenMeta = verified ? { symbol: verified.tokenSymbol, decimals: verified.tokenDecimals } : undefined
+  const recipientShown = recipientCustom || recipientOpen
+  // Closing the panel means "my wallet": a recipient typed into a hidden panel would be a surprise.
+  const toggleRecipient = () => {
+    if (recipientShown) {
+      setRecipientOpen(false)
+      setRecipientCustom(false)
+      setRecipientInput('')
+      setConfirmLast6('')
+    } else {
+      setRecipientOpen(true)
+    }
+  }
+  const amountNote = amountError ? (
+    <span className="text-danger">{amountError}</span>
+  ) : planData && verified && planData.dust > 0n ? (
+    <span className="text-warn">{fmt(d.ntt.dust, { amount: formatAmount(planData.dust, planData.trim.step > 1n ? verified.tokenDecimals : 0), symbol: verified.tokenSymbol })}</span>
+  ) : planData && verified ? (
+    <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.tokenDecimals, { maxFraction: 6 }), symbol: verified.tokenSymbol })}</span>
+  ) : undefined
+  const analysing = discovery.isFetching || tokenList.isLoading || analysis.isFetching
+
   const left = sent ? (
-    <Box>
-      <BoxLabel>{d.tracker.title}</BoxLabel>
-      <p className="text-sm text-muted">{d.ntt.sentHint}</p>
-      <div className="mt-3 flex flex-wrap gap-3 text-sm">
-        <a href={src.explorerTxUrl + sent} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
-          {d.tracker.sourceTx} ↗
-        </a>
-        <a href={wormholescanTxUrl(sent)} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
-          Wormholescan ↗
-        </a>
+    <Shell>
+      <div className="rounded-card bg-surface-2 p-4">
+        <BoxLabel>{d.tracker.title}</BoxLabel>
+        <p className="text-sm text-muted">{d.ntt.sentHint}</p>
+        <div className="mt-3 flex flex-wrap gap-3 text-sm">
+          <a href={src.explorerTxUrl + sent} target="_blank" rel="noopener noreferrer" className="text-ink underline decoration-dotted underline-offset-2">
+            {d.tracker.sourceTx} ↗
+          </a>
+          <a href={wormholescanTxUrl(sent)} target="_blank" rel="noopener noreferrer" className="text-ink underline decoration-dotted underline-offset-2">
+            Wormholescan ↗
+          </a>
+        </div>
+        <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
       </div>
-      <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
-      <div className="mt-4">
-        <Button
-          onClick={() => {
-            setSent(null)
-            setAmountInput('')
-          }}
-        >
-          {d.tracker.newTransfer}
-        </Button>
-      </div>
-    </Box>
+      <Button
+        variant="cta"
+        onClick={() => {
+          setSent(null)
+          setAmountInput('')
+        }}
+      >
+        {d.tracker.newTransfer}
+      </Button>
+    </Shell>
   ) : (
     <>
-      <Box>
-        <BoxLabel>{d.ntt.inputLabel}</BoxLabel>
-        <div className="flex h-[50px] items-center rounded-full bg-surface-2 pl-4 pr-1.5">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') go()
-            }}
-            placeholder={d.ntt.placeholder}
-            spellCheck={false}
-            autoComplete="off"
-            className="mono min-w-0 flex-1 bg-transparent pr-2 text-sm text-ink outline-none placeholder:text-faint"
-            aria-label={d.ntt.inputLabel}
-          />
-          <Button
-            variant="primary"
-            className="h-9 rounded-full px-4"
-            disabled={input.trim() === '' || discovery.isFetching || tokenList.isLoading || analysis.isFetching}
-            onClick={go}
-          >
-            {discovery.isFetching || tokenList.isLoading || analysis.isFetching ? <Spinner /> : d.analysis.button}
-          </Button>
+      <Shell>
+        <div className="rounded-card bg-surface-2 p-2 pl-4">
+          <div className="flex h-10 items-center gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') go()
+              }}
+              placeholder={d.ntt.placeholder}
+              spellCheck={false}
+              autoComplete="off"
+              className="mono min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+              aria-label={d.ntt.inputLabel}
+            />
+            <Button variant="primary" className="h-9 px-4" disabled={input.trim() === '' || analysing} onClick={go}>
+              {analysing ? <Spinner /> : d.analysis.button}
+            </Button>
+          </div>
+          {inputError ? (
+            <div className="px-2 pb-2 pt-1 text-xs">
+              <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
+            </div>
+          ) : null}
         </div>
-        {inputError ? (
-          <div className="mt-2 text-xs">
-            <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
-          </div>
-        ) : null}
-        {tokenList.data?.unavailable ? (
-          <div className="mt-2">
-            <Alert kind="warn">{d.ntt.listUnavailable}</Alert>
-          </div>
-        ) : null}
-        {discovery.data?.kind === 'unknown' ? (
-          <div className="mt-2">
-            <Alert kind="error">{discovery.data.reason === 'not_listed' ? d.ntt.notListed : d.ntt.unreadable}</Alert>
-          </div>
-        ) : null}
-        {discovery.data?.kind === 'token_without_minter' ? (
-          <div className="mt-2">
-            <Alert kind="warn">{dstChain ? d.ntt.noMinter : d.ntt.pickDestinationFirst}</Alert>
-          </div>
-        ) : null}
+        {tokenList.data?.unavailable ? <Alert kind="warn">{d.ntt.listUnavailable}</Alert> : null}
+        {discovery.data?.kind === 'unknown' ? <Alert kind="error">{discovery.data.reason === 'not_listed' ? d.ntt.notListed : d.ntt.unreadable}</Alert> : null}
+        {discovery.data?.kind === 'token_without_minter' ? <Alert kind="warn">{dstChain ? d.ntt.noMinter : d.ntt.pickDestinationFirst}</Alert> : null}
         {discovery.data?.kind === 'manager' ? (
-          <p className="mt-2 text-xs text-muted">
+          <p className="px-1 text-xs text-muted">
             {discovery.data.via === 'minter' ? d.ntt.foundViaMinter : discovery.data.via === 'peer' ? d.ntt.foundViaPeer : d.ntt.foundGiven}{' '}
             <AddressView value={discovery.data.manager} href={src.explorerAddrUrl + discovery.data.manager} short />
           </p>
         ) : null}
-      </Box>
 
-      <Box>
-        <BoxLabel
-          right={
-            verified && tokenBalance.data !== undefined ? (
-              <button type="button" className="tnum text-accent-ink hover:underline" onClick={() => setAmountInput(formatAmount(tokenBalance.data ?? 0n, verified.tokenDecimals))}>
-                {d.step2.balance}: {formatAmount(tokenBalance.data, verified.tokenDecimals, { maxFraction: 6 })} {verified.tokenSymbol} · {d.step2.max}
-              </button>
-            ) : null
-          }
-        >
-          {d.ui.from}
-        </BoxLabel>
-        <div className="flex items-center gap-3">
-          <AmountInput value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder="0" disabled={!verified} aria-label={d.step2.amount} aria-invalid={!!amountError} />
-          <PillSelect
-            label={src.name}
-            sub={verified?.tokenSymbol ?? src.nativeSymbol}
-            icon={<ChainIcon chain={src.key} />}
-            value={src.key}
-            onSelect={(v) => {
-              setSrcKey(v as ChainKey)
-              setTarget(null)
-              setDstChain(undefined)
-            }}
-            options={evmChains().map((c) => ({ value: c.key, label: c.name, sub: c.nativeSymbol, icon: <ChainIcon chain={c.key} size={28} /> }))}
-            aria-label={d.header.sourceChain}
-          />
-        </div>
-        <div className="mt-2 min-h-4 text-xs">
-          {amountError ? <span className="text-danger">{amountError}</span> : planData && planData.dust > 0n ? (
-            <span className="text-warn">{fmt(d.ntt.dust, { amount: formatAmount(planData.dust, planData.trim.step > 1n ? verified?.tokenDecimals ?? 18 : 0), symbol: verified?.tokenSymbol ?? '' })}</span>
-          ) : null}
-        </div>
-      </Box>
-
-      <ReverseArrow onClick={onReverse} enabled={reverseEnabled} title={reverseTitle} />
-
-      <Box>
-        <BoxLabel
-          right={
-            recipientCustom ? (
-              <button type="button" className="text-accent-ink hover:underline" onClick={() => { setRecipientCustom(false); setRecipientInput(''); setConfirmLast6('') }}>
-                {d.ui.useWallet}
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-2">
-                {wallet ? <AddressView value={wallet} short /> : <span className="text-faint">—</span>}
-                <button type="button" className="text-accent-ink hover:underline" onClick={() => setRecipientCustom(true)}>
-                  {d.ui.edit}
-                </button>
-              </span>
-            )
-          }
-        >
-          {d.ui.to}
-        </BoxLabel>
-        <div className="flex items-center gap-3">
-          <div className="tnum min-w-0 flex-1 truncate text-[32px] font-bold leading-none text-faint">
-            {planData && verified ? <span className="text-ink">{formatAmount(planData.received, planData.dst.tokenDecimals, { maxFraction: 6 })}</span> : '0'}
-          </div>
-          <PillSelect
-            label={dstChain ? byKey(dstChain).name : d.step2.destination}
-            sub={dstChain ? '' : ''}
-            {...(dstChain ? { icon: <ChainIcon chain={dstChain} /> } : {})}
-            value={dstChain ?? ''}
-            onSelect={(v) => setDstChain(v ? (v as ChainKey) : undefined)}
-            options={destinations.map((c) => ({ value: c, label: byKey(c).name, icon: <ChainIcon chain={c} size={28} /> }))}
-            aria-label={d.step2.destination}
-          />
-        </div>
-        {destinations.length === 0 && listedToken ? <p className="mt-2 text-xs text-muted">{d.ntt.noDestinations}</p> : null}
-        {recipientCustom ? (
-          <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs text-muted">{d.step2.otherAddress}</div>
-              <BookPicker family={bookFamily} onPick={(a) => { setRecipientInput(a); setConfirmLast6('') }} />
-            </div>
-            <Input value={recipientInput} onChange={(e) => { setRecipientInput(e.target.value); setConfirmLast6('') }} placeholder="0x…" className="mono" aria-label={d.step2.recipient} />
-            {recipientError && recipientInput.trim() !== '' ? <div className="text-xs text-danger">{recipientError}</div> : null}
-            {recipient ? <BookVerdictNote verdict={bookVerdict} /> : null}
-            {recipient && !bookConfirms(bookVerdict) ? (
-              <label className="block text-xs">
-                <span className="text-muted">{d.step2.confirmLast6}</span>
-                <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} maxLength={6} className={`mono mt-1 max-w-36 ${recipientConfirmed ? 'border-ok' : ''}`} />
-              </label>
-            ) : null}
-          </div>
-        ) : null}
-      </Box>
-
-      <div className="pt-1">
-        <Cta
-          state={cta}
-          info={verified ? { decimals: verified.tokenDecimals, symbol: verified.tokenSymbol } : undefined}
-          sending={switching || sendWrite.isPending}
-          approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
-          onClick={onCta}
-          error={txError}
+        <FromToRow
+          from={src}
+          fromOptions={evmChains().map((c) => c.key)}
+          onFrom={(k) => {
+            setSrcKey(k)
+            setTarget(null)
+            setDstChain(undefined)
+          }}
+          to={dstChain ? byKey(dstChain) : undefined}
+          toOptions={destinations}
+          onTo={(k) => setDstChain(k)}
+          toDisabled={destinations.length === 0}
+          reverse={{ enabled: reverseEnabled, title: reverseTitle, onClick: onReverse }}
         />
-      </div>
+        {destinations.length === 0 && listedToken ? <p className="px-1 text-xs text-muted">{d.ntt.noDestinations}</p> : null}
+
+        <AmountPanel
+          value={amountInput}
+          onChange={setAmountInput}
+          disabled={!verified}
+          token={tokenMeta}
+          tokenIcon={verified ? <ChainDot name={verified.tokenSymbol || 'T'} size={24} /> : undefined}
+          balance={verified ? tokenBalance.data : undefined}
+          onMax={() => {
+            if (verified) setAmountInput(formatAmount(tokenBalance.data ?? 0n, verified.tokenDecimals))
+          }}
+          note={amountNote}
+          recipientOpen={recipientShown}
+          onToggleRecipient={toggleRecipient}
+        />
+
+        {recipientShown ? (
+          <RecipientPanel
+            crossVm={false}
+            custom={recipientCustom}
+            onCustom={(custom) => {
+              setRecipientCustom(custom)
+              if (!custom) {
+                setRecipientInput('')
+                setConfirmLast6('')
+              }
+            }}
+            wallet={wallet}
+            value={recipientInput}
+            onChange={(v) => {
+              setRecipientInput(v)
+              setConfirmLast6('')
+            }}
+            placeholder="0x…"
+            error={recipientError}
+            bookFamily={bookFamily}
+            bookVerdict={bookVerdict}
+            onPickAddress={(a) => {
+              setRecipientInput(a)
+              setConfirmLast6('')
+            }}
+            bookConfirmed={bookConfirms(bookVerdict)}
+            confirm={confirmLast6}
+            confirmed={recipientConfirmed}
+            onConfirm={setConfirmLast6}
+          />
+        ) : null}
+
+      </Shell>
+      <Cta
+        state={cta}
+        info={verified ? { decimals: verified.tokenDecimals, symbol: verified.tokenSymbol } : undefined}
+        sending={switching || sendWrite.isPending}
+        approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
+        onClick={onCta}
+        error={txError}
+      />
     </>
   )
 
   const right = (
     <Panel title={d.ui.preview} badge={<ProtocolBadge id="wormhole-ntt" />}>
-      <div className="space-y-4">
-        {/* A pasted transaction is answered by the verdict; the manager gate has nothing to say
-            about it, and showing "not verified" next to "this is CCIP" would only muddle both. */}
-        {verdict ? (
-          <VerdictCard result={verdict} onAction={onAnalysisAction} />
-        ) : (
-          <VerificationCard verification={verification.data} loading={verification.isFetching} hasTarget={!!manager && !!dstChain} />
-        )}
-        {verified && planData ? (
-          <>
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.ui.section_quote}</div>
-              <div className="rounded-xl bg-surface-2 px-3 py-1">
-                <Row label={d.step3.sending}>
-                  <b className="tnum">{formatAmount(planData.amount, verified.tokenDecimals)} {verified.tokenSymbol}</b>
-                </Row>
-                <Row label={d.ntt.received}>
-                  <b className="tnum">{formatAmount(planData.received, planData.dst.tokenDecimals)} {verified.tokenSymbol}</b>
-                  <div className="text-xs text-muted">{fmt(d.ntt.trimNote, { decimals: String(planData.trim.trimmedDecimals) })}</div>
-                </Row>
-                <Row label={d.ntt.deliveryFee}>
-                  <b className="tnum">{formatAmount(planData.fee, 18, { maxFraction: 6 })} {src.nativeSymbol}</b>
-                  <div className="text-xs text-muted">{fmt(d.step3.feeDetail, { value: `${formatAmount(planData.value, 18, { maxFraction: 6 })} ${src.nativeSymbol}`, refund: `${formatAmount(planData.value - planData.fee, 18, { maxFraction: 6 })} ${src.nativeSymbol}` })}</div>
-                </Row>
-                <Row label={d.ntt.mode}>{planData.mode === 'burning' ? d.ntt.mode_burning : d.ntt.mode_locking}</Row>
-                <Row label={d.ntt.outbound}>
-                  <span className="tnum">{formatAmount(planData.outboundCapacity, verified.tokenDecimals, { maxFraction: 4 })}</span>
-                </Row>
-                <Row label={d.ntt.inbound}>
-                  <span className="tnum">{planData.inboundCapacity === undefined ? '—' : formatAmount(planData.inboundCapacity, planData.dst.tokenDecimals, { maxFraction: 4 })}</span>
-                </Row>
-                <Row label={d.step3.recipient} mono>
-                  <AddressView value={planData.recipientDisplay} href={byKey(planData.dst.chain).explorerAddrUrl + planData.recipientDisplay} short />
-                </Row>
+      {/* A pasted transaction is answered by the verdict; the manager gate has nothing to say
+          about it, and showing "not verified" next to "this is CCIP" would only muddle both. */}
+      {verdict ? (
+        <VerdictCard result={verdict} onAction={onAnalysisAction} />
+      ) : (
+        <VerificationCard verification={verification.data} loading={verification.isFetching} hasTarget={!!manager && !!dstChain} />
+      )}
+      {verified ? (
+        <>
+          <PanelSection title={d.risk.title}>
+            <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination} />
+          </PanelSection>
+          {planData ? (
+            <PanelSection title={d.ui.section_quote}>
+              <Row label={d.step3.sending}>
+                <b className="tnum">{formatAmount(planData.amount, verified.tokenDecimals)} {verified.tokenSymbol}</b>
+              </Row>
+              <Row label={d.ntt.received}>
+                <b className="tnum">{formatAmount(planData.received, planData.dst.tokenDecimals)} {verified.tokenSymbol}</b>
+                <div className="text-xs text-muted">{fmt(d.ntt.trimNote, { decimals: String(planData.trim.trimmedDecimals) })}</div>
+              </Row>
+              <Row label={d.ntt.deliveryFee}>
+                <b className="tnum">{formatAmount(planData.fee, 18, { maxFraction: 6 })} {src.nativeSymbol}</b>
+                <div className="text-xs text-muted">{fmt(d.step3.feeDetail, { value: `${formatAmount(planData.value, 18, { maxFraction: 6 })} ${src.nativeSymbol}`, refund: `${formatAmount(planData.value - planData.fee, 18, { maxFraction: 6 })} ${src.nativeSymbol}` })}</div>
+              </Row>
+              <Row label={d.ntt.mode}>{planData.mode === 'burning' ? d.ntt.mode_burning : d.ntt.mode_locking}</Row>
+              <Row label={d.ntt.outbound}>
+                <span className="tnum">{formatAmount(planData.outboundCapacity, verified.tokenDecimals, { maxFraction: 4 })}</span>
+              </Row>
+              <Row label={d.ntt.inbound}>
+                <span className="tnum">{planData.inboundCapacity === undefined ? '—' : formatAmount(planData.inboundCapacity, planData.dst.tokenDecimals, { maxFraction: 4 })}</span>
+              </Row>
+              <Row label={d.step3.recipient} mono>
+                <AddressView value={planData.recipientDisplay} href={byKey(planData.dst.chain).explorerAddrUrl + planData.recipientDisplay} short />
+              </Row>
+            </PanelSection>
+          ) : null}
+          <PanelFold title={d.indicator.details}>
+            <IndicatorReasons indicator={indicator} />
+            {/* §4 The eight LayerZero checks have no NTT runner; this tab's own guards are the whole rule. */}
+            <RiskNotAssessed why={d.risk.notCoveredNtt} />
+            <ul className="grid gap-x-3 gap-y-0.5 text-xs">
+              {report.results.map((r) => (
+                // Four tones: passed, in flight, the approve step (neutral), a note (amber), a block (red).
+                <li key={r.id} className={r.ok ? 'text-ok' : isNttPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'}>
+                  {r.ok ? '✓' : isNttPending(r) ? '○' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗'}{' '}
+                  {r.ok ? d.nttGuard[`ok_${r.id}` as keyof typeof d.nttGuard] ?? '' : d.nttGuard[r.code]}
+                </li>
+              ))}
+            </ul>
+            {check.data?.revert ? (
+              <div className="text-xs text-warn">
+                <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
+                <div className="mono mt-1 opacity-80">{formatRevert(check.data.revert)}</div>
+                {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? <div className="mt-1 opacity-80">{d.revert.fromContractAbi}</div> : null}
               </div>
-            </div>
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
-              <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination}>
-                {/* §4 The eight LayerZero checks have no NTT runner; this tab's own guards are the whole rule. */}
-                <RiskNotAssessed why={d.risk.notCoveredNtt} />
-                <ul className="grid gap-x-3 gap-y-0.5 text-xs">
-                  {report.results.map((r) => (
-                    // Four tones: passed, in flight, the approve step (neutral), a note (amber), a block (red).
-                    <li
-                      key={r.id}
-                      className={r.ok ? 'text-ok' : isNttPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'}
-                    >
-                      {r.ok ? '✓' : isNttPending(r) ? '○' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗'}{' '}
-                      {r.ok ? d.nttGuard[`ok_${r.id}` as keyof typeof d.nttGuard] ?? '' : d.nttGuard[r.code]}
-                    </li>
-                  ))}
-                </ul>
-                {check.data?.revert ? (
-                  <div className="text-xs text-warn">
-                    <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
-                    <div className="mono mt-1 opacity-80">{formatRevert(check.data.revert)}</div>
-                    {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? (
-                      <div className="mt-1 opacity-80">{d.revert.fromContractAbi}</div>
-                    ) : null}
-                  </div>
-                ) : check.data?.rpcUnavailable ? (
-                  <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p>
-                ) : null}
-              </RouteIndicator>
-            </div>
-          </>
-        ) : null}
-      </div>
+            ) : check.data?.rpcUnavailable ? (
+              <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p>
+            ) : null}
+          </PanelFold>
+        </>
+      ) : null}
     </Panel>
   )
 
@@ -676,10 +648,10 @@ export function NttApp({
 /** The four-part gate, in colour. This is what decides whether an approve is possible at all. */
 function VerificationCard({ verification, loading, hasTarget }: { verification: ReturnType<typeof useNttVerification>['data']; loading: boolean; hasTarget: boolean }) {
   const d = useDict()
-  if (!hasTarget) return <p className="text-sm text-muted">{d.ntt.previewEmpty}</p>
+  if (!hasTarget) return <p className="px-1 text-sm text-muted">{d.ntt.previewEmpty}</p>
   if (loading || !verification) {
     return (
-      <p className="inline-flex items-center gap-2 text-sm text-muted">
+      <p className="inline-flex items-center gap-2 px-1 text-sm text-muted">
         <Spinner /> {d.ntt.verifying}
       </p>
     )
@@ -687,7 +659,7 @@ function VerificationCard({ verification, loading, hasTarget }: { verification: 
   if (!verification.ok) {
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-bold text-danger">✗ {d.ntt.rejected}</div>
+        <div className="flex items-center gap-2 rounded-card bg-surface-2 px-4 py-3 text-sm font-semibold text-danger">✗ {d.ntt.rejected}</div>
         <p className="text-sm text-muted">{d.nttReject[verification.code]}</p>
         {verification.detail ? <p className="mono text-xs text-faint">{verification.detail.slice(0, 120)}</p> : null}
         <p className="text-xs text-muted">{d.ntt.noApprove}</p>
@@ -697,12 +669,12 @@ function VerificationCard({ verification, loading, hasTarget }: { verification: 
   const v = verification.verified
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-sm font-bold text-ok">✓ {d.ntt.verified}</div>
+      <div className="flex items-center gap-2 rounded-card bg-surface-2 px-4 py-3 text-sm font-semibold text-ok">✓ {d.ntt.verified}</div>
       {/* The gate passed, but only one provider answered — say so rather than imply two agreed. */}
       {verification.crossChecked === false ? <p className="text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p> : null}
       {/* Context, not a caveat: the catalogue never had a say in the verdict above it. */}
       {v.listed ? null : <p className="text-xs text-muted">{d.ntt.unlistedToken}</p>}
-      <div className="rounded-xl bg-surface-2 px-3 py-1">
+      <div className="rounded-card bg-surface-2 px-4 py-2">
         <Row label={d.ntt.manager} mono>
           <AddressView value={v.manager} href={byKey(v.chain).explorerAddrUrl + v.manager} short />
         </Row>

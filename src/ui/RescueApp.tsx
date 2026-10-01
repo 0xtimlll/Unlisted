@@ -30,7 +30,8 @@ import {
 import { fmt, useDict, type Dict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
 import { Panel, TwoColumn } from './components/Layout'
-import { Alert, Box, BoxLabel, Button, Disclosure, Input, Row, Select, Spinner } from './components/ui'
+import { Alert, Box, BoxLabel, Button, Disclosure, Input, Row, Spinner } from './components/ui'
+import { ChainRow } from './components/FromTo'
 import { isUserRejection, shortError } from './hooks'
 import type { Stored } from './storage'
 
@@ -132,22 +133,13 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
       <Panel title={d.rescue.title}>
         <p className="mb-3 text-xs text-muted">{d.rescue.intro}</p>
         <div className="space-y-3">
-          <Box>
-            <BoxLabel>{d.rescue.srcChain}</BoxLabel>
-            <Select value={srcKey} onChange={(e) => setSrcKey(e.target.value as ChainKey)}>
-              {chains.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </Box>
+          <ChainRow label={d.rescue.srcChain} chain={byKey(srcKey)} options={chains.map((c) => c.key)} onSelect={(k: ChainKey) => setSrcKey(k)} />
           <Box>
             <BoxLabel>{d.rescue.txHash}</BoxLabel>
-            <Input value={hash} onChange={(e) => setHash(e.target.value)} placeholder="0x…" spellCheck={false} />
+            <Input tone="surface" value={hash} onChange={(e) => setHash(e.target.value)} placeholder="0x…" spellCheck={false} className="mono" />
           </Box>
           {error ? <Alert kind="error">{error}</Alert> : null}
-          <Button variant="cta" disabled={busy} onClick={() => void onLook()}>
+          <Button variant="cta" data-tone={busy ? 'default' : 'primary'} disabled={busy} onClick={() => void onLook()}>
             {busy ? (
               <>
                 <Spinner /> {d.rescue.looking}
@@ -189,7 +181,7 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
             const canShowButton = sim?.status === 'ok'
             const needsSwitch = dst && isEvm(dst) && walletChainId !== dst.chainId
             return (
-              <div key={i} className="space-y-2 rounded-lg border border-line bg-surface-2 p-3">
+              <div key={i} className="space-y-2 rounded-card bg-surface-2 p-4">
                 <div className="text-xs font-semibold text-ink">
                   {m.version === 'v1' ? d.rescue.v1 : d.rescue.v2} · {byKey(m.srcChain).name} → {dst?.name ?? d.rescue.unknownChain}
                 </div>

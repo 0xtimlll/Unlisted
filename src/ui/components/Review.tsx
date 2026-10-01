@@ -14,6 +14,7 @@ import type { SourceInfo } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import type { DestinationState } from './FromTo'
+import { WalletIcon } from './icons'
 import { Button, Disclosure, Input, Row, Spinner } from './ui'
 
 /** Quote breakdown + advanced settings. Collapsed by default, like Relay's fee row. */
@@ -50,7 +51,7 @@ export function Details(p: {
   )
 
   const body = (
-    <div className="rounded-xl bg-surface-2 px-3 py-1">
+    <div>
           {plan ? (
             <>
               <Row label={d.step3.sending}>
@@ -363,9 +364,12 @@ export function Cta(p: {
             ? { text: s.reason, tone: 'muted' }
             : undefined
 
+  // The filled pill is for the moment the transfer can go: Approve or Send, enabled. Everything
+  // else — connect, switch, a wait, a block — is the quiet card-coloured pill.
+  const tone = !busy && ((s.kind === 'approve' && s.enabled) || (s.kind === 'send' && s.enabled)) ? 'primary' : 'default'
   return (
     <div className="space-y-2">
-      <Button variant="cta" disabled={disabled} onClick={p.onClick}>
+      <Button variant="cta" data-tone={tone} disabled={disabled} onClick={p.onClick}>
         {busy ? (
           <>
             <Spinner /> {busyLabel}
@@ -374,19 +378,23 @@ export function Cta(p: {
           <>
             <Spinner /> {label}
           </>
+        ) : s.kind === 'connect' ? (
+          <>
+            <WalletIcon className="h-6 w-6 p-0.5" /> {label}
+          </>
         ) : (
           label
         )}
       </Button>
-      {line ? <div className={`text-center text-xs ${line.tone === 'danger' ? 'text-danger' : 'text-muted'}`}>{line.text}</div> : null}
+      {line ? <div className={`px-4 text-center text-xs ${line.tone === 'danger' ? 'text-danger' : 'text-muted'}`}>{line.text}</div> : null}
       {txHash && p.approve ? (
         <div className="text-center text-xs">
-          <a href={p.approve.explorerTxUrl + txHash} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
+          <a href={p.approve.explorerTxUrl + txHash} target="_blank" rel="noopener noreferrer" className="text-ink underline decoration-dotted underline-offset-2">
             {d.approve.viewTx} ↗
           </a>
         </div>
       ) : null}
-      <div className="text-center text-xs text-faint">{d.step3.simulationHint}</div>
+      <div className="text-center text-xs text-muted">{d.step3.simulationHint}</div>
     </div>
   )
 }

@@ -32,7 +32,7 @@ import { v1SelfCheck } from '@/protocols/lz-v1/selfcheck'
 import { formatRevert } from '@/core/sim/revert'
 import { fmt, useDict, type Dict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
-import { Panel, TwoColumn } from './components/Layout'
+import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { Tracker } from './components/Tracker'
 import { Alert, AmountInput, Box, BoxLabel, Input, Row, Select, Spinner } from './components/ui'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
@@ -40,7 +40,7 @@ import { pushHistory, setHistoryStatus, type Stored } from './storage'
 import { useV1PeerBack, useV1Plan, useV1Simulation, useV1StoredPayload } from './v1Hooks'
 import { useV1RouteRisk } from './riskHooks'
 import { RiskChecks } from './components/RiskPanel'
-import { RouteIndicator } from './components/RouteIndicator'
+import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
 import { Cta, type CtaState } from './components/Review'
 
 const GUARD_LABEL = (d: Dict, code: string): string => (d.v1Guard as Record<string, string>)[code] ?? code
@@ -363,8 +363,8 @@ export function BridgeV1({
 
   const left = (
     <div className="space-y-4">
-      <Panel title={d.ui.section_contract} badge={<span className="rounded bg-surface-2 px-2 py-0.5 text-xs text-muted">{standardLabel(info.standard)}</span>}>
-        <div className="space-y-2">
+      <Panel title={d.ui.section_contract} badge={<span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-ink">{standardLabel(info.standard)}</span>}>
+        <div className="rounded-card bg-surface-2 px-4 py-2">
           <Row label={d.ui.token}>
             <span className="mono">
               {info.symbol} · {info.decimals} decimals
@@ -484,7 +484,7 @@ export function BridgeV1({
       <div className="space-y-3">
         {plan.error ? <Alert kind="error">{shortError(plan.error)}</Alert> : null}
         {planData ? (
-          <>
+          <PanelSection title={d.ui.section_quote}>
             <Row label={d.v1.sends} mono>
               {formatAmount(planData.amounts.amountLD, info.decimals, { maxFraction: 8 })} {info.symbol}
             </Row>
@@ -518,19 +518,20 @@ export function BridgeV1({
               {adapter?.empty ? d.v1.adapterEmpty : adapter ? fmt(d.v1.adapterGas, { gas: adapter.gas.toString() }) : '—'}
             </Row>
             {route && route.minDstGas > 0n ? <p className="text-xs text-muted">{fmt(d.v1.adapterMin, { gas: route.minDstGas.toString() })}</p> : null}
-          </>
+          </PanelSection>
         ) : (
-          <p className="text-xs text-muted">{d.ui.previewEmpty}</p>
+          <p className="px-1 text-xs text-muted">{d.ui.previewEmpty}</p>
         )}
 
-        <div>
-          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
-          <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstKey === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
-            <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} />
-            <V1Checks results={report.results} />
-            {simulation.data?.status === 'reverted' ? <p className="mono text-xs text-warn">{formatRevert(simulation.data.revert)}</p> : null}
-          </RouteIndicator>
-        </div>
+        <PanelSection title={d.risk.title}>
+          <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstKey === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount} />
+        </PanelSection>
+        <PanelFold title={d.indicator.details}>
+          <IndicatorReasons indicator={indicator} />
+          <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} />
+          <V1Checks results={report.results} />
+          {simulation.data?.status === 'reverted' ? <p className="mono text-xs text-warn">{formatRevert(simulation.data.revert)}</p> : null}
+        </PanelFold>
 
         <Cta
           state={cta}

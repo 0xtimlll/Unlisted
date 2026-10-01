@@ -12,9 +12,9 @@ import { ProtocolBadge } from './History'
 import { Button, Disclosure, Row } from './ui'
 
 const VERDICT_STYLE = {
-  can_bridge: 'border-ok/30 bg-ok/10 text-ok',
-  cannot_bridge: 'border-danger/30 bg-danger/10 text-danger',
-  unknown: 'border-line bg-surface-2 text-muted',
+  can_bridge: 'text-ok',
+  cannot_bridge: 'text-danger',
+  unknown: 'text-muted',
 } as const
 
 const VERDICT_GLYPH = { can_bridge: '✓', cannot_bridge: '✗', unknown: '?' } as const
@@ -73,14 +73,14 @@ export function VerdictCard({ result: r, onAction }: { result: AnalysisResult; o
 
   return (
     <div className="space-y-3">
-      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold ${VERDICT_STYLE[r.verdict]}`}>
+      <div className={`flex items-center gap-2 rounded-card bg-surface-2 px-4 py-3 text-sm font-semibold ${VERDICT_STYLE[r.verdict]}`}>
         <span aria-hidden>{VERDICT_GLYPH[r.verdict]}</span>
         <span>{d.analysis[`verdict_${r.verdict}`]}</span>
         {r.protocol && !isForeignProtocol(r.protocol) ? <ProtocolBadge id={r.protocol} /> : null}
       </div>
 
       <div>
-        <div className="text-base font-bold text-ink">{title}</div>
+        <div className="text-base font-semibold text-ink">{title}</div>
         <p className="mt-1 text-sm text-muted">{reason}</p>
       </div>
 
@@ -96,7 +96,7 @@ export function VerdictCard({ result: r, onAction }: { result: AnalysisResult; o
             href={r.action.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-10 items-center rounded-xl border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-2"
+            className="inline-flex h-10 items-center rounded-full bg-surface-2 px-5 text-sm font-semibold text-ink transition hover:scale-105"
           >
             {actionLabel(d, r.action)}
           </a>
@@ -108,7 +108,7 @@ export function VerdictCard({ result: r, onAction }: { result: AnalysisResult; o
       ) : null}
 
       <Disclosure title={d.analysis.raw} open={open} onToggle={() => setOpen(!open)}>
-        <div className="rounded-xl bg-surface-2 px-3 py-1">
+        <div className="rounded-card bg-surface-2 px-4 py-2">
           {r.details.txHash ? (
             <Row label="tx" mono>
               {shorten(r.details.txHash)}

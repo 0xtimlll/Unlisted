@@ -8,6 +8,7 @@ import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { protocolBadge, useDict } from '@/i18n'
 import { entryProtocol, filterHistory, type HistoryEntry, type HistoryFilter } from '../storage'
 import { ChainIcon } from './ChainIcon'
+import { Shell, Tabs } from './ui'
 
 /** Full-width list under the two columns: every transfer, whichever tab made it. */
 export function History({ entries, onClear, onTrack }: { entries: HistoryEntry[]; onClear: () => void; onTrack: (e: HistoryEntry) => void }) {
@@ -21,35 +22,24 @@ export function History({ entries, onClear, onTrack }: { entries: HistoryEntry[]
   ]
 
   return (
-    <section>
-      <div className="mb-2 flex items-center gap-3 text-sm text-muted">
-        <span className="font-semibold text-ink">{d.history.title}</span>
-        <div className="flex items-center gap-1 rounded-xl bg-surface-2 p-1">
-          {filters.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              className={`h-8 rounded-lg px-3 text-xs font-semibold transition ${filter === f.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="ml-auto text-xs hover:text-ink" onClick={onClear}>
+    <Shell>
+      <div className="flex items-center gap-3 px-1 text-sm text-muted">
+        <span className="text-xs font-semibold text-muted">{d.history.title}</span>
+        <Tabs value={filter} onChange={setFilter} items={filters} />
+        <button type="button" className="ml-auto rounded-full px-3 py-1 text-xs text-muted transition hover:bg-surface-2 hover:text-ink" onClick={onClear}>
           {d.history.clear}
         </button>
       </div>
       {shown.length === 0 ? (
-        <p className="rounded-card border border-line bg-surface px-4 py-3 text-sm text-muted">{d.history.empty}</p>
+        <p className="rounded-card bg-surface-2 px-4 py-3 text-sm text-muted">{d.history.empty}</p>
       ) : (
-        <ul className="divide-y divide-line rounded-card border border-line bg-surface">
+        <ul className="divide-y divide-line rounded-card bg-surface-2 px-4">
           {shown.map((e) => (
             <HistoryRow key={e.txHash} entry={e} onTrack={onTrack} />
           ))}
         </ul>
       )}
-    </section>
+    </Shell>
   )
 }
 
@@ -60,11 +50,11 @@ function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: H
   const dst = e.dstChain ? byKey(e.dstChain) : byEid(e.dstEid)
   const protocol = entryProtocol(e)
   return (
-    <li className="flex items-center gap-4 px-4 py-2.5 text-sm">
+    <li className="flex items-center gap-4 py-3 text-sm">
       <ProtocolBadge id={protocol} />
       <span className="flex items-center -space-x-1.5">
-        <ChainIcon chain={src.key} size={22} className="rounded-full ring-2 ring-surface" />
-        {dst ? <ChainIcon chain={dst.key} size={22} className="rounded-full ring-2 ring-surface" /> : null}
+        <ChainIcon chain={src.key} size={24} className="ring-2 ring-surface-2" />
+        {dst ? <ChainIcon chain={dst.key} size={24} className="ring-2 ring-surface-2" /> : null}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-ink">
@@ -75,7 +65,7 @@ function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: H
           {e.status === 'delivered' ? <span className="ml-2 text-ok">✓ {d.tracker.delivered}</span> : e.status === 'failed' ? <span className="ml-2 text-danger">{d.tracker.failed}</span> : null}
         </span>
       </span>
-      <button type="button" onClick={() => onTrack(e)} className="shrink-0 rounded-full bg-surface-2 px-3 py-1 text-xs text-ink hover:bg-line">
+      <button type="button" onClick={() => onTrack(e)} className="h-7 shrink-0 rounded-full bg-surface px-3 text-xs font-semibold text-ink transition hover:scale-105">
         {d.ui.track}
       </button>
       <a href={src.explorerTxUrl + e.txHash} target="_blank" rel="noopener noreferrer" className="mono shrink-0 text-xs text-accent-ink hover:underline">
@@ -101,5 +91,5 @@ function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: H
 
 export function ProtocolBadge({ id }: { id: ProtocolId }) {
   const d = useDict()
-  return <span className="shrink-0 rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-accent-ink">{protocolBadge(d, id)}</span>
+  return <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-ink">{protocolBadge(d, id)}</span>
 }

@@ -56,7 +56,8 @@ export function BookPicker({ family, onPick }: { family: AddressFamily | undefin
     <Select
       value=""
       aria-label={d.addressBook.pick}
-      className="h-9 max-w-48 text-xs"
+      className="h-9 text-xs"
+      wrapClassName="max-w-48"
       onChange={(e) => {
         const entry = entries.find((x) => x.id === e.target.value)
         if (entry) onPick(entry.address)
@@ -82,28 +83,28 @@ export function BookVerdictNote({ verdict }: { verdict: BookVerdict | undefined 
   if (!verdict) return null
   if (verdict.kind === 'known') {
     return (
-      <div className="rounded-xl border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok">
+      <div className="rounded-xl bg-surface px-3 py-2 text-xs text-ok">
         ✓ {fmt(d.addressBook.fromBook, { label: verdict.entry.label })}
       </div>
     )
   }
   if (verdict.kind === 'imported') {
     return (
-      <div className="rounded-xl border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">
+      <div className="rounded-xl bg-surface px-3 py-2 text-xs text-warn">
         ⚠ {fmt(d.addressBook.importedFirstUse, { label: verdict.entry.label })}
       </div>
     )
   }
   if (verdict.kind === 'lookalike') {
     return (
-      <div className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+      <div className="rounded-xl bg-surface px-3 py-2 text-xs text-danger">
         <div className="font-semibold">⛔ {fmt(d.addressBook.lookalike, { label: verdict.entry.label })}</div>
         <div className="mono mt-1 break-all opacity-90">{fmt(d.addressBook.lookalikeDetail, { label: verdict.entry.label, saved: verdict.entry.address })}</div>
         <div className="mt-1">{d.addressBook.lookalikeBlocked}</div>
       </div>
     )
   }
-  return <div className="rounded-xl border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-warn">⚠ {d.addressBook.newAddress}</div>
+  return <div className="rounded-xl bg-surface px-3 py-2 text-xs text-warn">⚠ {d.addressBook.newAddress}</div>
 }
 
 /**
@@ -149,7 +150,7 @@ export function RecipientBookAfterSend({
   }
   return (
     <div className="mt-3">
-      <Button variant="ghost" className="text-xs" onClick={() => setSaving(true)}>
+      <Button variant="pill" onClick={() => setSaving(true)}>
         {d.addressBook.saveToBook}
       </Button>
       {saving ? <AddressBookDialog onClose={() => setSaving(false)} initial={{ address, family, tailConfirmed: true }} /> : null}

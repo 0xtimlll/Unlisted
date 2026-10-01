@@ -10,7 +10,10 @@ import type { OftInfo, SourceInfo, SuspiciousFlag } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import { ChainIcon } from './ChainIcon'
-import { Alert, Box, BoxLabel, Button, ChainDot, Row, Spinner } from './ui'
+import { Alert, Button, ChainDot, Row, Spinner } from './ui'
+
+/** The id the amount panel's token pill focuses. */
+export const TOKEN_INPUT_ID = 'token-input'
 
 export function TokenStep(p: {
   chain: ChainDef
@@ -65,132 +68,111 @@ export function TokenStep(p: {
   }
 
   return (
-    <Box>
-      <BoxLabel>{d.ui.token}</BoxLabel>
-      <div className="flex h-[50px] items-center rounded-full bg-surface-2 pl-4 pr-1.5">
-        <input
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value)
-            setFormatError('')
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') go()
-          }}
-          placeholder={d.analysis.placeholder}
-          spellCheck={false}
-          autoComplete="off"
-          className="mono min-w-0 flex-1 bg-transparent pr-2 text-sm text-ink outline-none placeholder:text-faint"
-          aria-label={d.analysis.placeholder}
-        />
-        {/* Enabled whenever there is something to judge: a bad format must produce a message,
-            not a dead button the user cannot learn anything from. */}
-        <Button variant="primary" className="h-9 rounded-full px-4" disabled={v === '' || p.busy} onClick={go}>
-          {p.busy ? <Spinner /> : d.analysis.button}
-        </Button>
+    <>
+      <div className="rounded-card bg-surface-2 p-2 pl-4">
+        <div className="flex h-10 items-center gap-2">
+          <input
+            id={TOKEN_INPUT_ID}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setFormatError('')
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') go()
+            }}
+            placeholder={d.analysis.placeholder}
+            spellCheck={false}
+            autoComplete="off"
+            className="mono min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+            aria-label={d.analysis.placeholder}
+          />
+          {/* Enabled whenever there is something to judge: a bad format must produce a message,
+              not a dead button the user cannot learn anything from. */}
+          <Button variant="primary" className="h-9 px-4" disabled={v === '' || p.busy} onClick={go}>
+            {p.busy ? <Spinner /> : d.analysis.button}
+          </Button>
+        </div>
+        {formatError ? (
+          <div className="px-2 pb-2 pt-1 text-xs">
+            <span className="text-danger">{formatError}</span> <span className="text-muted">{d.analysis.examples}</span>
+          </div>
+        ) : null}
+        {svm && !p.info ? <p className="px-2 pb-2 pt-1 text-xs text-muted">{d.step1.storeHint}</p> : null}
+        {p.recent.length > 0 && !p.info ? (
+          <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2 pt-2 text-xs">
+            <span className="text-muted">{d.step1.recent}:</span>
+            {p.recent.map((a) => (
+              <Button
+                key={a}
+                variant="pill"
+                className="mono h-6 font-normal"
+                onClick={() => {
+                  setValue(a)
+                  const r = parseAnalysisInput(a)
+                  if (r.ok) p.onInput(r.input)
+                }}
+              >
+                {a.slice(0, 6)}…{a.slice(-4)}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </div>
-      {formatError ? (
-        <div className="mt-2 text-xs">
-          <span className="text-danger">{formatError}</span> <span className="text-muted">{d.analysis.examples}</span>
-        </div>
-      ) : null}
 
-      {svm && !p.info ? <p className="mt-2 text-xs text-muted">{d.step1.storeHint}</p> : null}
-      {p.recent.length > 0 && !p.info ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="text-muted">{d.step1.recent}:</span>
-          {p.recent.map((a) => (
-            <button
-              key={a}
-              type="button"
-              className="mono rounded-full bg-surface-2 px-2 py-0.5 text-ink hover:bg-line"
-              onClick={() => {
-                setValue(a)
-                const r = parseAnalysisInput(a)
-                if (r.ok) p.onInput(r.input)
-              }}
-            >
-              {a.slice(0, 6)}…{a.slice(-4)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {p.error ? (
-        <div className="mt-3">
-          <Alert kind="error">{p.error}</Alert>
-        </div>
-      ) : null}
-      {p.decodedHint ? (
-        <div className="mt-3">
-          <Alert kind="info">{d.step1.decodedHint}</Alert>
-        </div>
-      ) : null}
+      {p.error ? <Alert kind="error">{p.error}</Alert> : null}
+      {p.decodedHint ? <Alert kind="info">{d.step1.decodedHint}</Alert> : null}
       {p.hint ? (
-        <div className="mt-3">
-          <Alert kind="info">
-            <span className="inline-flex items-start gap-2">
-              {p.hintBusy ? <Spinner /> : null}
-              <span>{p.hint}</span>
-            </span>
-            {p.choices && p.choices.length > 0 ? (
-              <ul className="mt-2 space-y-1">
-                {p.choices.map((c) => (
-                  <li key={c.address}>
-                    <button type="button" className="mono text-left underline decoration-dotted underline-offset-2 hover:no-underline" onClick={() => p.onChoose?.(c.address)}>
-                      {c.address}
-                    </button>
-                    <span className="ml-2 text-xs text-muted">{c.note}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </Alert>
-        </div>
-      ) : null}
-      {p.decodedFailed ? (
-        <div className="mt-2">
-          <Alert kind="warn">{d.step1.decodedFailedHint}</Alert>
-        </div>
-      ) : null}
-      {p.optionsMalformed ? (
-        <div className="mt-2">
-          <Alert kind="warn">{d.step3.optionsMalformed}</Alert>
-        </div>
-      ) : null}
-      {p.droppedOptions.length > 0 ? (
-        <div className="mt-2">
-          <Alert kind="error">
-            <div className="font-semibold">{d.step3.droppedOptions}</div>
-            <ul className="list-disc pl-5">
-              {p.droppedOptions.map((o, i) => (
-                <li key={i} className="mono text-xs">
-                  {describeOption(o, d)}
+        <Alert kind="info">
+          <span className="inline-flex items-start gap-2">
+            {p.hintBusy ? <Spinner /> : null}
+            <span>{p.hint}</span>
+          </span>
+          {p.choices && p.choices.length > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {p.choices.map((c) => (
+                <li key={c.address}>
+                  <button type="button" className="mono text-left underline decoration-dotted underline-offset-2 hover:no-underline" onClick={() => p.onChoose?.(c.address)}>
+                    {c.address}
+                  </button>
+                  <span className="ml-2 text-xs text-muted">{c.note}</span>
                 </li>
               ))}
             </ul>
-          </Alert>
-        </div>
+          ) : null}
+        </Alert>
+      ) : null}
+      {p.decodedFailed ? <Alert kind="warn">{d.step1.decodedFailedHint}</Alert> : null}
+      {p.optionsMalformed ? <Alert kind="warn">{d.step3.optionsMalformed}</Alert> : null}
+      {p.droppedOptions.length > 0 ? (
+        <Alert kind="error">
+          <div className="font-semibold">{d.step3.droppedOptions}</div>
+          <ul className="list-disc pl-5">
+            {p.droppedOptions.map((o, i) => (
+              <li key={i} className="mono text-xs">
+                {describeOption(o, d)}
+              </li>
+            ))}
+          </ul>
+        </Alert>
       ) : null}
 
       {p.info ? (
-        <div className="mt-3">
-          <div className="flex items-center gap-3">
-            <ChainDot name={p.info.symbol || p.info.name || 'T'} size={36} />
-            <div className="min-w-0 flex-1 leading-tight">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-ink">{p.info.symbol || '—'}</span>
-                <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-semibold text-accent-ink">{p.info.kind}</span>
-                {p.info.approvalRequired ? <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs font-semibold text-warn">approve</span> : null}
-              </div>
-              <div className="truncate text-xs text-muted">
-                {p.info.name} · {p.info.decimals}/{p.info.sharedDecimals} · {d.ui.onChain}
-              </div>
+        <div className="flex items-center gap-3 rounded-card bg-surface-2 px-4 py-3">
+          <ChainDot name={p.info.symbol || p.info.name || 'T'} size={36} />
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-ink">{p.info.symbol || '—'}</span>
+              <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-ink">{p.info.kind}</span>
+              {p.info.approvalRequired ? <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-warn">approve</span> : null}
+            </div>
+            <div className="truncate text-xs text-muted">
+              {p.info.name} · {p.info.decimals}/{p.info.sharedDecimals} · {d.ui.onChain}
             </div>
           </div>
         </div>
       ) : null}
-    </Box>
+    </>
   )
 }
 
@@ -251,7 +233,7 @@ function SvmOftDetails({ chain, info }: { chain: ChainDef; info: SvmSourceInfo }
   const d = useDict()
   const link = (a: string) => chain.explorerAddrUrl + a
   return (
-    <div className="rounded-xl bg-surface-2 px-3 py-1">
+    <div>
       <Row label={d.card.approve}>{d.card.no}</Row>
       <Row label={d.card.store} mono>
         <Address value={info.oftStore} href={link(info.oftStore)} short />
@@ -284,7 +266,7 @@ function SvmOftDetails({ chain, info }: { chain: ChainDef; info: SvmSourceInfo }
 function OftDetails({ chain, info }: { chain: ChainDef; info: OftInfo }) {
   const d = useDict()
   return (
-    <div className="rounded-xl bg-surface-2 px-3 py-1">
+    <div>
       <Row label={d.card.approve}>{info.approvalRequired ? d.card.yes : d.card.no}</Row>
       <Row label={d.card.oft} mono>
         <Address value={info.oft} href={chain.explorerAddrUrl + info.oft} short />

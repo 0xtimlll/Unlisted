@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { checksum } from '@/core/encoding'
+import { CheckIcon, CopyIcon } from './icons'
 
 const BASE58_KEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 
@@ -13,7 +14,7 @@ export function Address({ value, href, short = false }: { value: string; href?: 
   try {
     a = BASE58_KEY.test(value) ? value : checksum(value)
   } catch {
-    return <span className="mono text-red-600 dark:text-red-400">{String(value).slice(0, 44)}</span>
+    return <span className="mono text-danger">{String(value).slice(0, 44)}</span>
   }
   const head = a.slice(0, 8)
   const mid = a.slice(8, -6)
@@ -44,8 +45,8 @@ export function Address({ value, href, short = false }: { value: string; href?: 
       ) : (
         body
       )}
-      <button type="button" onClick={copy} title="copy" className="rounded px-1 text-xs opacity-60 hover:opacity-100" aria-label="copy address">
-        {copied ? '✓' : '⧉'}
+      <button type="button" onClick={copy} title="copy" className="inline-flex h-5 w-5 items-center justify-center rounded-md text-muted transition hover:text-ink" aria-label="copy address">
+        {copied ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
       </button>
     </span>
   )

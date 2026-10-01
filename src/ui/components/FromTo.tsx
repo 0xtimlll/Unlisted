@@ -1,14 +1,21 @@
 'use client'
+/**
+ * The pieces of a send form that every tab shares: the From/To rows with the network picker
+ * behind them and the reverse button between them, the amount panel with the balance, Max and the
+ * recipient switch, and the recipient panel the switch opens. Each is markup around state the
+ * tab owns — nothing here decides anything.
+ */
+import { useState, type ReactNode } from 'react'
 import { formatAmount } from '@/core/amounts'
-import { byEid, CHAINS, type ChainDef, type ChainKey } from '@/core/chains'
-import type { SendPlan } from '@/core/plan'
-import type { SourceInfo } from '@/core/types'
-import { useDict } from '@/i18n'
+import type { ChainDef, ChainKey } from '@/core/chains'
 import type { AddressFamily, BookVerdict } from '@/core/addressBook'
+import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
-import { BookPicker, BookVerdictNote, bookConfirms } from './RecipientBook'
+import { BookPicker, BookVerdictNote } from './RecipientBook'
 import { ChainIcon } from './ChainIcon'
-import { AmountInput, Box, BoxLabel, Input, PillSelect } from './ui'
+import { ArrowsLeftRightIcon, CaretRightIcon, WalletIcon } from './icons'
+import { NetworkDialog } from './NetworkDialog'
+import { AmountInput, Button, Input } from './ui'
 
 export type DestinationState = {
   dstEid: number | undefined
@@ -21,198 +28,263 @@ export type DestinationState = {
   extraOptions: `0x${string}`
 }
 
+export type ReverseControl = { enabled: boolean; title: string; onClick: () => void }
+
 /**
- * The arrow between "From" and "To". When the route can be reversed it is a button (⇅) that swaps
- * the two sides in one click; otherwise it is the plain ↓ it always was, with the reason as its title.
+ * The button between From and To. When the route can be reversed it swaps the two sides in one
+ * click; otherwise it is the plain arrow it always was, with the reason as its title.
  */
-export function ReverseArrow({ onClick, enabled, title }: { onClick: () => void; enabled: boolean; title: string }) {
+export function ReverseArrow({ onClick, enabled, title }: ReverseControl) {
   return (
-    <div className="relative z-10 -my-4 flex justify-center">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!enabled}
-        title={title}
-        aria-label={title}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-surface text-muted shadow-sm transition enabled:hover:border-ink/40 enabled:hover:text-ink disabled:cursor-default"
-      >
-        <span aria-hidden>{enabled ? '⇅' : '↓'}</span>
-      </button>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!enabled}
+      title={title}
+      aria-label={title}
+      className="absolute left-1/2 top-1/2 z-10 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 scale-[0.8] items-center justify-center rounded-xl bg-surface-2 text-muted ring-4 ring-surface transition enabled:hover:scale-90 enabled:hover:text-ink disabled:cursor-default outline-none focus-visible:ring-ink/40"
+    >
+      {enabled ? <ArrowsLeftRightIcon className="h-4 w-4" /> : <CaretRightIcon className="h-4 w-4" />}
+    </button>
+  )
+}
+
+/** One side of the route: the tile, "From"/"To" in small grey, the network's name. */
+function Side({ label, chain, placeholder, reverse = false, onClick, disabled = false }: { label: string; chain: ChainDef | undefined; placeholder: string; reverse?: boolean; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`relative flex h-20 w-full cursor-pointer select-none items-center gap-3 rounded-card bg-surface-2 p-4 text-left transition enabled:hover:scale-[1.02] disabled:cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ink/30 ${reverse ? 'origin-left flex-row-reverse text-right' : 'origin-right'}`}
+    >
+      {chain ? <ChainIcon chain={chain.key} size={48} /> : <span aria-hidden className="inline-block h-12 w-12 shrink-0 rounded-xl border-2 border-dashed border-line" />}
+      <span className="-mb-1 flex min-w-0 flex-col gap-0.5">
+        <span className="text-xs font-semibold leading-none text-muted">{label}</span>
+        <span className={`truncate text-lg font-semibold leading-none ${chain ? 'text-ink' : 'text-muted'}`}>{chain?.name ?? placeholder}</span>
+      </span>
+    </button>
+  )
+}
+
+/**
+ * From and To side by side, the reverse button between them, the network picker behind each.
+ * `toOptions` are the destinations the contract actually has a route to; the rest of the
+ * registry is listed dimmed.
+ */
+export function FromToRow({
+  from,
+  fromOptions,
+  onFrom,
+  to,
+  toOptions,
+  onTo,
+  toDisabled = false,
+  reverse,
+}: {
+  from: ChainDef
+  fromOptions: ChainKey[]
+  onFrom: (k: ChainKey) => void
+  to: ChainDef | undefined
+  toOptions: ChainKey[]
+  onTo: (k: ChainKey) => void
+  /** Nothing to choose from yet (no contract analysed): the row is shown but not clickable. */
+  toDisabled?: boolean
+  reverse: ReverseControl
+}) {
+  const d = useDict()
+  const [open, setOpen] = useState<'from' | 'to' | null>(null)
+  const dimmed = fromOptions.filter((k) => k !== from.key && !toOptions.includes(k))
+  const swap = { enabled: reverse.enabled, title: reverse.title, onClick: reverse.onClick }
+  return (
+    <div className="relative grid select-none grid-cols-2 gap-1 pt-0.5">
+      <Side label={d.ui.from} chain={from} placeholder={d.header.sourceChain} onClick={() => setOpen('from')} />
+      <ReverseArrow {...reverse} />
+      <Side label={d.ui.to} chain={to} placeholder={d.network.select} reverse onClick={() => setOpen('to')} disabled={toDisabled} />
+      {open === 'from' ? <NetworkDialog options={fromOptions} selected={from.key} onSelect={onFrom} onClose={() => setOpen(null)} swap={swap} /> : null}
+      {open === 'to' ? <NetworkDialog options={toOptions} dimmed={dimmed} selected={to?.key} onSelect={onTo} onClose={() => setOpen(null)} swap={swap} /> : null}
     </div>
   )
 }
 
-/** "Sell"-style box: source chain + amount. */
-export function FromBox(p: {
-  src: ChainDef
-  onSrcChange: (k: ChainKey) => void
-  info: SourceInfo | undefined
-  balance: bigint | undefined
-  amountInput: string
-  onAmount: (v: string) => void
-  amountError: string
-  dustTrimmed: bigint | undefined
-}) {
-  const d = useDict()
-  const dec = p.info?.decimals ?? 18
+/** A single network row with the picker behind it (the Rescue tab's source chain). */
+export function ChainRow({ label, chain, options, onSelect }: { label: string; chain: ChainDef; options: ChainKey[]; onSelect: (k: ChainKey) => void }) {
+  const [open, setOpen] = useState(false)
   return (
-    <Box>
-      <BoxLabel
-        right={
-          p.info && p.balance !== undefined ? (
-            <button type="button" className="tnum text-accent-ink hover:underline" onClick={() => p.onAmount(formatAmount(p.balance ?? 0n, dec))}>
-              {d.step2.balance}: {formatAmount(p.balance, dec, { maxFraction: 6 })} {p.info.symbol} · {d.step2.max}
-            </button>
-          ) : null
-        }
-      >
-        {d.ui.from}
-      </BoxLabel>
-      <div className="flex items-center gap-3">
-        <AmountInput
-          value={p.amountInput}
-          onChange={(e) => p.onAmount(e.target.value)}
-          placeholder="0"
-          disabled={!p.info}
-          aria-label={d.step2.amount}
-          aria-invalid={!!p.amountError}
-        />
-        <PillSelect
-          label={p.src.name}
-          sub={p.info ? p.info.symbol : p.src.nativeSymbol}
-          icon={<ChainIcon chain={p.src.key} />}
-          value={p.src.key}
-          onSelect={(v) => p.onSrcChange(v as ChainKey)}
-          options={CHAINS.map((c) => ({ value: c.key, label: c.name, sub: c.nativeSymbol, icon: <ChainIcon chain={c.key} size={28} /> }))}
-          aria-label={d.header.sourceChain}
-        />
-      </div>
-      <div className="mt-2 min-h-4 text-xs">
-        {p.amountError ? (
-          <span className="text-danger">{p.amountError}</span>
-        ) : p.dustTrimmed && p.dustTrimmed > 0n ? (
-          <span className="text-warn">
-            {d.step2.dustTrimmed} <span className="mono">{formatAmount(p.dustTrimmed, dec)}</span> {p.info?.symbol}
-          </span>
-        ) : null}
-      </div>
-    </Box>
+    <>
+      <Side label={label} chain={chain} placeholder="" onClick={() => setOpen(true)} />
+      {open ? <NetworkDialog options={options} selected={chain.key} onSelect={onSelect} onClose={() => setOpen(false)} /> : null}
+    </>
   )
 }
 
-/** "Buy"-style box: destination chain + minimum received + recipient. */
-export function ToBox(p: {
-  info: SourceInfo
-  /** The connected wallet on the SOURCE chain; offered as the default recipient only when it can receive on the destination. */
-  wallet: string | undefined
-  plan: SendPlan | undefined
-  state: DestinationState
-  onChange: (s: DestinationState) => void
-  /** VM of the selected destination; undefined until one is chosen. */
-  dstVm: 'evm' | 'svm' | undefined
-  /** Validation message for the typed recipient (core/recipient.ts), or ''. */
-  recipientError: string
-  /**
-   * Whether the typed tail matches (core/recipient.confirmsTail). Computed by the screen, which
-   * holds the parsed recipient, so the check has ONE source of truth — this box only styles it.
-   */
-  recipientConfirmed: boolean
-  /** Address-book family of the destination, or undefined until a destination is chosen. */
-  bookFamily: AddressFamily | undefined
-  /** What the book says about the typed recipient (components/RecipientBook.tsx). */
-  bookVerdict: BookVerdict | undefined
-  /** Fills the field from the book. */
-  onPickAddress: (address: string) => void
-  /** Error from Solana-side discovery, or ''. */
-  svmError: string
+/**
+ * The amount panel: the big number, the token on the right, and under them what the wallet holds,
+ * Max, and the switch that opens the recipient panel. `note` is the line on the left: what will
+ * arrive, the dust that was trimmed, or why the amount is not accepted.
+ */
+export function AmountPanel({
+  value,
+  onChange,
+  disabled,
+  token,
+  tokenIcon,
+  onPickToken,
+  balance,
+  onMax,
+  note,
+  recipientOpen,
+  onToggleRecipient,
+  recipientForced = false,
+}: {
+  value: string
+  onChange: (v: string) => void
+  disabled: boolean
+  token: { symbol: string; decimals: number } | undefined
+  tokenIcon?: ReactNode
+  /** The token is set by the contract that was analysed; the pill sends the user to that field. */
+  onPickToken?: () => void
+  balance: bigint | undefined
+  onMax: () => void
+  note?: ReactNode
+  recipientOpen: boolean
+  onToggleRecipient: () => void
+  /** Across VMs the recipient has to be typed, so the panel cannot be closed. */
+  recipientForced?: boolean
 }) {
   const d = useDict()
-  const s = p.state
-  const set = (patch: Partial<DestinationState>) => p.onChange({ ...s, ...patch })
-  const routes = p.info.routes.filter((r) => byEid(r.eid))
-  const dst = s.dstEid !== undefined ? byEid(s.dstEid) : undefined
-  // Across VMs the field is always custom: a Solana wallet cannot receive on EVM and vice versa,
-  // so there is no "use my wallet" (§4.3).
-  const crossVm = p.dstVm !== undefined && p.dstVm !== p.info.vm
-  const custom = crossVm || s.recipientCustom
-  const typed = s.recipientInput.trim()
-  const recipientValid = !custom || (typed !== '' && p.recipientError === '')
-  const confirmed = !custom || p.recipientConfirmed
-
+  const symbol = token?.symbol ?? ''
   return (
-    <Box>
-      <BoxLabel
-        right={
-          crossVm ? null : s.recipientCustom ? (
-            <button type="button" className="text-accent-ink hover:underline" onClick={() => set({ recipientCustom: false, recipientInput: '', confirmLast6: '' })}>
-              {d.ui.useWallet}
-            </button>
+    <div className="relative flex flex-col gap-4 rounded-card border border-transparent bg-surface-2 px-4 pb-5 pt-6 transition-colors focus-within:border-line">
+      <div className="flex items-start gap-2">
+        <AmountInput value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" disabled={disabled} aria-label={d.step2.amount} className="ml-0.5 mt-0.5" />
+        <button
+          type="button"
+          onClick={onPickToken}
+          disabled={!onPickToken}
+          title={token ? token.symbol : d.ui.token}
+          className="relative -top-1 flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-surface py-2 pl-3 pr-3 text-lg font-semibold text-ink transition enabled:hover:scale-105 outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+        >
+          {token ? (
+            <>
+              {tokenIcon ?? <span className="h-6 w-6 rounded-full bg-ink/20" aria-hidden />}
+              <span className="max-w-32 truncate">{symbol}</span>
+            </>
           ) : (
-            <span className="inline-flex items-center gap-2">
-              {p.wallet ? <Address value={p.wallet} short /> : <span className="text-faint">—</span>}
-              <button type="button" className="text-accent-ink hover:underline" onClick={() => set({ recipientCustom: true, recipientInput: '', confirmLast6: '' })}>
-                {d.ui.edit}
-              </button>
-            </span>
-          )
-        }
-      >
-        {d.ui.to}
-      </BoxLabel>
-      <div className="flex items-center gap-3">
-        <div className="tnum min-w-0 flex-1 truncate text-[32px] font-bold leading-none text-faint">
-          {p.plan ? <span className="text-ink">{formatAmount(p.plan.amounts.minAmountLD, p.info.decimals, { maxFraction: 6 })}</span> : '0'}
-        </div>
-        <PillSelect
-          label={dst?.name ?? d.step2.destination}
-          sub={dst ? `eid ${dst.eid}` : ''}
-          {...(dst ? { icon: <ChainIcon chain={dst.key} /> } : {})}
-          value={s.dstEid !== undefined ? String(s.dstEid) : ''}
-          onSelect={(v) => set({ dstEid: v ? Number(v) : undefined })}
-          options={routes.map((r) => {
-            const c = byEid(r.eid)!
-            return { value: String(r.eid), label: c.name, sub: `eid ${r.eid}`, icon: <ChainIcon chain={c.key} size={28} /> }
-          })}
-          aria-label={d.step2.destination}
-        />
+            <span className="text-muted">{d.ui.token}</span>
+          )}
+        </button>
       </div>
-      <div className="mt-2 text-xs text-muted">{d.step3.receiveMin}</div>
-      {p.svmError ? (
-        <div className="mt-2 text-xs text-danger">{p.svmError}</div>
-      ) : null}
+      <div className="flex min-h-5 items-center justify-between gap-3 text-xs">
+        <div className="min-w-0 flex-1 truncate text-muted">{note}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          {token && balance !== undefined ? (
+            <>
+              <span className="tnum text-muted">{fmt(d.ui.available, { amount: formatAmount(balance, token.decimals, { maxFraction: 6 }), symbol })}</span>
+              <Button variant="pill" className="h-6" onClick={onMax} disabled={disabled}>
+                {d.ui.max}
+              </Button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={onToggleRecipient}
+            disabled={recipientForced}
+            aria-pressed={recipientOpen}
+            aria-label={d.ui.recipientToggle}
+            title={d.ui.recipientToggle}
+            className={`inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-full transition enabled:hover:scale-105 disabled:cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ink/30 ${recipientOpen ? 'bg-accent text-page' : 'bg-surface text-muted hover:text-ink'}`}
+          >
+            <WalletIcon className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      {custom ? (
-        <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs text-muted">{crossVm ? d.step2.recipient : d.step2.otherAddress}</div>
-            <BookPicker family={p.bookFamily} onPick={p.onPickAddress} />
+/**
+ * The recipient panel: the connected wallet with "Edit", or the typed address with the address
+ * book, the book's verdict and the six-character confirmation. The texts come from the tab —
+ * Solana and EVM destinations say different things.
+ */
+export function RecipientPanel({
+  crossVm,
+  custom,
+  onCustom,
+  wallet,
+  value,
+  onChange,
+  placeholder,
+  error,
+  hints = [],
+  bookFamily,
+  bookVerdict,
+  onPickAddress,
+  bookConfirmed,
+  confirm,
+  confirmed,
+  onConfirm,
+}: {
+  crossVm: boolean
+  custom: boolean
+  onCustom: (custom: boolean) => void
+  wallet: string | undefined
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  error: string
+  hints?: ReactNode[]
+  bookFamily: AddressFamily | undefined
+  bookVerdict: BookVerdict | undefined
+  onPickAddress: (address: string) => void
+  /** The book vouches for the typed address, so the tail is not asked for. */
+  bookConfirmed: boolean
+  confirm: string
+  confirmed: boolean
+  onConfirm: (v: string) => void
+}) {
+  const d = useDict()
+  const typed = value.trim()
+  const valid = typed !== '' && error === ''
+  const showCustom = crossVm || custom
+  return (
+    <div className="flex flex-col gap-2 rounded-card bg-surface-2 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold text-muted">{crossVm ? d.step2.recipient : showCustom ? d.step2.otherAddress : d.step2.recipient}</div>
+        {crossVm ? null : showCustom ? (
+          <Button variant="pill" onClick={() => onCustom(false)}>
+            {d.ui.useWallet}
+          </Button>
+        ) : (
+          <Button variant="pill" onClick={() => onCustom(true)}>
+            {d.ui.edit}
+          </Button>
+        )}
+      </div>
+      {showCustom ? (
+        <>
+          <Input tone="surface" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mono" aria-label={d.step2.recipient} aria-invalid={!valid && typed !== ''} />
+          <div className="flex items-center justify-between gap-2 text-xs text-muted">
+            <BookPicker family={bookFamily} onPick={onPickAddress} />
           </div>
-          <Input
-            value={s.recipientInput}
-            onChange={(e) => set({ recipientInput: e.target.value, confirmLast6: '' })}
-            placeholder={p.dstVm === 'svm' ? d.step3.svmRecipientPlaceholder : '0x…'}
-            className="mono"
-            aria-label={d.step2.recipient}
-            aria-invalid={!recipientValid && typed !== ''}
-          />
-          {p.recipientError && typed !== '' ? <div className="text-xs text-danger">{p.recipientError}</div> : null}
-          {p.dstVm === 'svm' ? <div className="text-xs text-muted">{d.step3.svmRecipientHint}</div> : null}
-          {crossVm && p.dstVm === 'evm' ? <div className="text-xs text-muted">{d.step3.evmRecipientHint}</div> : null}
-          {recipientValid && typed !== '' ? <BookVerdictNote verdict={p.bookVerdict} /> : null}
-          {recipientValid && typed !== '' && !bookConfirms(p.bookVerdict) ? (
+          {error && typed !== '' ? <div className="text-xs text-danger">{error}</div> : null}
+          {hints.map((h, i) => (
+            <div key={i} className="text-xs text-muted">
+              {h}
+            </div>
+          ))}
+          {valid ? <BookVerdictNote verdict={bookVerdict} /> : null}
+          {valid && !bookConfirmed ? (
             <label className="block text-xs">
               <span className="text-muted">{d.step2.confirmLast6}</span>
-              <Input
-                value={s.confirmLast6}
-                onChange={(e) => set({ confirmLast6: e.target.value })}
-                maxLength={6}
-                className={`mono mt-1 max-w-36 ${confirmed ? 'border-ok' : ''}`}
-                aria-invalid={!confirmed}
-              />
+              <Input tone="surface" value={confirm} onChange={(e) => onConfirm(e.target.value)} maxLength={6} className={`mono mt-1 max-w-36 ${confirmed ? 'ring-1 ring-ok' : ''}`} aria-invalid={!confirmed} />
             </label>
           ) : null}
-        </div>
-      ) : null}
-    </Box>
+        </>
+      ) : (
+        <div className="flex h-10 items-center text-sm">{wallet ? <Address value={wallet} short /> : <span className="text-muted">—</span>}</div>
+      )}
+    </div>
   )
 }

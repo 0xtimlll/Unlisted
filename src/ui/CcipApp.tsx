@@ -21,7 +21,7 @@ import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
 import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
-import { BookPicker, bookConfirms, BookVerdictNote, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
+import { bookConfirms, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { ccipRouterAbi } from '@/protocols/ccip/abi'
 import { ccipConfig } from '@/protocols/ccip/chains'
@@ -31,14 +31,13 @@ import { ccipSelfCheck } from '@/protocols/ccip/preview'
 import { ccipTxUrl } from '@/protocols/ccip/track'
 import { fmt, useDict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
-import { ChainIcon } from './components/ChainIcon'
 import { ProtocolBadge } from './components/History'
-import { Panel, TwoColumn } from './components/Layout'
+import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
-import { Alert, AmountInput, Box, BoxLabel, Button, Input, PillSelect, Row, Spinner } from './components/ui'
+import { Alert, BoxLabel, Button, ChainDot, Row, Shell, Spinner } from './components/ui'
 import { RiskNotAssessed } from './components/RiskPanel'
-import { RouteIndicator } from './components/RouteIndicator'
-import { ReverseArrow } from './components/FromTo'
+import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
+import { AmountPanel, FromToRow, RecipientPanel } from './components/FromTo'
 import { approveBusy } from '@/core/approveFlow'
 import { reverseCcip } from '@/core/reverse'
 import { Cta, type CtaState } from './components/Review'
@@ -78,6 +77,8 @@ export function CcipApp({
   const [target, setTarget] = useState<string | null>(null)
   const [dstChain, setDstChain] = useState<ChainKey | undefined>(undefined)
   const [amountInput, setAmountInput] = useState('')
+  // Whether the recipient panel is open — a view state; the recipient itself is the state below.
+  const [recipientOpen, setRecipientOpen] = useState(false)
   const [recipientCustom, setRecipientCustom] = useState(false)
   const [recipientInput, setRecipientInput] = useState('')
   const [confirmLast6, setConfirmLast6] = useState('')
@@ -420,279 +421,250 @@ export function CcipApp({
   }
 
   // ---- render ---------------------------------------------------------------------
+  const tokenMeta = token ? { symbol: sym, decimals: dec } : undefined
+  const recipientShown = recipientCustom || recipientOpen
+  // Closing the panel means "my wallet": a recipient typed into a hidden panel would be a surprise.
+  const toggleRecipient = () => {
+    if (recipientShown) {
+      setRecipientOpen(false)
+      setRecipientCustom(false)
+      setRecipientInput('')
+      setConfirmLast6('')
+    } else {
+      setRecipientOpen(true)
+    }
+  }
+  const amountNote = amountError ? (
+    <span className="text-danger">{amountError}</span>
+  ) : planData ? (
+    <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.decimals ?? dec, { maxFraction: 6 }), symbol: sym })}</span>
+  ) : undefined
+  const analysing = discovery.isFetching || analysis.isFetching
+
   const left = sent ? (
-    <Box>
-      <BoxLabel>{d.tracker.title}</BoxLabel>
-      <p className="text-sm text-muted">{d.ccip.sentHint}</p>
-      <div className="mt-3 flex flex-wrap gap-3 text-sm">
-        <a href={src.explorerTxUrl + sent} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
-          {d.tracker.sourceTx} ↗
-        </a>
-        <a href={ccipTxUrl(sent)} target="_blank" rel="noopener noreferrer" className="text-accent-ink underline">
-          CCIP Explorer ↗
-        </a>
+    <Shell>
+      <div className="rounded-card bg-surface-2 p-4">
+        <BoxLabel>{d.tracker.title}</BoxLabel>
+        <p className="text-sm text-muted">{d.ccip.sentHint}</p>
+        <div className="mt-3 flex flex-wrap gap-3 text-sm">
+          <a href={src.explorerTxUrl + sent} target="_blank" rel="noopener noreferrer" className="text-ink underline decoration-dotted underline-offset-2">
+            {d.tracker.sourceTx} ↗
+          </a>
+          <a href={ccipTxUrl(sent)} target="_blank" rel="noopener noreferrer" className="text-ink underline decoration-dotted underline-offset-2">
+            CCIP Explorer ↗
+          </a>
+        </div>
+        <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
       </div>
-      <RecipientBookAfterSend family={bookFamily} address={recipientCustom ? recipient?.display : undefined} />
-      <div className="mt-4">
-        <Button
-          onClick={() => {
-            setSent(null)
-            setAmountInput('')
-          }}
-        >
-          {d.tracker.newTransfer}
-        </Button>
-      </div>
-    </Box>
+      <Button
+        variant="cta"
+        onClick={() => {
+          setSent(null)
+          setAmountInput('')
+        }}
+      >
+        {d.tracker.newTransfer}
+      </Button>
+    </Shell>
   ) : (
     <>
-      <Box>
-        <BoxLabel>{d.ccip.inputLabel}</BoxLabel>
-        <div className="flex h-[50px] items-center rounded-full bg-surface-2 pl-4 pr-1.5">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') go()
-            }}
-            placeholder={d.ccip.placeholder}
-            spellCheck={false}
-            autoComplete="off"
-            className="mono min-w-0 flex-1 bg-transparent pr-2 text-sm text-ink outline-none placeholder:text-faint"
-            aria-label={d.ccip.inputLabel}
-          />
-          <Button
-            variant="primary"
-            className="h-9 rounded-full px-4"
-            disabled={input.trim() === '' || discovery.isFetching || analysis.isFetching}
-            onClick={go}
-          >
-            {discovery.isFetching || analysis.isFetching ? <Spinner /> : d.analysis.button}
-          </Button>
+      <Shell>
+        <div className="rounded-card bg-surface-2 p-2 pl-4">
+          <div className="flex h-10 items-center gap-2">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') go()
+              }}
+              placeholder={d.ccip.placeholder}
+              spellCheck={false}
+              autoComplete="off"
+              className="mono min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted"
+              aria-label={d.ccip.inputLabel}
+            />
+            <Button variant="primary" className="h-9 px-4" disabled={input.trim() === '' || analysing} onClick={go}>
+              {analysing ? <Spinner /> : d.analysis.button}
+            </Button>
+          </div>
+          {inputError ? (
+            <div className="px-2 pb-2 pt-1 text-xs">
+              <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
+            </div>
+          ) : null}
         </div>
-        {inputError ? (
-          <div className="mt-2 text-xs">
-            <span className="text-danger">{inputError}</span> <span className="text-muted">{d.analysis.examples}</span>
-          </div>
-        ) : null}
-        {discovery.data?.kind === 'no_pool' ? (
-          <div className="mt-2">
-            <Alert kind="error">{d.ccip.noPool}</Alert>
-          </div>
-        ) : null}
-        {discovery.data?.kind === 'unknown' ? (
-          <div className="mt-2">
-            <Alert kind="error">{d.ccipReject[discovery.data.reason]}</Alert>
-          </div>
-        ) : null}
+        {discovery.data?.kind === 'no_pool' ? <Alert kind="error">{d.ccip.noPool}</Alert> : null}
+        {discovery.data?.kind === 'unknown' ? <Alert kind="error">{d.ccipReject[discovery.data.reason]}</Alert> : null}
         {token && pool ? (
-          <p className="mt-2 text-xs text-muted">
+          <p className="px-1 text-xs text-muted">
             {d.ccip.foundPool} <AddressView value={pool} href={src.explorerAddrUrl + pool} short />
           </p>
         ) : null}
         {/* The pool was found, but only one provider answered — say so rather than imply two agreed. */}
-        {token && pool && discovery.data?.crossChecked === false ? (
-          <p className="mt-1 text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p>
-        ) : null}
-      </Box>
+        {token && pool && discovery.data?.crossChecked === false ? <p className="px-1 text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p> : null}
 
-      <Box>
-        <BoxLabel
-          right={
-            token && tokenBalance.data !== undefined ? (
-              <button type="button" className="tnum text-accent-ink hover:underline" onClick={() => setAmountInput(formatAmount(tokenBalance.data ?? 0n, dec))}>
-                {d.step2.balance}: {formatAmount(tokenBalance.data, dec, { maxFraction: 6 })} {sym} · {d.step2.max}
-              </button>
-            ) : null
-          }
-        >
-          {d.ui.from}
-        </BoxLabel>
-        <div className="flex items-center gap-3">
-          <AmountInput value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder="0" disabled={!token} aria-label={d.step2.amount} aria-invalid={!!amountError} />
-          <PillSelect
-            label={src.name}
-            sub={sym || src.nativeSymbol}
-            icon={<ChainIcon chain={src.key} />}
-            value={src.key}
-            onSelect={(v) => {
-              setSrcKey(v as ChainKey)
-              setTarget(null)
-              setDstChain(undefined)
-            }}
-            options={evmChains()
-              .filter((c) => !!ccipConfig(c.key))
-              .map((c) => ({ value: c.key, label: c.name, sub: c.nativeSymbol, icon: <ChainIcon chain={c.key} size={28} /> }))}
-            aria-label={d.header.sourceChain}
-          />
-        </div>
-        <div className="mt-2 min-h-4 text-xs">{amountError ? <span className="text-danger">{amountError}</span> : null}</div>
-      </Box>
-
-      <ReverseArrow onClick={onReverse} enabled={reverseEnabled} title={reverseTitle} />
-
-      <Box>
-        <BoxLabel
-          right={
-            recipientCustom ? (
-              <button type="button" className="text-accent-ink hover:underline" onClick={() => { setRecipientCustom(false); setRecipientInput(''); setConfirmLast6('') }}>
-                {d.ui.useWallet}
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-2">
-                {wallet ? <AddressView value={wallet} short /> : <span className="text-faint">—</span>}
-                <button type="button" className="text-accent-ink hover:underline" onClick={() => setRecipientCustom(true)}>
-                  {d.ui.edit}
-                </button>
-              </span>
-            )
-          }
-        >
-          {d.ui.to}
-        </BoxLabel>
-        <div className="flex items-center gap-3">
-          <div className="tnum min-w-0 flex-1 truncate text-[32px] font-bold leading-none text-faint">
-            {planData ? <span className="text-ink">{formatAmount(planData.received, planData.dst.decimals ?? dec, { maxFraction: 6 })}</span> : '0'}
-          </div>
-          <PillSelect
-            label={dstChain ? byKey(dstChain).name : d.step2.destination}
-            {...(dstChain ? { icon: <ChainIcon chain={dstChain} /> } : {})}
-            value={dstChain ?? ''}
-            onSelect={(v) => setDstChain(v ? (v as ChainKey) : undefined)}
-            options={destinations.map((c) => ({ value: c, label: byKey(c).name, icon: <ChainIcon chain={c} size={28} /> }))}
-            aria-label={d.step2.destination}
-          />
-        </div>
-        {token && destinations.length === 0 ? <p className="mt-2 text-xs text-muted">{d.ccip.noDestinations}</p> : null}
-        {recipientCustom ? (
-          <div className="mt-3 space-y-2 rounded-xl bg-surface-2 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs text-muted">{d.step2.otherAddress}</div>
-              <BookPicker family={bookFamily} onPick={(a) => { setRecipientInput(a); setConfirmLast6('') }} />
-            </div>
-            <Input value={recipientInput} onChange={(e) => { setRecipientInput(e.target.value); setConfirmLast6('') }} placeholder="0x…" className="mono" aria-label={d.step2.recipient} />
-            {recipientError && recipientInput.trim() !== '' ? <div className="text-xs text-danger">{recipientError}</div> : null}
-            {recipient ? <BookVerdictNote verdict={bookVerdict} /> : null}
-            {recipient && !bookConfirms(bookVerdict) ? (
-              <label className="block text-xs">
-                <span className="text-muted">{d.step2.confirmLast6}</span>
-                <Input value={confirmLast6} onChange={(e) => setConfirmLast6(e.target.value)} maxLength={6} className={`mono mt-1 max-w-36 ${recipientConfirmed ? 'border-ok' : ''}`} />
-              </label>
-            ) : null}
-          </div>
-        ) : null}
-      </Box>
-
-      <div className="pt-1">
-        <Cta
-          state={cta}
-          info={meta.data}
-          sending={switching || sendWrite.isPending}
-          approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
-          onClick={onCta}
-          error={txError}
+        <FromToRow
+          from={src}
+          fromOptions={evmChains()
+            .filter((c) => !!ccipConfig(c.key))
+            .map((c) => c.key)}
+          onFrom={(k) => {
+            setSrcKey(k)
+            setTarget(null)
+            setDstChain(undefined)
+          }}
+          to={dstChain ? byKey(dstChain) : undefined}
+          toOptions={destinations}
+          onTo={(k) => setDstChain(k)}
+          toDisabled={destinations.length === 0}
+          reverse={{ enabled: reverseEnabled, title: reverseTitle, onClick: onReverse }}
         />
-      </div>
+        {token && destinations.length === 0 ? <p className="px-1 text-xs text-muted">{d.ccip.noDestinations}</p> : null}
+
+        <AmountPanel
+          value={amountInput}
+          onChange={setAmountInput}
+          disabled={!token}
+          token={tokenMeta}
+          tokenIcon={token ? <ChainDot name={sym || 'T'} size={24} /> : undefined}
+          balance={token ? tokenBalance.data : undefined}
+          onMax={() => {
+            if (token) setAmountInput(formatAmount(tokenBalance.data ?? 0n, dec))
+          }}
+          note={amountNote}
+          recipientOpen={recipientShown}
+          onToggleRecipient={toggleRecipient}
+        />
+
+        {recipientShown ? (
+          <RecipientPanel
+            crossVm={false}
+            custom={recipientCustom}
+            onCustom={(custom) => {
+              setRecipientCustom(custom)
+              if (!custom) {
+                setRecipientInput('')
+                setConfirmLast6('')
+              }
+            }}
+            wallet={wallet}
+            value={recipientInput}
+            onChange={(v) => {
+              setRecipientInput(v)
+              setConfirmLast6('')
+            }}
+            placeholder="0x…"
+            error={recipientError}
+            bookFamily={bookFamily}
+            bookVerdict={bookVerdict}
+            onPickAddress={(a) => {
+              setRecipientInput(a)
+              setConfirmLast6('')
+            }}
+            bookConfirmed={bookConfirms(bookVerdict)}
+            confirm={confirmLast6}
+            confirmed={recipientConfirmed}
+            onConfirm={setConfirmLast6}
+          />
+        ) : null}
+
+      </Shell>
+      <Cta
+        state={cta}
+        info={meta.data}
+        sending={switching || sendWrite.isPending}
+        approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
+        onClick={onCta}
+        error={txError}
+      />
     </>
   )
 
   const right = (
     <Panel title={d.ui.preview} badge={<ProtocolBadge id="ccip" />}>
-      <div className="space-y-4">
-        {verdict ? <VerdictCard result={verdict} onAction={onAnalysisAction} /> : null}
-        {!token ? (
-          verdict ? null : <p className="text-sm text-muted">{d.ccip.previewEmpty}</p>
-        ) : (
-          <>
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.ui.section_contract}</div>
-              <div className="rounded-xl bg-surface-2 px-3 py-1">
-                <Row label={d.card.token} mono>
-                  <AddressView value={token} href={src.explorerAddrUrl + token} short />
-                </Row>
-                <Row label={d.ccip.pool} mono>
-                  {pool ? <AddressView value={pool} href={src.explorerAddrUrl + pool} short /> : '—'}
-                </Row>
-                <Row label={d.ccip.router} mono>
-                  {cfg ? <AddressView value={cfg.router} href={src.explorerAddrUrl + cfg.router} short /> : '—'}
-                </Row>
-                <Row label={d.ccip.routerNote}>{d.ccip.routerFromConfig}</Row>
-                {planData?.dst.token ? (
-                  <Row label={d.ccip.remoteToken} mono>
-                    <AddressView value={planData.dst.token} href={byKey(planData.dst.chain).explorerAddrUrl + planData.dst.token} short />
-                  </Row>
-                ) : null}
-              </div>
-            </div>
-
-            {planData ? (
-              <div>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.ui.section_quote}</div>
-                <div className="rounded-xl bg-surface-2 px-3 py-1">
-                  <Row label={d.step3.sending}>
-                    <b className="tnum">{formatAmount(planData.amount, planData.decimals)} {sym}</b>
-                  </Row>
-                  <Row label={d.ccip.arrives}>
-                    <b className="tnum">{formatAmount(planData.received, planData.dst.decimals ?? planData.decimals)} {sym}</b>
-                    {planData.dst.decimals !== undefined && planData.dst.decimals !== planData.decimals ? (
-                      <div className="text-xs text-muted">{fmt(d.ccip.decimalsNote, { here: String(planData.decimals), there: String(planData.dst.decimals) })}</div>
-                    ) : null}
-                  </Row>
-                  <Row label={d.ccip.fee}>
-                    <b className="tnum">{formatAmount(planData.fee, 18, { maxFraction: 8 })} {src.nativeSymbol}</b>
-                    <div className="text-xs text-muted">{d.ccip.feeExact}</div>
-                  </Row>
-                  <Row label={d.ccip.outbound}>
-                    <span className="tnum">
-                      {planData.outbound === undefined ? '—' : !planData.outbound.isEnabled ? d.ccip.noLimit : formatAmount(planData.outbound.tokens, planData.decimals, { maxFraction: 4 })}
-                    </span>
-                  </Row>
-                  <Row label={d.ccip.inbound}>
-                    <span className="tnum">
-                      {planData.inbound === undefined ? '—' : !planData.inbound.isEnabled ? d.ccip.noLimit : formatAmount(planData.inbound.tokens, planData.dst.decimals ?? planData.decimals, { maxFraction: 4 })}
-                    </span>
-                  </Row>
-                  <Row label={d.step3.recipient} mono>
-                    <AddressView value={planData.recipient} href={byKey(planData.dst.chain).explorerAddrUrl + planData.recipient} short />
-                  </Row>
-                  <Row label={d.ccip.messageShape}>{d.ccip.messagePlain}</Row>
-                </div>
-              </div>
+      {verdict ? <VerdictCard result={verdict} onAction={onAnalysisAction} /> : null}
+      {!token ? (
+        verdict ? null : <p className="px-1 text-sm text-muted">{d.ccip.previewEmpty}</p>
+      ) : (
+        <>
+          <PanelSection title={d.risk.title}>
+            <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination} />
+          </PanelSection>
+          <PanelSection title={d.ui.section_contract}>
+            <Row label={d.card.token} mono>
+              <AddressView value={token} href={src.explorerAddrUrl + token} short />
+            </Row>
+            <Row label={d.ccip.pool} mono>
+              {pool ? <AddressView value={pool} href={src.explorerAddrUrl + pool} short /> : '—'}
+            </Row>
+            <Row label={d.ccip.router} mono>
+              {cfg ? <AddressView value={cfg.router} href={src.explorerAddrUrl + cfg.router} short /> : '—'}
+            </Row>
+            <Row label={d.ccip.routerNote}>{d.ccip.routerFromConfig}</Row>
+            {planData?.dst.token ? (
+              <Row label={d.ccip.remoteToken} mono>
+                <AddressView value={planData.dst.token} href={byKey(planData.dst.chain).explorerAddrUrl + planData.dst.token} short />
+              </Row>
             ) : null}
+          </PanelSection>
 
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{d.risk.title}</div>
-              <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dstChain ? d.indicator.enterAmount : d.indicator.chooseDestination}>
-                {/* §4 The eight LayerZero checks have no CCIP runner; this tab's own guards are the whole rule. */}
-                <RiskNotAssessed why={d.risk.notCoveredCcip} />
-                <ul className="grid gap-x-3 gap-y-0.5 text-xs">
-                  {report.results.map((r) => (
-                    // Four tones: passed, in flight, the approve step (neutral), a note (amber), a block (red).
-                    <li
-                      key={r.id}
-                      className={r.ok ? 'text-ok' : isCcipPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'}
-                    >
-                      {r.ok ? '✓' : isCcipPending(r) ? '○' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗'}{' '}
-                      {r.ok ? (d.ccipGuard[`ok_${r.id}` as keyof typeof d.ccipGuard] ?? '') : d.ccipGuard[r.code]}
-                    </li>
-                  ))}
-                </ul>
-                {check.data?.revert ? (
-                  <div className="text-xs text-warn">
-                    <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
-                    <div className="mono mt-1 opacity-80">{formatRevert(check.data.revert)}</div>
-                    {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? (
-                      <div className="mt-1 opacity-80">{d.revert.fromContractAbi}</div>
-                    ) : null}
-                  </div>
-                ) : check.data?.rpcUnavailable ? (
-                  <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p>
+          {planData ? (
+            <PanelSection title={d.ui.section_quote}>
+              <Row label={d.step3.sending}>
+                <b className="tnum">{formatAmount(planData.amount, planData.decimals)} {sym}</b>
+              </Row>
+              <Row label={d.ccip.arrives}>
+                <b className="tnum">{formatAmount(planData.received, planData.dst.decimals ?? planData.decimals)} {sym}</b>
+                {planData.dst.decimals !== undefined && planData.dst.decimals !== planData.decimals ? (
+                  <div className="text-xs text-muted">{fmt(d.ccip.decimalsNote, { here: String(planData.decimals), there: String(planData.dst.decimals) })}</div>
                 ) : null}
-              </RouteIndicator>
-            </div>
-          </>
-        )}
-      </div>
+              </Row>
+              <Row label={d.ccip.fee}>
+                <b className="tnum">{formatAmount(planData.fee, 18, { maxFraction: 8 })} {src.nativeSymbol}</b>
+                <div className="text-xs text-muted">{d.ccip.feeExact}</div>
+              </Row>
+              <Row label={d.ccip.outbound}>
+                <span className="tnum">
+                  {planData.outbound === undefined ? '—' : !planData.outbound.isEnabled ? d.ccip.noLimit : formatAmount(planData.outbound.tokens, planData.decimals, { maxFraction: 4 })}
+                </span>
+              </Row>
+              <Row label={d.ccip.inbound}>
+                <span className="tnum">
+                  {planData.inbound === undefined ? '—' : !planData.inbound.isEnabled ? d.ccip.noLimit : formatAmount(planData.inbound.tokens, planData.dst.decimals ?? planData.decimals, { maxFraction: 4 })}
+                </span>
+              </Row>
+              <Row label={d.step3.recipient} mono>
+                <AddressView value={planData.recipient} href={byKey(planData.dst.chain).explorerAddrUrl + planData.recipient} short />
+              </Row>
+              <Row label={d.ccip.messageShape}>{d.ccip.messagePlain}</Row>
+            </PanelSection>
+          ) : null}
+
+          <PanelFold title={d.indicator.details}>
+            <IndicatorReasons indicator={indicator} />
+            {/* §4 The eight LayerZero checks have no CCIP runner; this tab's own guards are the whole rule. */}
+            <RiskNotAssessed why={d.risk.notCoveredCcip} />
+            <ul className="grid gap-x-3 gap-y-0.5 text-xs">
+              {report.results.map((r) => (
+                // Four tones: passed, in flight, the approve step (neutral), a note (amber), a block (red).
+                <li key={r.id} className={r.ok ? 'text-ok' : isCcipPending(r) ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'}>
+                  {r.ok ? '✓' : isCcipPending(r) ? '○' : isStepCode(r.code) ? '→' : isNoteCode(r.code) ? '●' : '✗'}{' '}
+                  {r.ok ? (d.ccipGuard[`ok_${r.id}` as keyof typeof d.ccipGuard] ?? '') : d.ccipGuard[r.code]}
+                </li>
+              ))}
+            </ul>
+            {check.data?.revert ? (
+              <div className="text-xs text-warn">
+                <div className="font-semibold">{d.revert[revertMeaning(check.data.revert) ?? 'generic']}</div>
+                <div className="mono mt-1 opacity-80">{formatRevert(check.data.revert)}</div>
+                {check.data.revert.kind === 'error' && check.data.revert.source === 'contract' ? <div className="mt-1 opacity-80">{d.revert.fromContractAbi}</div> : null}
+              </div>
+            ) : check.data?.rpcUnavailable ? (
+              <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p>
+            ) : null}
+          </PanelFold>
+        </>
+      )}
     </Panel>
   )
 

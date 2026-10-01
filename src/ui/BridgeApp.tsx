@@ -7,8 +7,8 @@ import { oftAbi } from '@/core/abi'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
-import { AmountError, parseAmount } from '@/core/amounts'
-import { byChainId, byEid, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
+import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
+import { byChainId, byEid, byKey, CHAINS, evmChains, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
 import { analyzeSvmPrefill } from '@/core/analysis/svm'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
@@ -27,14 +27,14 @@ import type { DvnConfig } from '@/core/lz/dvn'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
 import { sanitizeText } from '@/core/text'
 import { fmt, useDict, type Dict } from '@/i18n'
-import { FromBox, ReverseArrow, ToBox, type DestinationState } from './components/FromTo'
+import { AmountPanel, FromToRow, RecipientPanel, type DestinationState } from './components/FromTo'
 import { reverseOft, type Reversal } from '@/core/reverse'
 import { approveBusy } from '@/core/approveFlow'
 import { ProtocolBadge } from './components/History'
-import { Panel, TwoColumn } from './components/Layout'
+import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { Checks, Cta, Details, type CtaState } from './components/Review'
-import { Alert } from './components/ui'
-import { ContractFacts, TokenStep } from './components/TokenStep'
+import { Alert, ChainDot, Shell } from './components/ui'
+import { ContractFacts, TOKEN_INPUT_ID, TokenStep } from './components/TokenStep'
 import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
@@ -48,7 +48,7 @@ import { useProbeV1 } from './v1Hooks'
 import { ProbeV1Error } from '@/protocols/lz-v1/detect'
 import { useV2RouteRisk } from './riskHooks'
 import { RiskChecks, RiskNotAssessed } from './components/RiskPanel'
-import { RouteIndicator } from './components/RouteIndicator'
+import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
 import { isNoteCode, shownFailures, waitsOnlyForApprove } from '@/core/severity'
 
 const EMPTY_DEST: DestinationState = {
@@ -121,6 +121,8 @@ export function BridgeApp({
     return a ? { txHash: a.txHash, dstEid: a.dstEid, startedAt: a.at, srcChain: a.srcChain, restored: true } : null
   })
   const [txError, setTxError] = useState('')
+  // Whether the recipient panel is open — a view state; the recipient itself lives in `dest`.
+  const [recipientOpen, setRecipientOpen] = useState(false)
 
   // "Track" in Recent transfers: the shell switches to this tab and hands the entry over.
   useEffect(() => {
@@ -730,112 +732,154 @@ export function BridgeApp({
   }
 
   // ---- render -------------------------------------------------------------------
+  const routeKeys = info ? info.routes.map((r) => byEid(r.eid)?.key).filter((k): k is ChainKey => k !== undefined) : []
+  const tokenMeta = info ? { symbol: info.symbol, decimals: info.decimals } : undefined
+  const recipientShown = !!info && (crossVm || dest.recipientCustom || recipientOpen)
+  // Closing the panel means "my wallet": a recipient typed into a hidden panel would be a surprise.
+  const toggleRecipient = () => {
+    if (recipientShown && !crossVm) {
+      setRecipientOpen(false)
+      if (dest.recipientCustom) setDest({ ...dest, recipientCustom: false, recipientInput: '', confirmLast6: '' })
+    } else {
+      setRecipientOpen(true)
+    }
+  }
+  const amountNote = amountError ? (
+    <span className="text-danger">{amountError}</span>
+  ) : planData && info && planData.amounts.dustTrimmed > 0n ? (
+    <span className="text-warn">
+      {d.step2.dustTrimmed} <span className="mono">{formatAmount(planData.amounts.dustTrimmed, info.decimals)}</span> {info.symbol}
+    </span>
+  ) : planData && info ? (
+    <span className="tnum">{fmt(d.ui.receiveAtLeast, { amount: formatAmount(planData.amounts.minAmountLD, info.decimals, { maxFraction: 6 }), symbol: info.symbol })}</span>
+  ) : undefined
+
   const left = sent ? (
-    <>
-    <Tracker
-      src={byKey(sent.srcChain)}
-      dstEid={sent.dstEid}
-      txHash={sent.txHash}
-      startedAt={sent.startedAt}
-      restored={sent.restored}
-      customRpc={stored.customRpc['solana']}
-      onFinal={(phase) => {
-        setStored(setHistoryStatus(stored, sent.txHash, phase))
-      }}
-      onNew={reset}
-    />
-    <RecipientBookAfterSend family={bookFamily} address={recipientIsCustom ? recipient?.display : undefined} />
-    </>
+    <Shell>
+      <Tracker
+        src={byKey(sent.srcChain)}
+        dstEid={sent.dstEid}
+        txHash={sent.txHash}
+        startedAt={sent.startedAt}
+        restored={sent.restored}
+        customRpc={stored.customRpc['solana']}
+        onFinal={(phase) => {
+          setStored(setHistoryStatus(stored, sent.txHash, phase))
+        }}
+        onNew={reset}
+      />
+      <RecipientBookAfterSend family={bookFamily} address={recipientIsCustom ? recipient?.display : undefined} />
+    </Shell>
   ) : (
     <>
-      <TokenStep
-        chain={src}
-        onInput={onInput}
-        prefill={handedOver}
-        busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching || adapterSearch.isFetching}
-        recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
-        info={info}
-        flags={flags}
-        error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
-        decodedHint={!!decodeData}
-        hint={adapterNote}
-        hintBusy={adapterSearch.isFetching}
-        choices={adapterChoices}
-        onChoose={(address) => {
-          const f = adapterSearch.data?.found.find((x) => x.adapter.toLowerCase() === address.toLowerCase())
-          if (!f || !probeTarget) return
-          setAdapterHint({ token: probeTarget, adapter: f.adapter, foundOn: f.foundOn })
-          applyTarget({ chain: src.key, address: f.adapter, kind: 'oft', ...(dest.dstEid !== undefined && byEid(dest.dstEid) ? { dstChain: byEid(dest.dstEid)!.key } : {}) })
-          setHandedOver(f.adapter)
-        }}
-        decodedFailed={svmDecode.data?.observed.failed ?? false}
-        droppedOptions={decodeData?.droppedOptions ?? []}
-        optionsMalformed={decodeData?.optionsMalformed ?? false}
-      />
+      <Shell>
+        <TokenStep
+          chain={src}
+          onInput={onInput}
+          prefill={handedOver}
+          busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching || adapterSearch.isFetching}
+          recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
+          info={info}
+          flags={flags}
+          error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
+          decodedHint={!!decodeData}
+          hint={adapterNote}
+          hintBusy={adapterSearch.isFetching}
+          choices={adapterChoices}
+          onChoose={(address) => {
+            const f = adapterSearch.data?.found.find((x) => x.adapter.toLowerCase() === address.toLowerCase())
+            if (!f || !probeTarget) return
+            setAdapterHint({ token: probeTarget, adapter: f.adapter, foundOn: f.foundOn })
+            applyTarget({ chain: src.key, address: f.adapter, kind: 'oft', ...(dest.dstEid !== undefined && byEid(dest.dstEid) ? { dstChain: byEid(dest.dstEid)!.key } : {}) })
+            setHandedOver(f.adapter)
+          }}
+          decodedFailed={svmDecode.data?.observed.failed ?? false}
+          droppedOptions={decodeData?.droppedOptions ?? []}
+          optionsMalformed={decodeData?.optionsMalformed ?? false}
+        />
 
-      <FromBox
-        src={src}
-        onSrcChange={onSrcChange}
-        info={info}
-        balance={tokenBalance}
-        amountInput={dest.amountInput}
-        onAmount={(v) => setDest({ ...dest, amountInput: v })}
-        amountError={amountError}
-        dustTrimmed={planData?.amounts.dustTrimmed}
-      />
+        <FromToRow
+          from={src}
+          fromOptions={CHAINS.map((c) => c.key)}
+          onFrom={onSrcChange}
+          to={dstChain}
+          toOptions={routeKeys}
+          onTo={(k) => {
+            const next = byKey(k)
+            const patch = { ...dest, dstEid: next.eid }
+            // Switching between an EVM and a Solana destination clears the recipient:
+            // an address for one VM must never linger into the other.
+            setDest(next.vm !== dstVm ? { ...patch, recipientCustom: false, recipientInput: '', confirmLast6: '' } : patch)
+          }}
+          toDisabled={!info}
+          reverse={{ enabled: reverseEnabled, title: reverseTitle, onClick: onReverse }}
+        />
+        {svmDest.error ? <p className="px-1 text-xs text-danger">{describeError(d, svmDest.error)}</p> : null}
 
-      {info ? (
-        <>
-          <ReverseArrow onClick={onReverse} enabled={reverseEnabled} title={reverseTitle} />
-          <ToBox
-            info={info}
+        <AmountPanel
+          value={dest.amountInput}
+          onChange={(v) => setDest({ ...dest, amountInput: v })}
+          disabled={!info}
+          token={tokenMeta}
+          tokenIcon={info ? <ChainDot name={info.symbol || info.name || 'T'} size={24} /> : undefined}
+          onPickToken={() => document.getElementById(TOKEN_INPUT_ID)?.focus()}
+          balance={tokenBalance}
+          onMax={() => {
+            if (info && tokenBalance !== undefined) setDest({ ...dest, amountInput: formatAmount(tokenBalance, info.decimals) })
+          }}
+          note={amountNote}
+          recipientOpen={recipientShown}
+          onToggleRecipient={toggleRecipient}
+          recipientForced={crossVm}
+        />
+
+        {recipientShown ? (
+          <RecipientPanel
+            crossVm={crossVm}
+            custom={dest.recipientCustom}
+            onCustom={(custom) => setDest({ ...dest, recipientCustom: custom, recipientInput: '', confirmLast6: '' })}
             wallet={sender}
-            plan={planData}
-            state={dest}
-            onChange={(next) => {
-              // Switching between an EVM and a Solana destination clears the recipient:
-              // an address for one VM must never linger into the other.
-              const nextVm = next.dstEid !== undefined ? byEid(next.dstEid)?.vm : undefined
-              setDest(nextVm !== dstVm ? { ...next, recipientCustom: false, recipientInput: '', confirmLast6: '' } : next)
-            }}
-            dstVm={dstVm}
-            recipientError={recipientError}
-            recipientConfirmed={recipientConfirmed}
+            value={dest.recipientInput}
+            onChange={(v) => setDest({ ...dest, recipientInput: v, confirmLast6: '' })}
+            placeholder={dstVm === 'svm' ? d.step3.svmRecipientPlaceholder : '0x…'}
+            error={recipientError}
+            hints={[...(dstVm === 'svm' ? [d.step3.svmRecipientHint] : []), ...(crossVm && dstVm === 'evm' ? [d.step3.evmRecipientHint] : [])]}
             bookFamily={bookFamily}
             bookVerdict={bookVerdict}
             onPickAddress={(address) => setDest({ ...dest, recipientCustom: true, recipientInput: address, confirmLast6: '' })}
-            svmError={svmDest.error ? describeError(d, svmDest.error) : ''}
+            bookConfirmed={bookConfirms(bookVerdict)}
+            confirm={dest.confirmLast6}
+            confirmed={recipientConfirmed}
+            onConfirm={(v) => setDest({ ...dest, confirmLast6: v })}
           />
-        </>
-      ) : null}
+        ) : null}
 
-      <div className="pt-1">
-        <Cta
-          state={cta}
-          info={info}
-          sending={sending}
-          approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
-          onClick={onCta}
-          error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')}
-        />
-      </div>
+      </Shell>
+      <Cta
+        state={cta}
+        info={info}
+        sending={sending}
+        approve={evmSrc ? { phase: approveFlow.phase, explorerTxUrl: evmSrc.explorerTxUrl } : undefined}
+        onClick={onCta}
+        error={txError || (svmSource && !svmWallet.address ? svmWallet.error : '')}
+      />
     </>
   )
 
   const unreachable = analysis.data?.failed ?? []
   const analysisError = analysis.error ? describeError(d, analysis.error) : ''
 
-  // The panel is the live preview: the verdict first, then what comes out, what it costs and
-  // every check — all without scrolling.
+  // The panel is the live preview: the route's colour first, then what was read, what it costs,
+  // and every check behind a fold.
   const right = (
     <Panel title={d.ui.preview} badge={<ProtocolBadge id="lz-oft" />}>
       {sent ? (
-        <p className="text-sm text-muted">{d.ui.previewTracking}</p>
+        <p className="px-1 text-sm text-muted">{d.ui.previewTracking}</p>
       ) : (
-        <div className="space-y-4">
+        <>
           {results.length > 1 ? (
-            <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{fmt(d.analysis.severalTitle, { n: results.length })}</div>
+            <div className="px-1">
+              <div className="mb-1 text-xs font-semibold text-muted">{fmt(d.analysis.severalTitle, { n: results.length })}</div>
               <p className="mb-2 text-xs text-muted">{d.analysis.severalHint}</p>
               <div className="flex flex-wrap gap-1">
                 {results.map((r, i) => (
@@ -843,7 +887,7 @@ export function BridgeApp({
                     key={i}
                     type="button"
                     onClick={() => setChosen(i)}
-                    className={`h-8 rounded-lg px-3 text-xs font-semibold ${i === chosen ? 'bg-accent text-page' : 'bg-surface-2 text-ink hover:bg-line'}`}
+                    className={`h-8 rounded-full px-3 text-xs font-semibold transition ${i === chosen ? 'bg-accent text-page' : 'bg-surface-2 text-ink hover:scale-105'}`}
                   >
                     {i + 1}. {r.protocol ? r.protocol : d.analysis.title_unknown}
                   </button>
@@ -854,33 +898,33 @@ export function BridgeApp({
 
           {primary ? <VerdictCard result={primary} onAction={onAnalysisAction} /> : null}
 
-          {unreachable.length > 0 ? (
-            <Alert kind="warn">{fmt(d.analysis.unreachable, { chains: unreachable.map((f) => byKey(f.chain).name).join(', ') })}</Alert>
-          ) : null}
+          {unreachable.length > 0 ? <Alert kind="warn">{fmt(d.analysis.unreachable, { chains: unreachable.map((f) => byKey(f.chain).name).join(', ') })}</Alert> : null}
 
           {analysisError ? <Alert kind="error">{analysisError}</Alert> : null}
 
           {info ? (
             <>
+              <PanelSection title={d.risk.title}>
+                <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dest.dstEid === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount} />
+              </PanelSection>
               <PanelSection title={d.ui.section_contract}>
                 <ContractFacts chain={src} info={info} />
               </PanelSection>
               <PanelSection title={d.ui.section_quote}>
                 <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat />
               </PanelSection>
-              <PanelSection title={d.risk.title}>
-                <RouteIndicator indicator={indicator} noneText={impossible && planData ? d.indicator.held : dest.dstEid === undefined ? d.indicator.chooseDestination : d.indicator.enterAmount}>
-                  {riskCovered ? <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} /> : <RiskNotAssessed />}
-                  <Checks report={report} show={!!planData} />
-                  <SimulationNote check={evmData} />
-                  <DvnNote config={dvn.data} />
-                </RouteIndicator>
-              </PanelSection>
+              <PanelFold title={d.indicator.details}>
+                <IndicatorReasons indicator={indicator} />
+                {riskCovered ? <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} /> : <RiskNotAssessed />}
+                <Checks report={report} show={!!planData} />
+                <SimulationNote check={evmData} />
+                <DvnNote config={dvn.data} />
+              </PanelFold>
             </>
           ) : primary ? null : (
-            <p className="text-sm text-muted">{d.ui.previewEmpty}</p>
+            <p className="px-1 text-sm text-muted">{d.ui.previewEmpty}</p>
           )}
-        </div>
+        </>
       )}
     </Panel>
   )
@@ -949,15 +993,6 @@ function SimulationNote({ check }: { check: CheckResult | undefined }) {
           {d.analysis.lookupSelector}
         </a>
       ) : null}
-    </div>
-  )
-}
-
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-faint">{title}</div>
-      {children}
     </div>
   )
 }
