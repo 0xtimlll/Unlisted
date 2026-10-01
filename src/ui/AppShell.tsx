@@ -1,19 +1,21 @@
 'use client'
 /**
- * Everything that is the same on every tab: the header (tabs, theme, settings, wallet), the
- * page frame, Recent transfers across the full width and the settings dialog. The active tab
- * renders its own two columns inside `children`. The disclaimer, the canonical domain and the
- * build stamp (components/Footer.tsx) are not mounted: they belong on the splash, and go back up
- * there once the app is finished.
+ * Everything that is the same on every tab: the header (tabs, wallet, menu), the page frame,
+ * Recent transfers across the full width, and the dialogs the header opens — the wallets sheet,
+ * the address book, the settings, the Solana wallet picker. The active tab renders its own two
+ * cards inside `children`.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ChainKey } from '@/core/chains'
 import type { TabSlug } from '@/core/protocols'
 import { Header } from './components/Header'
 import { History } from './components/History'
 import { AddressBookDialog } from './components/AddressBookDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { WalletsDialog } from './components/WalletsDialog'
 import type { HistoryEntry, Stored, Theme } from './storage'
+import { useSvmWallet } from './svm/context'
+import { SvmWalletPicker } from './svm/SvmWalletButton'
 
 export function AppShell({
   tab,
@@ -22,6 +24,7 @@ export function AppShell({
   setStored,
   onTheme,
   srcVm,
+  onSolanaSource,
   onTrack,
   children,
 }: {
@@ -30,28 +33,58 @@ export function AppShell({
   stored: Stored
   setStored: (s: Stored) => void
   onTheme: (t: Theme) => void
-  /** Which wallet connector the header shows — follows the active tab's source chain. */
+  /** Which wallet the header shows — follows the active tab's source chain. */
   srcVm: 'evm' | 'svm'
+  /** Makes Solana the source (on the OFT tab), which is what loads the Solana wallet stack. */
+  onSolanaSource: () => void
   onTrack: (e: HistoryEntry) => void
   children: React.ReactNode
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [bookOpen, setBookOpen] = useState(false)
-  return (
-    // min-w: below ~1024px the page scrolls sideways instead of falling apart (desktop-only tool).
-    <div className="flex min-h-screen w-full min-w-[1024px] flex-col">
-      {/* The header floats the full width of the window, on a gutter just wide enough to read as
-          a panel. Only the header is this wide; the content below keeps its column. */}
-      <div className="w-full px-4 pt-4">
-        <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} onAddressBook={() => setBookOpen(true)} srcVm={srcVm} />
-      </div>
+  const [walletsOpen, setWalletsOpen] = useState(false)
+  const [svmPickerOpen, setSvmPickerOpen] = useState(false)
+  // "Connect" on the Solana row while the stack is not loaded: load it, then open the picker.
+  const [svmPickerPending, setSvmPickerPending] = useState(false)
+  const svm = useSvmWallet()
+  useEffect(() => {
+    if (svmPickerPending && svm.ready) {
+      setSvmPickerPending(false)
+      setSvmPickerOpen(true)
+    }
+  }, [svmPickerPending, svm.ready])
 
-      <main className="mx-auto w-full max-w-[1280px] flex-1 px-6 pb-8 pt-6">
+  const connectSvm = () => {
+    if (svm.ready) {
+      setSvmPickerOpen(true)
+      return
+    }
+    setSvmPickerPending(true)
+    onSolanaSource()
+  }
+
+  return (
+    // min-w: below ~1200px the page scrolls sideways instead of falling apart (desktop-only tool).
+    <div className="flex min-h-screen w-full min-w-[1200px] flex-col">
+      <Header tab={tab} onTab={onTab} theme={stored.theme} onTheme={onTheme} onSettings={() => setSettingsOpen(true)} onAddressBook={() => setBookOpen(true)} onWallets={() => setWalletsOpen(true)} srcVm={srcVm} />
+
+      <main className="mx-auto w-full max-w-[1216px] flex-1 px-6 pb-12 pt-6">
         {children}
-        <div className="pt-10">
+        <div className="mx-auto max-w-[1168px] pt-10">
           <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} onTrack={onTrack} />
         </div>
       </main>
+
+      {walletsOpen ? <WalletsDialog onClose={() => setWalletsOpen(false)} svmAvailable={svm.ready} onConnectSvm={connectSvm} /> : null}
+      {svmPickerOpen ? (
+        <SvmWalletPicker
+          onClose={() => setSvmPickerOpen(false)}
+          onPick={(name) => {
+            setSvmPickerOpen(false)
+            void svm.connect(name)
+          }}
+        />
+      ) : null}
 
       {bookOpen ? <AddressBookDialog onClose={() => setBookOpen(false)} /> : null}
 

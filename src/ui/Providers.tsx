@@ -130,6 +130,11 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
               setStored={setStored}
               onTheme={onTheme}
               srcVm={svmSource ? 'svm' : 'evm'}
+              onSolanaSource={() => {
+                // The Solana stack lives on the OFT tab: open it if needed, then make Solana the source.
+                if (tab !== 'oft') goTab('oft')
+                setSrcKey('solana')
+              }}
               onTrack={(e: HistoryEntry) => {
                 goTab(tabOfProtocol(entryProtocol(e)))
                 setTrackRequest(e)

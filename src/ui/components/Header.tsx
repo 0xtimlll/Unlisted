@@ -1,24 +1,22 @@
 'use client'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useAccount } from 'wagmi'
 import Link from 'next/link'
 import { TAB_SLUGS, tabPath, type TabSlug } from '@/core/protocols'
 import { useDict } from '@/i18n'
 import type { Theme } from '../storage'
-import { SvmWalletButton } from '../svm/SvmWalletButton'
-import { BookIcon, GearIcon } from './icons'
-import { ThemeToggle } from './ThemeToggle'
-import { IconButton, LinkTabs } from './ui'
+import { useSvmWallet } from '../svm/context'
+import { WalletIcon } from './icons'
+import { HeaderMenu } from './Menu'
+import { LinkTabs } from './ui'
 
 export const CANONICAL_DOMAIN = process.env['NEXT_PUBLIC_CANONICAL_DOMAIN'] ?? 'localhost'
 
 /**
  * One header for every tab: the wordmark (a link back to the welcome screen), the protocol tabs,
- * then the shared controls. One wallet slot — the connector follows the source chain's VM
- * (RainbowKit for EVM, wallet-adapter for Solana). Everything here is 40px tall so tabs, icons and
- * the wallet button share one baseline.
+ * then the wallet pill and the menu. Everything on the right is a 40px pill on the card colour.
  *
- * It is a panel that floats over the page rather than a bar stuck to its edge: same corner radius
- * as the cards below it, one step lighter than the page, and no rule underneath (6-header-reference).
+ * The wallet pill says "Connect" until a wallet is connected, then shows the address of the one
+ * the active tab's source chain uses (EVM or Solana); either way a click opens the wallets sheet.
  */
 export function Header({
   tab,
@@ -27,6 +25,7 @@ export function Header({
   onTheme,
   onSettings,
   onAddressBook,
+  onWallets,
   srcVm,
 }: {
   tab: TabSlug
@@ -35,60 +34,41 @@ export function Header({
   onTheme: (t: Theme) => void
   onSettings: () => void
   onAddressBook: () => void
+  onWallets: () => void
   srcVm: 'evm' | 'svm'
 }) {
   const d = useDict()
   return (
-    <header className="flex w-full items-center gap-6 rounded-card border border-line/60 bg-raised px-5 py-2.5">
+    <header className="flex h-[88px] w-full items-center gap-6 px-6">
       {/* A real link: the address really does change, and the welcome screen is bookmarkable too. */}
-      <Link
-        href="/"
-        title={d.splash.home}
-        className="-mx-1.5 rounded-lg px-1.5 text-[22px] font-black tracking-tight text-ink outline-none transition hover:text-muted focus-visible:ring-2 focus-visible:ring-ink/30"
-      >
+      <Link href="/" title={d.splash.home} className="-mx-1.5 rounded-lg px-1.5 text-[22px] font-bold tracking-tight text-ink outline-none transition hover:text-muted focus-visible:ring-2 focus-visible:ring-ink/30">
         {d.app.title}
       </Link>
-      <LinkTabs
-        value={tab}
-        onSelect={onTab}
-        items={TAB_SLUGS.map((s) => ({ value: s, label: d.tabs[s], href: tabPath(s) }))}
-      />
-      <div className="ml-auto flex items-center gap-1.5">
-        <ThemeToggle theme={theme} onTheme={onTheme} />
-        <IconButton label={d.header.addressBook} onClick={onAddressBook}>
-          <BookIcon className="h-6 w-6" />
-        </IconButton>
-        <IconButton label={d.header.settings} onClick={onSettings} className="group">
-          <GearIcon className="h-6 w-6 transition-transform duration-300 group-hover:rotate-[75deg]" />
-        </IconButton>
-        {srcVm === 'svm' ? <SvmWalletButton /> : <WalletButton />}
+      <LinkTabs value={tab} onSelect={onTab} items={TAB_SLUGS.map((s) => ({ value: s, label: d.tabs[s], href: tabPath(s) }))} />
+      <div className="ml-auto flex items-center gap-2">
+        <WalletPill srcVm={srcVm} onClick={onWallets} />
+        <HeaderMenu theme={theme} onTheme={onTheme} onAddressBook={onAddressBook} onSettings={onSettings} />
       </div>
     </header>
   )
 }
 
-/** RainbowKit connect button restyled to match: black pill, white text. */
-function WalletButton() {
+/** "Connect" with a wallet glyph, or the connected address with the same glyph. */
+function WalletPill({ srcVm, onClick }: { srcVm: 'evm' | 'svm'; onClick: () => void }) {
   const d = useDict()
+  const { address } = useAccount()
+  const svm = useSvmWallet()
+  const shown = srcVm === 'svm' ? svm.address : address
+  const label = shown ? (srcVm === 'svm' ? `${shown.slice(0, 4)}…${shown.slice(-4)}` : `${shown.slice(0, 6)}…${shown.slice(-4)}`) : d.header.connect
   return (
-    <ConnectButton.Custom>
-      {({ account, chain, openAccountModal, openConnectModal, mounted }) => {
-        const ready = mounted
-        const connected = ready && account && chain
-        if (!ready) return <span className="h-10 w-24" aria-hidden />
-        if (!connected) {
-          return (
-            <button type="button" onClick={openConnectModal} className="h-10 rounded-xl bg-accent px-4 text-sm font-semibold text-page transition hover:bg-accent-hover">
-              {d.header.connect}
-            </button>
-          )
-        }
-        return (
-          <button type="button" onClick={openAccountModal} className="mono h-10 rounded-xl border border-line bg-surface px-3 text-sm font-semibold text-ink transition hover:bg-surface-2">
-            {account.displayName}
-          </button>
-        )
-      }}
-    </ConnectButton.Custom>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={shown ? `${d.wallets.title}: ${label}` : d.header.connect}
+      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-raised py-2 pl-5 pr-4 text-sm font-semibold text-ink shadow-sm backdrop-blur-sm transition hover:scale-105 outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+    >
+      <span className={shown ? 'tnum' : ''}>{label}</span>
+      <WalletIcon className="h-5 w-5" />
+    </button>
   )
 }
