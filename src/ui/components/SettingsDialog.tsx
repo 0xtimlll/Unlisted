@@ -36,7 +36,7 @@ export function SettingsDialog({ stored, onSave, onClose }: { stored: Stored; on
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'oft-bridge-ui-local-data.json'
+      a.download = 'unlisted-local-data.json'
       a.click()
       URL.revokeObjectURL(url)
     } catch {

@@ -1,5 +1,5 @@
 {
-  "name": "oft-bridge-ui",
+  "name": "unlisted",
   "version": "0.1.0",
   "private": true,
   "description": "Bridge any LayerZero OFT token — a non-custodial static UI that reads the contract and builds the transaction.",
