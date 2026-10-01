@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Unlisted — TREAD read from its contract on HyperEVM, ready to bridge to Ethereum" width="820">
+  <img src="docs/screenshot.png" alt="Unlisted — CT read from its OFTAdapter on Ethereum, route to BNB Chain in order, ready to approve 25 CT" width="820">
 </p>
 
 <p align="center">
-  <sub>Nothing in that panel was typed in or looked up in a list — every field was read from the contract.</sub>
+  <sub>Nothing in that panel was typed in or looked up in a list — every field was read from the contracts, and the green chip is eight on-chain checks of the route. The wallet address is masked.</sub>
 </p>
 
 ---
@@ -356,6 +356,9 @@ Every event signature, error signature, chain id and selector used for this come
 
 ## Development
 
+Reviewing the code for the first time? [`docs/REVIEW.md`](docs/REVIEW.md) is a short map: what is
+intentional, which invariants must never weaken, and what is known and left open.
+
 ```sh
 npm ci                  # `ignore-scripts` is on: no dependency runs code while installing
 npm run dev             # http://localhost:3000
@@ -384,14 +387,15 @@ Build-time configuration lives in [`.env.production`](.env.production) (all valu
 
 ```
 src/app      / is the welcome screen; /bridge, /ntt, /ccip are the protocol tabs and /rescue is Status / Rescue (/oft still redirects to /bridge)
-src/core     pure logic, no React: abi, chains, protocols, amounts, plan, guards, probe, options, quorum, track
+src/core     pure logic, no React: abi, chains, protocols, amounts, plan, guards, severity (what holds the button),
+             indicator (the route colour), approveFlow (Approve → Send), probe, options, quorum, track
 src/core/svm Solana: base58, PDAs, account layouts, discovery, the send plan codec/self-check, the SDK boundary (send.ts)
 src/protocols  one module per bridge: lz-v1 (Endpoint V1 OFTs), wormhole-ntt, ccip
                plus lz-risk: the eight route checks and the verdict they fold into (§4)
                plus lz-rescue: diagnosing a stuck message and the four calls that finish it (§5)
 src/ui       wagmi/RainbowKit providers, the shell (header/tabs/history), the Solana wallet slot, hooks, components, local storage
 shims        build-time stand-ins for LayerZero helper packages the Solana SDK declares but never uses
-scripts      build, security headers, write-whitelist check, the v1 chain-table generator, local server
+scripts      build, security headers, write-whitelist check, the v1 chain-table and DVN-table generators, local server
 tests/core   unit tests · tests/integration  live-RPC and anvil fork tests
 ```
 

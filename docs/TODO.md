@@ -61,3 +61,55 @@ self-check still blocks a `bytes` recipient that is not exactly 20 bytes.
 **To close it** Find a deployed `OFT` or `ProxyOFT` on a chain in the registry, add it to
 `tests/integration/lzv1.live.test.ts` alongside the others, and remove `'bytes'` from
 `UNVERIFIED_WIRES`.
+
+---
+
+## An NTT locking hub is always red, even a real one with locked supply
+
+**Where** [`src/core/indicator.ts`](../src/core/indicator.ts) (`ntt_anchor_missing` in `RED_NOTES`),
+[`src/protocols/wormhole-ntt/verify.ts`](../src/protocols/wormhole-ntt/verify.ts) (`anchor`).
+
+**What** The owner's spec makes a locking hub green when it holds ≥ 0.1% of the token's supply and
+has ≥ 20 outbound messages — the same rule the LayerZero adapters already follow. The NTT side does
+not implement it yet: any manager the source token does not name as minter is red, so a genuine hub
+(L3 on Ethereum, for example) shows "High risk". Nothing is blocked; only the colour is wrong.
+
+**Why it was left alone** Deferred by the owner on 2026-10-01 until an outside review. The spec
+also needs one decision first: a real hub usually has an anchor only on the destination side, which
+the same spec lists as red. Proposed reading: locked share and history present → green; absent, and
+only a destination-side anchor → red.
+
+**To close it** Read `token.balanceOf(manager) / token.totalSupply()` on the source chain and an
+outbound counter from the NttManager itself (there is no EndpointV2 in Wormhole), feed both into the
+NTT indicator the way `lz-risk/adapters.ts` does, and add one green and one red case to
+`tests/core/indicator.test.ts`.
+
+---
+
+## The red line for an address-book twin does not name the entry
+
+**Where** [`src/core/indicator.ts`](../src/core/indicator.ts) (the `headline`),
+`recipient_lookalike` in [`src/i18n/en.ts`](../src/i18n/en.ts).
+
+**What** The spec's example is `Looks like "Bybit deposit", but this is a DIFFERENT address`. The
+indicator says the generic sentence without the label. The label is already shown next to the
+recipient field (`BookVerdictNote`), just not in the indicator's one visible line.
+
+**Why it was left alone** Deferred by the owner on 2026-10-01.
+
+**To close it** Let the screens pass the matched entry's label into `assessIndicator` and format the
+`recipient_lookalike` text with it.
+
+---
+
+## The v1 form still switches to a custom recipient with a checkbox
+
+**Where** [`src/ui/BridgeV1.tsx`](../src/ui/BridgeV1.tsx), the "I am sending to an address that is
+not my wallet" control.
+
+**What** It is an input-mode switch, not a risk acknowledgement, but it is the one checkbox left on
+any send form. The V2, NTT and CCIP forms use an "Edit / Use my wallet" link for the same thing.
+
+**Why it was left alone** Deferred by the owner on 2026-10-01.
+
+**To close it** Replace it with the same link the other three forms use.
