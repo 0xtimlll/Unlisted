@@ -14,6 +14,7 @@ import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
+import { useLinkSync } from './useLink'
 import { approveBusy } from '@/core/approveFlow'
 import { reverseV1, type Reversal } from '@/core/reverse'
 import { sameAddress } from '@/core/encoding'
@@ -281,6 +282,7 @@ export function BridgeV1({
   }
 
   const chainMismatch = walletChainId !== undefined && walletChainId !== src.chainId
+  useLinkSync({ from: src.key, token: info.oft, to: dstKey })
   // Reverse: the trusted remote for the chosen destination becomes the source (core/reverse.ts).
   const reversal = reverseV1(src.key, info.routes.find((r) => r.key === dstKey))
   const reverseBusy = switching || sendWrite.isPending || approveBusy(approveFlow.phase)

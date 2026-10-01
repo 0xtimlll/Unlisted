@@ -16,6 +16,7 @@ import { NttApp } from './NttApp'
 import { RescueApp } from './RescueApp'
 import { entryProtocol, load, save, type HistoryEntry, type Stored, type Theme } from './storage'
 import { saveLastTab } from './tabs'
+import { useLinkTarget } from './useLink'
 import { SvmWalletHost } from './svm/SvmWalletHost'
 import { makeWagmiConfig } from './wagmi'
 
@@ -39,6 +40,11 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   const [trackRequest, setTrackRequest] = useState<HistoryEntry | null>(null)
   /** What the analysis found for another protocol, carried across when its tab opens. */
   const [handoff, setHandoff] = useState<AnalysisTarget | null>(null)
+  // A link (core/link.ts) is handed to the tab exactly like a target from another tab.
+  const linkTarget = useLinkTarget(initialTab)
+  useEffect(() => {
+    if (linkTarget) setHandoff(linkTarget)
+  }, [linkTarget])
   const setStored = (s: Stored) => {
     setStoredState(s)
     save(s)

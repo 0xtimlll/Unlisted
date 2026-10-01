@@ -62,6 +62,7 @@ npm run test:integration   # живые публичные RPC и форк на 
 | `src/core/severity.ts` | какие коды guard'ов держат кнопку, а какие только окрашивают индикатор |
 | `src/core/indicator.ts` | цвет индикатора и причины; ничего не запрещает |
 | `src/core/approveFlow.ts`, `src/ui/useApproveFlow.ts` | автомат Approve → Send: симуляция, подпись, receipt, перечитывание allowance |
+| `src/core/link.ts`, `src/ui/useLink.ts` | ссылка на маршрут в адресной строке: только мост, сети и токен; получателя и суммы в ней нет; найденное проверяется как вставленный адрес |
 | `src/core/adapterSearch.ts` | поиск адаптера по адресу токена через peer на других сетях; найденное проверяется как вставленный адрес |
 | `src/core/reverse.ts` | разворот маршрута: контракт другой стороны берётся из peer и проверяется заново с нуля |
 | `src/core/guards.ts` | 22 guard'а LayerZero V2 (и Solana) |

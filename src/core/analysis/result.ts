@@ -80,6 +80,8 @@ export type AnalysisTarget = {
   token?: string
   /** Destination the sample used, as that protocol numbers its chains. */
   dstChain?: ChainKey
+  /** Set when the target came from the page's own address (core/link.ts), so the tab can say so. */
+  via?: 'link'
 }
 
 /** Raw material, always shown behind a disclosure so a wrong verdict can still be debugged. */

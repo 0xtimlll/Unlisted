@@ -77,6 +77,7 @@
 
 **Ядро** — `src/core/`: `probe.ts` (детект OFT), `plan.ts`, `guards.ts`, `severity.ts` (что
 держит кнопку), `indicator.ts` (цвет и причины), `approveFlow.ts` (автомат Approve → Send),
+`link.ts` (ссылка `/bridge?from=&token=&to=` — только мост, сети и токен; получателя и суммы в ней нет никогда, всё из неё перечитывается с нуля),
 `adapterSearch.ts` (адаптер по токену: `peers(srcEid)` того же адреса на других сетях — подсказка, probe на исходной сети — решение),
 `reverse.ts` (разворот маршрута: контракт другой стороны из peer, затем полный probe заново),
 `recipient.ts`, `quorum.ts` (кросс-проверка двух RPC), `options.ts`, `verify.ts`, `track.ts`,

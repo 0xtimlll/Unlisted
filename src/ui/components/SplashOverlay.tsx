@@ -67,7 +67,8 @@ export function SplashOverlay() {
     if (going.current) return
     going.current = true
     setLeaving(true)
-    wait(() => router.push(tabPath(loadLastTab())), OUT_MS)
+    // A link opened at / keeps its query: the tab it dissolves into reads it (core/link.ts).
+    wait(() => router.push(tabPath(loadLastTab()) + window.location.search), OUT_MS)
   }
 
   /**

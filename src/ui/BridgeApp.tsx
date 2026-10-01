@@ -6,6 +6,7 @@ import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
 import { oftAbi } from '@/core/abi'
 import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
+import { useLinkSync } from './useLink'
 import { AmountError, parseAmount } from '@/core/amounts'
 import { byChainId, byEid, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
@@ -140,6 +141,7 @@ export function BridgeApp({
   const reset = useCallback(() => {
     setProbeTarget(null)
     setAdapterHint(null)
+    setOpenedFromLink(false)
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
@@ -174,20 +176,32 @@ export function BridgeApp({
    * `oft-store` is deliberately left out: a Solana source is set up by its own decode path.
    */
   const [handedOver, setHandedOver] = useState<string | undefined>(undefined)
+  const [openedFromLink, setOpenedFromLink] = useState(false)
   useEffect(() => {
     if (!handoff) return
     if (handoff.kind === 'oft' || handoff.kind === 'lz-oapp') {
       applyTarget(handoff)
       setHandedOver(handoff.address)
+      setOpenedFromLink(handoff.via === 'link')
+    } else if (handoff.kind === 'oft-store' && handoff.via === 'link') {
+      // A Solana source from a link: the store is probed on Solana, like one pasted there.
+      setSrcKey('solana')
+      setDecodeTarget(null)
+      setProbeTarget(handoff.address)
+      setHandedOver(handoff.address)
+      setDest(handoff.dstChain ? { ...EMPTY_DEST, dstEid: byKey(handoff.dstChain).eid } : EMPTY_DEST)
+      setOpenedFromLink(true)
     }
     onHandoffConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoff?.address, handoff?.chain])
 
+
   const onInput = (i: AnalysisInput) => {
     setTxError('')
     setProbeTarget(null)
     setAdapterHint(null)
+    setOpenedFromLink(false)
     setDecodeTarget(null)
     setAnalysisInput(null)
     setDest(EMPTY_DEST)
@@ -231,6 +245,9 @@ export function BridgeApp({
   const v2SaysNotOft = probe.error instanceof ProbeError && probe.error.code === 'not_oft'
   const probeV1 = useProbeV1(evmSrc, v2SaysNotOft ? probeTarget : null, stored.customRpc[src.key], v2SaysNotOft && !svmSource)
   const v1Info = probeV1.data?.info
+  // The address bar follows the form: bridge (the path), source, token, destination (core/link.ts).
+  // The v1 form writes its own while it is shown.
+  useLinkSync(probeTarget ? { from: src.key, token: probeTarget, to: dest.dstEid !== undefined ? byEid(dest.dstEid)?.key : undefined } : undefined, !v1Info)
   const v1Flags = probeV1.data?.flags ?? []
 
   /**
@@ -247,7 +264,8 @@ export function BridgeApp({
     if (!r || !bothDeclined || !probeTarget || r.found.length !== 1) return
     const f = r.found[0]!
     setAdapterHint({ token: probeTarget, adapter: f.adapter, foundOn: f.foundOn })
-    applyTarget({ chain: src.key, address: f.adapter, kind: 'oft' })
+    // The destination chosen before the search (a link, or by hand) stays chosen.
+    applyTarget({ chain: src.key, address: f.adapter, kind: 'oft', ...(dest.dstEid !== undefined && byEid(dest.dstEid) ? { dstChain: byEid(dest.dstEid)!.key } : {}) })
     setHandedOver(f.adapter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapterSearch.data])
@@ -727,14 +745,14 @@ export function BridgeApp({
         flags={flags}
         error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}
         decodedHint={!!decodeData}
-        hint={adapterNote}
+        hint={adapterNote || (openedFromLink && info ? d.step1.openedFromLink : '')}
         hintBusy={adapterSearch.isFetching}
         choices={adapterChoices}
         onChoose={(address) => {
           const f = adapterSearch.data?.found.find((x) => x.adapter.toLowerCase() === address.toLowerCase())
           if (!f || !probeTarget) return
           setAdapterHint({ token: probeTarget, adapter: f.adapter, foundOn: f.foundOn })
-          applyTarget({ chain: src.key, address: f.adapter, kind: 'oft' })
+          applyTarget({ chain: src.key, address: f.adapter, kind: 'oft', ...(dest.dstEid !== undefined && byEid(dest.dstEid) ? { dstChain: byEid(dest.dstEid)!.key } : {}) })
           setHandedOver(f.adapter)
         }}
         decodedFailed={svmDecode.data?.observed.failed ?? false}
