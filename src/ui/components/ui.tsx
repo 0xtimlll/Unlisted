@@ -231,6 +231,11 @@ export function Disclosure({ title, open, onToggle, children }: { title: ReactNo
 export function useDismiss(onClose: () => void, ms = 160): { leaving: boolean; dismiss: () => void } {
   const [leaving, setLeaving] = useState(false)
   const closing = useRef(false)
+  // The timer below must not depend on `onClose`'s identity: callers pass inline arrows, and a parent
+  // re-rendering during the exit animation would otherwise restart it — under steady re-renders the
+  // invisible overlay would stay mounted over the page and swallow every click.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   const dismiss = () => {
     if (closing.current) return
     closing.current = true
@@ -249,9 +254,9 @@ export function useDismiss(onClose: () => void, ms = 160): { leaving: boolean; d
   }, [])
   useEffect(() => {
     if (!leaving) return
-    const t = window.setTimeout(onClose, ms)
+    const t = window.setTimeout(() => onCloseRef.current(), ms)
     return () => window.clearTimeout(t)
-  }, [leaving, onClose, ms])
+  }, [leaving, ms])
   return { leaving, dismiss }
 }
 
