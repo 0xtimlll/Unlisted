@@ -10,12 +10,13 @@ import { ChainIcon } from './ChainIcon'
 import { CheckIcon } from './icons'
 import { Alert, Box, BoxLabel, Button, Spinner } from './ui'
 
-function useElapsed(since: number): string {
+function useElapsed(since: number, running: boolean): string {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
+    if (!running) return
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [running])
   const s = Math.max(0, Math.floor((now - since) / 1000))
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 }
@@ -37,10 +38,12 @@ export function Tracker(p: {
   // Source-chain confirmation: a receipt on EVM, a signature status on Solana. Scan is asked in
   // parallel from the start: it only ever indexes a mined transaction, so a Scan answer is a
   // confirmation in itself, and a receipt poll that lags behind can no longer hold the tracker.
-  const receipt = useSourceReceipt(isEvm(p.src) ? p.src : undefined, evm ? (p.txHash as Hash) : undefined)
-  const sig = useSvmSignatureStatus(evm ? undefined : p.txHash, p.customRpc)
   const track = useTrack(p.txHash, p.startedAt)
   const s = track.data
+  // Once Scan has the final word there is nothing left for the source chain to add.
+  const scanFinal = s?.phase === 'delivered' || s?.phase === 'failed'
+  const receipt = useSourceReceipt(isEvm(p.src) ? p.src : undefined, evm ? (p.txHash as Hash) : undefined, scanFinal)
+  const sig = useSvmSignatureStatus(evm ? undefined : p.txHash, p.customRpc)
   const scanSawIt = s !== undefined && s.phase !== 'no_data'
   const confirmed = scanSawIt || (evm ? receipt.data?.status === 'success' : sig.data === 'confirmed')
   const sourceFailed = evm ? receipt.data?.status === 'reverted' : sig.data === 'failed'
@@ -51,7 +54,7 @@ export function Tracker(p: {
     else void sig.refetch()
   }
   const final = phase === 'delivered' || phase === 'failed'
-  const elapsed = useElapsed(p.startedAt)
+  const elapsed = useElapsed(p.startedAt, !final)
   // Confirmations are counted in blocks, so the block time has to come from the chain: 20 of them
   // is four minutes on Ethereum and two seconds on a chain that produces one every 100ms.
   const minutes = Math.max(1, Math.round((p.src.srcConfirmationsHint * (p.src.blockTimeSec ?? 12)) / 60))

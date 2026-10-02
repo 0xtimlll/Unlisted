@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { usePathname } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { WagmiProvider } from 'wagmi'
-import type { ChainKey } from '@/core/chains'
+import { byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisTarget } from '@/core/analysis/result'
 import { tabOfPath, tabOfProtocol, tabPath, type ProtocolId, type TabSlug } from '@/core/protocols'
 import { AddressBookProvider } from './addressBookContext'
@@ -14,9 +14,10 @@ import { BridgeApp } from './BridgeApp'
 import { CcipApp } from './CcipApp'
 import { NttApp } from './NttApp'
 import { RescueApp } from './RescueApp'
-import { entryProtocol, load, save, type HistoryEntry, type Stored, type Theme } from './storage'
+import { entryProtocol, load, save, type HistoryEntry, type SetStored, type Stored, type Theme } from './storage'
 import { saveLastTab } from './tabs'
 import { useLinkTarget } from './useLink'
+import { hasStoredSvmWallet } from './svm/stored'
 import { SvmWalletHost } from './svm/SvmWalletHost'
 import { makeWagmiConfig } from './wagmi'
 
@@ -45,9 +46,12 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   useEffect(() => {
     if (linkTarget) setHandoff(linkTarget)
   }, [linkTarget])
-  const setStored = (s: Stored) => {
-    setStoredState(s)
-    save(s)
+  const setStored: SetStored = (s) => {
+    setStoredState((prev) => {
+      const next = typeof s === 'function' ? s(prev) : s
+      save(next)
+      return next
+    })
   }
 
   /**
@@ -105,19 +109,31 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
   const rpcKey = JSON.stringify(stored.customRpc)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const config = useMemo(() => makeWagmiConfig(stored.customRpc), [rpcKey])
-  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }))
-  const onTheme = (t: Theme) => setStored({ ...stored, theme: t })
+  // A new cache with every RPC change: many read hooks key on the chain and the input, not on the
+  // RPC URL, and a reading from the old RPC must not be served as the new one's answer.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }), [rpcKey])
+  const onTheme = (t: Theme) => setStored((prev) => ({ ...prev, theme: t }))
 
-  const rkTheme = dark
-    ? darkTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' })
-    : lightTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' })
+  const rkTheme = useMemo(
+    () =>
+      dark
+        ? darkTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' })
+        : lightTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' }),
+    [dark, rk.accent, rk.on],
+  )
+
+  // Solana is a source only on the OFT tab; the others read every chain through an EVM client,
+  // so they get the last EVM source (or Ethereum) rather than a source they cannot use.
+  const evmSrcKey: ChainKey = isEvm(byKey(srcKey)) ? srcKey : 'ethereum'
 
   // Only the OFT tab can have a Solana source; the others are EVM-only, so the header shows the
-  // EVM wallet there. The Solana stack is loaded when Solana is the source or when the user asks
-  // to connect a Solana wallet, and it stays mounted from then on: a connected Solana wallet
+  // EVM wallet there. The Solana stack is loaded when Solana is the source, when the user asks to
+  // connect a Solana wallet, or at start-up when a Solana wallet was connected before (the adapter
+  // then reconnects silently), and it stays mounted from then on: a connected Solana wallet
   // survives a switch to an EVM source and is simply used again when the source is Solana.
   const svmSource = tab === 'oft' && srcKey === 'solana'
-  const [svmWanted, setSvmWanted] = useState(false)
+  const [svmWanted, setSvmWanted] = useState(hasStoredSvmWallet)
   useEffect(() => {
     if (svmSource) setSvmWanted(true)
   }, [svmSource])
@@ -139,6 +155,8 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
               srcVm={svmSource ? 'svm' : 'evm'}
               onEnableSvm={() => setSvmWanted(true)}
               onTrack={(e: HistoryEntry) => {
+                // Every tab that can be asked consumes the request; nothing is left behind for
+                // the next tab to mistake for its own transfer.
                 goTab(tabOfProtocol(entryProtocol(e)))
                 setTrackRequest(e)
               }}
@@ -154,13 +172,13 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                   {...handoffProps}
                 />
               ) : tab === 'ntt' ? (
-                <NttApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} {...handoffProps} />
+                <NttApp stored={stored} setStored={setStored} srcKey={evmSrcKey} setSrcKey={setSrcKey} trackRequest={trackRequest} onTrackConsumed={() => setTrackRequest(null)} {...handoffProps} />
               ) : tab === 'ccip' ? (
-                <CcipApp stored={stored} setStored={setStored} srcKey={srcKey} setSrcKey={setSrcKey} {...handoffProps} />
+                <CcipApp stored={stored} setStored={setStored} srcKey={evmSrcKey} setSrcKey={setSrcKey} trackRequest={trackRequest} onTrackConsumed={() => setTrackRequest(null)} {...handoffProps} />
               ) : (
                 // §5 The rescue tab takes no handoff: it is not a form for a protocol, it is a
                 // transaction hash and whatever the two chains say about it.
-                <RescueApp stored={stored} srcKey={srcKey} setSrcKey={setSrcKey} />
+                <RescueApp stored={stored} srcKey={evmSrcKey} setSrcKey={setSrcKey} />
               )}
             </AppShell>
            </AddressBookProvider>

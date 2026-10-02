@@ -82,7 +82,7 @@ export function NetworkDialog({
   }
 
   return (
-    <div className={`overlay fixed inset-0 z-50 ${leaving ? 'animate-fade-out' : 'animate-fade-in'}`} role="dialog" aria-modal="true" aria-label={d.network.find}>
+    <div className={`overlay fixed inset-0 z-50 ${leaving ? 'animate-fade-out' : 'animate-fade-in'}`} role="dialog" data-dismiss="" aria-modal="true" aria-label={d.network.find}>
       <button type="button" onClick={dismiss} aria-label={d.ui.close} title={d.ui.close} className="fixed right-6 top-6 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink shadow-sm transition hover:scale-105 outline-none focus-visible:ring-2 focus-visible:ring-ink/30">
         <CloseIcon className="h-3.5 w-3.5" />
       </button>

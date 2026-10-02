@@ -38,7 +38,7 @@ import { ContractFacts, TOKEN_INPUT_ID, TokenStep } from './components/TokenStep
 import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
-import { activeTransfer, pushHistory, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
+import { activeTransfer, pushHistory, setHistoryStatus, type HistoryEntry, type SetStored, type Stored } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
@@ -84,7 +84,7 @@ export function BridgeApp({
   onOpenTab,
 }: {
   stored: Stored
-  setStored: (s: Stored) => void
+  setStored: SetStored
   srcKey: ChainKey
   setSrcKey: (k: ChainKey) => void
   /** A past transfer the user asked to track from Recent transfers. */
@@ -123,6 +123,8 @@ export function BridgeApp({
   const [txError, setTxError] = useState('')
   // Whether the recipient panel is open — a view state; the recipient itself lives in `dest`.
   const [recipientOpen, setRecipientOpen] = useState(false)
+  /** The address another tab or a link handed over (declared early: `reset` clears it). */
+  const [handedOver, setHandedOver] = useState<string | undefined>(undefined)
 
   // "Track" in Recent transfers: the shell switches to this tab and hands the entry over.
   useEffect(() => {
@@ -132,9 +134,15 @@ export function BridgeApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackRequest])
 
-  // Follow the EVM wallet's chain when it is one we support and the source is EVM.
+  // Follow the EVM wallet's chain when the user SWITCHES it to one we support and the source is
+  // EVM. Only a change between two known chains counts: the wallet appearing (connect, reconnect
+  // after a reload) must not move a source the user or a link chose — the button says
+  // "Switch to <chain>" for that.
+  const prevWalletChainId = useRef(walletChainId)
   useEffect(() => {
-    if (walletChainId === undefined || svmSource) return
+    const prev = prevWalletChainId.current
+    prevWalletChainId.current = walletChainId
+    if (walletChainId === undefined || prev === undefined || prev === walletChainId || svmSource) return
     const c = byChainId(walletChainId)
     if (c) setSrcKey(c.key)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,6 +153,9 @@ export function BridgeApp({
     setAdapterHint(null)
     setDecodeTarget(null)
     setAnalysisInput(null)
+    // Otherwise a remounted token field would show the address that was handed over, over an
+    // empty form (TokenStep's prefill).
+    setHandedOver(undefined)
     setDest(EMPTY_DEST)
     setV1Dst(undefined)
     setV1Amount('')
@@ -176,7 +187,6 @@ export function BridgeApp({
    * Arriving from the NTT or CCIP tab, which recognised a LayerZero transfer they cannot build.
    * `oft-store` is deliberately left out: a Solana source is set up by its own decode path.
    */
-  const [handedOver, setHandedOver] = useState<string | undefined>(undefined)
   useEffect(() => {
     if (!handoff) return
     if (handoff.kind === 'oft' || handoff.kind === 'lz-oapp') {
@@ -588,7 +598,8 @@ export function BridgeApp({
   const svmSend = useSvmSend()
   const recordSent = (txHash: string, dstEid: number, oft: string) => {
     setSent({ txHash, dstEid, startedAt: Date.now(), srcChain: src.key, restored: false })
-    setStored(pushHistory(stored, { srcChain: src.key, protocol: 'lz-oft', dstEid, oft, txHash, at: Date.now() }))
+    // An updater: the wallet may take minutes to sign, and whatever changed meanwhile must survive.
+    setStored((prev) => pushHistory(prev, { srcChain: src.key, protocol: 'lz-oft', dstEid, oft, txHash, at: Date.now() }))
   }
   // One wallet prompt per click. A ref rather than the mutation's isPending: that flips on the
   // next render, and a double click lands before it.
@@ -758,7 +769,7 @@ export function BridgeApp({
         restored={sent.restored}
         customRpc={stored.customRpc['solana']}
         onFinal={(phase) => {
-          setStored(setHistoryStatus(stored, sent.txHash, phase))
+          setStored((prev) => setHistoryStatus(prev, sent.txHash, phase))
         }}
         onNew={reset}
       />

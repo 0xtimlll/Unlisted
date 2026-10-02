@@ -70,7 +70,7 @@ export function WalletsDialog({
 
   return (
     <div className={`overlay-light fixed inset-0 z-50 ${leaving ? 'animate-scrim-out' : 'animate-scrim-in'}`} onMouseDown={dismiss}>
-      <div role="dialog" aria-modal="true" aria-label={d.wallets.title} onMouseDown={(e) => e.stopPropagation()} className={`fixed right-0 top-0 w-full max-w-[480px] p-5 outline-none ${leaving ? 'animate-sheet-out' : 'animate-sheet-in'}`}>
+      <div role="dialog" data-dismiss="" aria-modal="true" aria-label={d.wallets.title} onMouseDown={(e) => e.stopPropagation()} className={`fixed right-0 top-0 w-full max-w-[480px] p-5 outline-none ${leaving ? 'animate-sheet-out' : 'animate-sheet-in'}`}>
         <div className="flex flex-col gap-4 rounded-dialog bg-surface p-6 shadow-lg">
           <div className="flex items-center justify-between gap-4">
             <h2 className="px-2 text-lg font-semibold text-ink">{d.wallets.title}</h2>

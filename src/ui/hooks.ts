@@ -270,7 +270,7 @@ export type SourceReceipt = { status: 'pending' | 'success' | 'reverted'; blockN
  * yet, and an RPC that did not answer, are both simply "pending"; only a mined receipt with
  * `status: 'reverted'` is a failure.
  */
-export function useSourceReceipt(chain: EvmChainDef | undefined, hash: Hash | undefined) {
+export function useSourceReceipt(chain: EvmChainDef | undefined, hash: Hash | undefined, done = false) {
   const client = useReadClient(chain)
   return useQuery({
     queryKey: ['sourceReceipt', chain?.key, hash],
@@ -282,7 +282,7 @@ export function useSourceReceipt(chain: EvmChainDef | undefined, hash: Hash | un
         return { status: 'pending' }
       }
     },
-    enabled: !!client && !!hash,
+    enabled: !!client && !!hash && !done,
     refetchInterval: (q) => ((q.state.data as SourceReceipt | undefined)?.status === 'pending' || !q.state.data ? 5_000 : false),
     refetchIntervalInBackground: true,
     refetchOnWindowFocus: true,

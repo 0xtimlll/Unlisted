@@ -14,7 +14,7 @@ import { History } from './components/History'
 import { AddressBookDialog } from './components/AddressBookDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { WalletsDialog } from './components/WalletsDialog'
-import type { HistoryEntry, Stored, Theme } from './storage'
+import type { HistoryEntry, SetStored, Stored, Theme } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 
@@ -32,7 +32,7 @@ export function AppShell({
   tab: TabSlug
   onTab: (t: TabSlug) => void
   stored: Stored
-  setStored: (s: Stored) => void
+  setStored: SetStored
   onTheme: (t: Theme) => void
   /** Which wallet the header shows — follows the active tab's source chain. */
   srcVm: 'evm' | 'svm'
@@ -72,7 +72,7 @@ export function AppShell({
       <main className="mx-auto w-full max-w-[1216px] flex-1 px-6 pb-12 pt-6">
         {children}
         <div className="mx-auto max-w-[1168px] pt-10">
-          <History entries={stored.history} onClear={() => setStored({ ...stored, history: [] })} onTrack={onTrack} />
+          <History entries={stored.history} onClear={() => setStored((prev) => ({ ...prev, history: [] }))} onTrack={onTrack} />
         </div>
       </main>
 
@@ -94,7 +94,7 @@ export function AppShell({
           stored={stored}
           onClose={() => setSettingsOpen(false)}
           onSave={(rpc: Partial<Record<ChainKey, string>>) => {
-            setStored({ ...stored, customRpc: rpc })
+            setStored((prev) => ({ ...prev, customRpc: rpc }))
             setSettingsOpen(false)
           }}
         />

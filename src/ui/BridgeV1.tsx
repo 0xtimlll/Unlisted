@@ -36,7 +36,7 @@ import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { Tracker } from './components/Tracker'
 import { Alert, AmountInput, Box, BoxLabel, Input, Row, Select, Spinner } from './components/ui'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
-import { pushHistory, setHistoryStatus, type Stored } from './storage'
+import { pushHistory, setHistoryStatus, type SetStored, type Stored } from './storage'
 import { useV1PeerBack, useV1Plan, useV1Simulation, useV1StoredPayload } from './v1Hooks'
 import { useV1RouteRisk } from './riskHooks'
 import { RiskChecks } from './components/RiskPanel'
@@ -91,7 +91,7 @@ export function BridgeV1({
   info: OftV1Info
   flags: readonly SuspiciousFlag[]
   stored: Stored
-  setStored: (s: Stored) => void
+  setStored: SetStored
   onReset: () => void
   /** Where a reversed route starts: the chain it came from, when this contract has a route there. */
   initialDstKey?: ChainKey | undefined
@@ -263,8 +263,8 @@ export function BridgeV1({
     try {
       const hash = await submitV1Send(sendWrite, planData, src.chainId)
       setSent({ txHash: hash, dstKey, at: Date.now() })
-      setStored(
-        pushHistory(stored, {
+      setStored((prev) =>
+        pushHistory(prev, {
           srcChain: src.key,
           protocol: 'lz-oft',
           // The destination's registry eid names the chain; it is not a claim that this transfer
@@ -348,7 +348,7 @@ export function BridgeV1({
           restored={false}
           customRpc={stored.customRpc[src.key]}
           onFinal={(phase) => {
-            setStored(setHistoryStatus(stored, sent.txHash, phase))
+            setStored((prev) => setHistoryStatus(prev, sent.txHash, phase))
           }}
           onNew={() => {
             setSent(null)

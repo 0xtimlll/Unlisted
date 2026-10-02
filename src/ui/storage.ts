@@ -15,6 +15,13 @@ const isAccount = (v: unknown): v is string => typeof v === 'string' && (isAddre
 /** An EVM tx hash or a Solana signature. */
 const isTx = (v: unknown): v is string => typeof v === 'string' && (/^0x[0-9a-fA-F]{64}$/.test(v) || /^[1-9A-HJ-NP-Za-km-z]{86,88}$/.test(v))
 
+/**
+ * Writes the persisted state. Takes the next state or an updater; callbacks that run later than
+ * the render they were made in (a wallet signing, a tracker finishing) must use the updater, or
+ * they would write back the snapshot they closed over and undo everything changed since.
+ */
+export type SetStored = (s: Stored | ((prev: Stored) => Stored)) => void
+
 export type HistoryEntry = {
   srcChain: ChainKey
   /**

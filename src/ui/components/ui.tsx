@@ -243,11 +243,14 @@ export function useDismiss(onClose: () => void, ms = 160): { leaving: boolean; d
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        dismiss()
-      }
+      if (e.key !== 'Escape') return
+      // Escape inside a dialog that is not one of ours (RainbowKit's wallet chooser over the
+      // wallets sheet) belongs to that dialog: it closes itself, this one stays.
+      const within = e.target instanceof Element ? e.target.closest('[role="dialog"]') : null
+      if (within && !within.hasAttribute('data-dismiss')) return
+      e.preventDefault()
+      e.stopPropagation()
+      dismiss()
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
@@ -285,6 +288,7 @@ export function Modal({
     <div className={`overlay fixed inset-0 z-50 flex items-center justify-center p-6 ${leaving ? 'animate-fade-out' : 'animate-fade-in'}`} onMouseDown={dismiss}>
       <div
         role="dialog"
+        data-dismiss=""
         aria-modal="true"
         aria-labelledby={titleId}
         onMouseDown={(e) => e.stopPropagation()}

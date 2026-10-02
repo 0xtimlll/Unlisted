@@ -44,7 +44,7 @@ import { Cta, type CtaState } from './components/Review'
 import { useAnalysis } from './useAnalysis'
 import { useCcipCheck, useCcipPlan, useCcipRemote, useCcipToken, useTokenMeta } from './ccipHooks'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
-import { pushHistory, type Stored } from './storage'
+import { pushHistory, type HistoryEntry, type SetStored, type Stored } from './storage'
 
 export function CcipApp({
   stored,
@@ -54,9 +54,14 @@ export function CcipApp({
   handoff,
   onHandoffConsumed,
   onOpenTab,
+  trackRequest,
+  onTrackConsumed,
 }: {
   stored: Stored
-  setStored: (s: Stored) => void
+  setStored: SetStored
+  /** A history entry whose "Track" was pressed; shown as the sent transfer, then consumed. */
+  trackRequest: HistoryEntry | null
+  onTrackConsumed: () => void
   srcKey: ChainKey
   setSrcKey: (k: ChainKey) => void
   /** What another tab's analysis found for CCIP, carried across when this tab opened. */
@@ -85,12 +90,27 @@ export function CcipApp({
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
 
+  // Follow the wallet's chain when the user SWITCHES it to one we support. Only a change between
+  // two known chains counts: the wallet appearing (connect, reconnect after a reload) must not
+  // move a source the user chose — the button says "Switch to <chain>" for that.
+  const prevWalletChainId = useRef(walletChainId)
   useEffect(() => {
-    if (walletChainId === undefined) return
+    const prev = prevWalletChainId.current
+    prevWalletChainId.current = walletChainId
+    if (walletChainId === undefined || prev === undefined || prev === walletChainId) return
     const c = byChainId(walletChainId)
     if (c) setSrcKey(c.key)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletChainId])
+
+  // "Track" in Recent transfers: the shell switches to this tab and hands the entry over.
+  useEffect(() => {
+    if (!trackRequest) return
+    setSrcKey(trackRequest.srcChain)
+    setSent(trackRequest.txHash)
+    onTrackConsumed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackRequest])
 
   // Arriving from another tab's analysis with a CCIP transfer it recognised.
   useEffect(() => {
@@ -324,8 +344,8 @@ export function CcipApp({
       {
         onSuccess: (hash) => {
           setSent(hash)
-          setStored(
-            pushHistory(stored, {
+          setStored((prev) =>
+            pushHistory(prev, {
               srcChain: srcKey,
               protocol: 'ccip',
               dstEid: 0,

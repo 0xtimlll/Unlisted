@@ -42,7 +42,7 @@ import { Cta, type CtaState } from './components/Review'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { useAnalysis } from './useAnalysis'
 import { nttDestinations, useNttCheck, useNttDiscovery, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
-import { pushHistory, type Stored } from './storage'
+import { pushHistory, type HistoryEntry, type SetStored, type Stored } from './storage'
 
 export function NttApp({
   stored,
@@ -52,9 +52,14 @@ export function NttApp({
   handoff,
   onHandoffConsumed,
   onOpenTab,
+  trackRequest,
+  onTrackConsumed,
 }: {
   stored: Stored
-  setStored: (s: Stored) => void
+  setStored: SetStored
+  /** A history entry whose "Track" was pressed; shown as the sent transfer, then consumed. */
+  trackRequest: HistoryEntry | null
+  onTrackConsumed: () => void
   srcKey: ChainKey
   setSrcKey: (k: ChainKey) => void
   /** What another tab's analysis found for NTT, when the user arrived through the verdict card. */
@@ -82,13 +87,27 @@ export function NttApp({
   const [sent, setSent] = useState<string | null>(null)
   const [txError, setTxError] = useState('')
 
-  // Follow the wallet's chain when it is one we support.
+  // Follow the wallet's chain when the user SWITCHES it to one we support. Only a change between
+  // two known chains counts: the wallet appearing (connect, reconnect after a reload) must not
+  // move a source the user chose — the button says "Switch to <chain>" for that.
+  const prevWalletChainId = useRef(walletChainId)
   useEffect(() => {
-    if (walletChainId === undefined) return
+    const prev = prevWalletChainId.current
+    prevWalletChainId.current = walletChainId
+    if (walletChainId === undefined || prev === undefined || prev === walletChainId) return
     const c = byChainId(walletChainId)
     if (c) setSrcKey(c.key)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletChainId])
+
+  // "Track" in Recent transfers: the shell switches to this tab and hands the entry over.
+  useEffect(() => {
+    if (!trackRequest) return
+    setSrcKey(trackRequest.srcChain)
+    setSent(trackRequest.txHash)
+    onTrackConsumed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackRequest])
 
   // Arriving from the OFT tab's analysis: take the manager and the destination it found.
   useEffect(() => {
@@ -319,8 +338,8 @@ export function NttApp({
       {
         onSuccess: (hash) => {
           setSent(hash)
-          setStored(
-            pushHistory(stored, {
+          setStored((prev) =>
+            pushHistory(prev, {
               srcChain: srcKey,
               protocol: 'wormhole-ntt',
               // NTT does not use LayerZero eids; the destination is recorded as a chain.

@@ -52,6 +52,7 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
   const [error, setError] = useState('')
   const [lookup, setLookup] = useState<Lookup | null>(null)
   const [sims, setSims] = useState<Record<number, RescueSimulation>>({})
+  const [simBusy, setSimBusy] = useState<Record<number, boolean>>({})
   const [sent, setSent] = useState<Record<number, string>>({})
   const [actionError, setActionError] = useState<Record<number, string>>({})
 
@@ -65,6 +66,7 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
     setError('')
     setLookup(null)
     setSims({})
+    setSimBusy({})
     setSent({})
     setActionError({})
     if (!isTxHash(hash.trim())) {
@@ -96,11 +98,15 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
       const dstChain = report.diagnosis.message.dstChain
       const client = dstChain ? rescueClientFor(dstChain, stored.customRpc) : undefined
       if (!client) return
-      setSims((s) => ({ ...s, [i]: { status: 'unavailable', reason: d.rescue.simulating } }))
-      const sim = await simulateRescue(client, report.plan.call, wallet)
-      setSims((s) => ({ ...s, [i]: sim }))
+      setSimBusy((b) => ({ ...b, [i]: true }))
+      try {
+        const sim = await simulateRescue(client, report.plan.call, wallet)
+        setSims((s) => ({ ...s, [i]: sim }))
+      } finally {
+        setSimBusy((b) => ({ ...b, [i]: false }))
+      }
     },
-    [wallet, stored.customRpc, d.rescue.simulating],
+    [wallet, stored.customRpc],
   )
 
   const onSubmit = useCallback(
@@ -248,6 +254,8 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
                       <Button variant="cta" disabled={switching} onClick={() => switchChain({ chainId: dst.chainId })}>
                         {fmt(d.ui.cta_switch, { chain: dst.name })}
                       </Button>
+                    ) : simBusy[i] ? (
+                      <p className="text-xs text-muted">{d.rescue.simulating}</p>
                     ) : !sim ? (
                       <Button variant="cta" onClick={() => void onSimulate(i, report)}>
                         {d.rescue.simulate}
