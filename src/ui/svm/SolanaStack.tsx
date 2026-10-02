@@ -67,8 +67,10 @@ function Bridge({ onState, error, setError }: { onState: (s: SvmWallet) => void;
       },
       disconnect: async () => {
         setError('')
+        // One call only. The provider forgets the wallet itself on the adapter's `disconnect`
+        // event; a `select(null)` after this ran `adapter.disconnect()` a second time through a
+        // stale closure, and the extension was asked to disconnect twice.
         await disconnect()
-        select(null)
       },
       error,
     }),
