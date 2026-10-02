@@ -16,6 +16,7 @@
  * the contract the user has to approve, for exactly the amount being sent.
  */
 import { getAddress, toFunctionSelector, type Address, type Hex } from 'viem'
+import { isContractRefusal } from '@/core/rpcErrors'
 import { erc20Abi } from '../../core/abi'
 import type { ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
@@ -38,6 +39,7 @@ export type ProbeV1ErrorCode =
   | 'shared_decimals_invalid'
   | 'no_routes'
   | 'rpc_mismatch'
+  | 'rpc_unavailable'
 
 export class ProbeV1Error extends Error {
   constructor(
@@ -108,12 +110,18 @@ export type OftV1Info = {
 
 export type ProbeV1Result = { info: OftV1Info; flags: SuspiciousFlag[] }
 
-/** A staticcall that is allowed to fail: failure is an answer ("not this standard"). */
+/**
+ * A staticcall that is allowed to fail: a revert or empty return is an answer ("not this
+ * standard"). A provider that did not answer is not — that would classify a contract by the
+ * weather, pick the wrong wire standard and build a `sendFrom` that reverts in the wallet. It is
+ * thrown as `rpc_unavailable` instead, and the quorum treats it as an outage, not a disagreement.
+ */
 async function attempt<T>(p: Promise<T>): Promise<T | undefined> {
   try {
     return await p
-  } catch {
-    return undefined
+  } catch (e) {
+    if (isContractRefusal(e)) return undefined
+    throw new ProbeV1Error('rpc_unavailable', e instanceof Error ? e.message.split('\n')[0] : String(e))
   }
 }
 

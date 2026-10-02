@@ -180,7 +180,7 @@ describe('2. an NTT manager nothing on the source chain vouches for', () => {
     ({
       readContract: async ({ address, functionName }: { address: string; functionName: string }) => {
         const key = `${m(address)}.${functionName}`
-        if (!(key in answers)) throw new Error(`no answer for ${key}`)
+        if (!(key in answers)) throw new Error(`execution reverted: no answer for ${key}`)
         const v = answers[key]
         if (v instanceof Error) throw v
         return v
@@ -199,8 +199,8 @@ describe('2. an NTT manager nothing on the source chain vouches for', () => {
     [`${m(NTT.TRANSCEIVER)}.wormhole`]: ETH_CORE,
     [`${m(NTT.TRANSCEIVER)}.isWormholeRelayingEnabled`]: true,
     [`${m(NTT.TRANSCEIVER)}.isSpecialRelayingEnabled`]: false,
-    [`${m(token)}.minter`]: new Error('locking hub: nothing mints'),
-    [`${m(token)}.MINTER_ROLE`]: new Error('no role'),
+    [`${m(token)}.minter`]: new Error('execution reverted: nothing mints'),
+    [`${m(token)}.MINTER_ROLE`]: new Error('execution reverted: no role'),
     // What a real hub has that a fake does not: the supply that circulates on its spokes.
     [`${m(token)}.balanceOf`]: 120_000n * 10n ** 18n,
     [`${m(token)}.totalSupply`]: 1_000_000n * 10n ** 18n,

@@ -8,6 +8,7 @@
  * treated as "not usable here" rather than waved through.
  */
 import { getAddress, isAddressEqual, parseAbi, type Address } from 'viem'
+import { readOptional, UnreadableError } from '@/core/rpcErrors'
 import type { ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
 import { tokenAdminRegistryAbi, tokenPoolAbi } from './abi'
@@ -16,13 +17,12 @@ import { ccipConfig, chainOfCcipSelector } from './chains'
 const ZERO: Address = `0x${'0'.repeat(40)}`
 const erc20DecimalsAbi = parseAbi(['function decimals() view returns (uint8)'])
 
-const read = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
-  try {
-    return await fn()
-  } catch {
-    return undefined
-  }
-}
+/**
+ * `undefined` when the contract refused (reverted, no such function). A provider that did not
+ * answer throws `UnreadableError`, which `discoverCcipToken` reports as `unreadable` — never as a
+ * mismatch about the pool, which would be a verdict drawn from a timeout.
+ */
+const read = <T,>(fn: () => Promise<T>): Promise<T | undefined> => readOptional('CCIP read', fn)
 
 export type CcipRoute = { chain: ChainKey; selector: bigint }
 
@@ -41,6 +41,15 @@ export type CcipDiscovery =
   | { kind: 'unknown'; reason: 'unreadable' | 'chain_unsupported' | 'pool_token_mismatch' | 'pool_wrong_router' }
 
 export async function discoverCcipToken(client: ReadClient, chain: ChainKey, tokenAddress: string): Promise<CcipDiscovery> {
+  try {
+    return await discoverUnguarded(client, chain, tokenAddress)
+  } catch (e) {
+    if (e instanceof UnreadableError) return { kind: 'unknown', reason: 'unreadable' }
+    throw e
+  }
+}
+
+async function discoverUnguarded(client: ReadClient, chain: ChainKey, tokenAddress: string): Promise<CcipDiscovery> {
   const cfg = ccipConfig(chain)
   if (!cfg) return { kind: 'unknown', reason: 'chain_unsupported' }
 

@@ -274,6 +274,16 @@ describe('6b. slippage cap', () => {
     expect(code(g6MinAmount(goodInput({ plan: mk(MAX_SLIPPAGE_BPS + 1) })))).toBe('slippage_too_high')
     expect(code(g6MinAmount(goodInput({ plan: mk(10000) })))).toBe('slippage_too_high')
   })
+  it('5% at an amount that is not a multiple of the shared-decimals step still passes (the floor is rounded like the plan)', () => {
+    // 18 decimals, 6 shared: the step is 1e12. 1.000001 at 500 bps gives a minimum that is
+    // rounded down to the step, and the un-rounded 95% floor sat just above it: a false block.
+    const info = treadOftInfo()
+    for (const amount of ['1.000001', '0.000003', '123.456789']) {
+      const p = treadPlan()
+      p.amounts = computeAmounts(amount, info.decimals, info.conversionRate, MAX_SLIPPAGE_BPS)
+      expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('ok')
+    }
+  })
   it('a hand-built plan with minAmountLD = 0 is rejected', () => {
     const p = treadPlan()
     p.amounts = { ...p.amounts, minAmountLD: 0n }

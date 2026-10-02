@@ -102,7 +102,7 @@ function mockClient(answers: Answers): ReadClient {
   return {
     readContract: async ({ address, functionName }: { address: string; functionName: string }) => {
       const key = `${address.toLowerCase()}.${functionName}`
-      if (!(key in answers)) throw new Error(`no answer for ${key}`)
+      if (!(key in answers)) throw new Error(`execution reverted: no answer for ${key}`)
       const v = answers[key]
       if (v instanceof Error) throw v
       return v
@@ -163,7 +163,7 @@ describe('the four-part gate', () => {
   it('accepts an AccessControl token that grants the manager MINTER_ROLE', async () => {
     const r = await verify(
       srcAnswers({
-        [`${TOKEN.toLowerCase()}.minter`]: new Error('no such function'),
+        [`${TOKEN.toLowerCase()}.minter`]: new Error('execution reverted: no such function'),
         [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
         [`${TOKEN.toLowerCase()}.hasRole`]: true,
       }),
@@ -178,7 +178,7 @@ describe('the four-part gate', () => {
     // token names the destination manager. We reached that token through `manager.getPeer()`, so
     // an attacker supplies both halves. Now it takes the committed list instead.
     const r = await verify(
-      srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
+      srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('execution reverted: no minter') }),
       dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),
     )
     expect(r.ok).toBe(true)
@@ -288,13 +288,25 @@ describe('the four-part gate', () => {
     expect(rep.canSend).toBe(false)
   })
 
-  it('a token that will not say how much the manager holds counts as nothing — an outage is not a pass', async () => {
-    const r = await fakeManager({ [`${TOKEN.toLowerCase()}.balanceOf`]: new Error('rpc down') })
+  it('a token whose balanceOf REVERTS counts as nothing held — the token answered', async () => {
+    const r = await fakeManager({ [`${TOKEN.toLowerCase()}.balanceOf`]: new Error('execution reverted') })
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.verified.lockedBps).toBeUndefined()
     const rep = runNttGuards(guardInput({ verification: r }))
     expect(rep.blocks.map((b) => !b.ok && b.code)).toContain('ntt_unvouched')
+  })
+
+  it('a provider that cannot read the locked share makes the manager UNVERIFIED, not unvouched — an outage is not a verdict', async () => {
+    const r = await fakeManager({ [`${TOKEN.toLowerCase()}.balanceOf`]: new Error('rpc down') })
+    expect(r).toMatchObject({ ok: false, code: 'unverifiable', detail: 'token.balanceOf(manager)' })
+  })
+
+  it('a provider that cannot read minter() makes the manager UNVERIFIED — never "no anchor" (a 429 is not a fact about the token)', async () => {
+    // A burning manager holds nothing; if a timeout on `minter()` read as "no anchor", the empty
+    // balance would then read as "unvouched" and hold the button on a perfectly good route.
+    const r = await verify(srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: new Error('HTTP request failed: 429') }), dstAnswers())
+    expect(r).toMatchObject({ ok: false, code: 'unverifiable', detail: 'token.minter()' })
   })
 
   it('a locking hub that holds the supply circulating on its spokes stays a RED note, and the send is possible', async () => {
@@ -500,27 +512,36 @@ describe('the gate, asked twice (RPC quorum)', () => {
     expect(r.crossChecked).toBe(true)
   })
 
-  it('a disagreement about the ANCHOR lowers the verdict instead of refusing it', async () => {
-    // One provider can read the token's minter and the other cannot — a flake, not a finding.
-    // The facts still match, so the route stands; it simply loses what vouched for it.
-    const blind = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: new Error('rpc hiccup'), [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('none') })
+  it('a second provider that cannot read the token is an outage: the anchor stands, the flag drops', async () => {
+    // One provider reads the token's minter and the other times out — a flake, not a finding.
+    // Before 2026-10-02 this lowered the anchor to null; now that a missing anchor can hold the
+    // button (guard 2b), a hiccup must not be allowed to look like one.
+    const blind = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: new Error('rpc hiccup'), [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('execution reverted: none') })
     const r = await quorum(srcAnswers(), dstAnswers(), { src: blind, dst: dstAnswers() })
     expect(r.ok).toBe(true)
     if (r.ok) {
-      expect(r.verified.anchor).toBeNull()
+      expect(r.verified.anchor).toEqual({ side: 'source', kind: 'minter' })
       expect(r.verified.manager).toBe(MANAGER)
     }
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('two providers READING different anchors is a disagreement, and is refused like any other', async () => {
+    const other = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: WALLET, [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('execution reverted: none') })
+    const r = await quorum(srcAnswers(), dstAnswers(), { src: other, dst: dstAnswers() })
+    expect(r).toMatchObject({ ok: false, code: 'unverifiable' })
     expect(r.crossChecked).toBe(true)
   })
 
   it('never turns the primary’s rejection into a pass', async () => {
-    const rejected = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: WALLET, [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('none') })
-    const r = await quorum(rejected, dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: WALLET, [`${DST_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('none') }), {
+    const rejected = srcAnswers({ [`${TOKEN.toLowerCase()}.minter`]: WALLET, [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('execution reverted: none') })
+    const r = await quorum(rejected, dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: WALLET, [`${DST_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('execution reverted: none') }), {
       src: srcAnswers(),
       dst: dstAnswers(),
     })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.verified.anchor).toBeNull()
+    // The primary read "no anchor", the second read "minter": neither may win.
+    expect(r).toMatchObject({ ok: false, code: 'unverifiable' })
+    expect(r.crossChecked).toBe(true)
   })
 })
 
@@ -640,7 +661,7 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
     [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
     [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
     // The real token grants the fake manager nothing. This is the one answer he cannot forge.
-    [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('not a minter'),
+    [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('execution reverted: not a minter'),
     [`${REAL_TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
     [`${REAL_TOKEN.toLowerCase()}.hasRole`]: false,
   })
@@ -694,7 +715,7 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
   it('2b. MINTER_ROLE on the source token counts as the same anchor', async () => {
     const r = await verify(
       srcAnswers({
-        [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter()'),
+        [`${TOKEN.toLowerCase()}.minter`]: new Error('execution reverted: no minter()'),
         [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
         [`${TOKEN.toLowerCase()}.hasRole`]: true,
       }),
@@ -727,8 +748,8 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
         [`${TRANSCEIVER.toLowerCase()}.wormhole`]: ETH_CORE,
         [`${TRANSCEIVER.toLowerCase()}.isWormholeRelayingEnabled`]: true,
         [`${TRANSCEIVER.toLowerCase()}.isSpecialRelayingEnabled`]: false,
-        [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('locking hub: nothing mints'),
-        [`${REAL_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('no role'),
+        [`${REAL_TOKEN.toLowerCase()}.minter`]: new Error('execution reverted: nothing mints'),
+        [`${REAL_TOKEN.toLowerCase()}.MINTER_ROLE`]: new Error('execution reverted: no role'),
       }),
       dstClient: mockClient(dstPeeringBackAt(m)),
       tokenList: [],
@@ -740,7 +761,7 @@ describe('the anchor rule: only a fact the attacker cannot write about himself',
 
   it('4. a locking manager with a destination-side anchor only is still unvouched for', async () => {
     const r = await verify(
-      srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('no minter') }),
+      srcAnswers({ [`${MANAGER.toLowerCase()}.getMode`]: 0, [`${TOKEN.toLowerCase()}.minter`]: new Error('execution reverted: no minter') }),
       dstAnswers({ [`${DST_TOKEN.toLowerCase()}.minter`]: DST_MANAGER }),
     )
     expect(r.ok).toBe(true)

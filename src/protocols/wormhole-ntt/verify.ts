@@ -42,6 +42,7 @@
  * still shown, and it can now only ever be context.
  */
 import { getAddress, isAddressEqual, type Address } from 'viem'
+import { readOptional, UnreadableError } from '@/core/rpcErrors'
 import { erc20Abi } from '../../core/abi'
 import { sanitizeLabel } from '../../core/text'
 import type { ChainKey } from '../../core/chains'
@@ -129,13 +130,14 @@ export type NttVerification = { ok: true; verified: VerifiedNttManager } | { ok:
 
 const fail = (code: NttRejectionCode, detail?: string): NttVerification => (detail === undefined ? { ok: false, code } : { ok: false, code, detail })
 
-/** A read that must succeed. `undefined` means the provider could not answer, which blocks. */
-async function read<T>(fn: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await fn()
-  } catch {
-    return undefined
-  }
+/**
+ * A read whose refusal by the contract is an answer: `undefined` means the contract reverted or
+ * has no such function. A provider that did not answer is not an answer about the contract — it
+ * is thrown (`UnreadableError`) and becomes `unverifiable` at the top of the gate, never a verdict
+ * such as "no anchor" or "nothing locked" (CLAUDE.md: a failed read is not a missing function).
+ */
+async function read<T>(fn: () => Promise<T>, what = 'a read'): Promise<T | undefined> {
+  return readOptional(what, fn)
 }
 
 export type VerifyInput = {
@@ -148,6 +150,15 @@ export type VerifyInput = {
 }
 
 export async function verifyNttManager(p: VerifyInput): Promise<NttVerification> {
+  try {
+    return await verifyUnguarded(p)
+  } catch (e) {
+    if (e instanceof UnreadableError) return fail('unverifiable', e.what)
+    throw e
+  }
+}
+
+async function verifyUnguarded(p: VerifyInput): Promise<NttVerification> {
   const srcWh = wormholeChainId(p.srcChain)
   const dstWh = wormholeChainId(p.dstChain)
   if (srcWh === undefined || dstWh === undefined) return fail('chain_unsupported', `${p.srcChain} -> ${p.dstChain}`)
@@ -234,8 +245,8 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   let lockedBps: number | undefined
   if (!srcAnchor) {
     const [held, supply] = await Promise.all([
-      read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [manager] })),
-      read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'totalSupply' })),
+      read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [manager] }), 'token.balanceOf(manager)'),
+      read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'totalSupply' }), 'token.totalSupply()'),
     ])
     if (held !== undefined && supply !== undefined) lockedBps = supply === 0n ? 0 : Number((held * 10_000n) / supply)
   }
@@ -304,12 +315,12 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
  * AccessControl, with MINTER_ROLE read from the token so no role hash is assumed here.
  */
 async function tokenAnchors(client: ReadClient, token: Address, manager: Address): Promise<AnchorKind | undefined> {
-  const minter = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'minter' }))
+  const minter = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'minter' }), 'token.minter()')
   if (minter && isAddressEqual(getAddress(minter), manager)) return 'minter'
 
-  const role = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'MINTER_ROLE' }))
+  const role = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'MINTER_ROLE' }), 'token.MINTER_ROLE()')
   if (!role) return undefined
-  const has = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'hasRole', args: [role, manager] }))
+  const has = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'hasRole', args: [role, manager] }), 'token.hasRole()')
   return has === true ? 'role' : undefined
 }
 
@@ -387,12 +398,15 @@ export async function verifyNttManagerQuorum(p: VerifyInput, second: NttSecondOp
   if (!sameNttVerdict(first.verified, other.verified)) {
     return withFlag({ ok: false, code: 'unverifiable', detail: 'RPC providers disagree about this manager' }, true)
   }
-  // The anchor is a REASON, not a destination, so it is not part of `sameNttVerdict` — and it has a
-  // benign way to differ: tokenAnchors() swallows read errors, so one flaky token read alone can
-  // turn `source` into `null`. Disagreement therefore LOWERS the verdict to the weaker of the two
-  // rather than refusing it: a hiccup must not look like a finding, and a missing anchor is a
-  // warning anyway (guard 2b).
-  const anchor = first.verified.anchor && other.verified.anchor ? first.verified.anchor : null
+  // The anchor is a REASON, not a destination, so it is not part of `sameNttVerdict`. A provider
+  // that could not read the token never gets here (that is `unverifiable`, the outage branch
+  // above), so two answers that differ are two providers reading different facts from the same
+  // token — and since 2026-10-02 a missing anchor can hold the button (guard 2b), neither answer
+  // may simply win. Refused, like any other disagreement.
+  if (!first.verified.anchor !== !other.verified.anchor) {
+    return withFlag({ ok: false, code: 'unverifiable', detail: 'RPC providers disagree about whether the token names this manager' }, true)
+  }
+  const anchor = first.verified.anchor
   // The locked share is money, so two readings are reconciled downwards: the smaller one stands.
   // One provider failing to read it is an outage, and the other's reading is kept.
   const a = first.verified.lockedBps

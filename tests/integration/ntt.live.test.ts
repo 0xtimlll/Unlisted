@@ -64,9 +64,11 @@ describe('NTT against mainnet', () => {
     expect(r.verified.dst.manager).toBe(SPOKE_MANAGER)
     // The hub mints nothing, so no token can vouch for it. It used to be accepted on the spoke's
     // anchor, which we reach only through this hub's own getPeer() — the hole that let a fake
-    // manager supply both halves. Now the committed list is what speaks for it, and the far-side
+    // manager supply both halves. Now nothing vouches (`anchor: null`) and what tells a hub from a
+    // fake is money: the share of the token's supply it holds (guard 2b, >= 0.1%). The far-side
     // anchor survives only as context.
-    expect(r.verified.anchor).toEqual({ side: 'listed', kind: 'committed' })
+    expect(r.verified.anchor).toBeNull()
+    expect(r.verified.lockedBps).toBeGreaterThanOrEqual(10)
     expect(r.verified.alsoOnDestination).toBe(true)
   })
 

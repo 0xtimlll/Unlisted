@@ -832,6 +832,7 @@ export const en = {
     shared_decimals_invalid: 'The contract’s sharedDecimals does not fit its token’s decimals.',
     no_routes: 'This contract has no trusted remote on any network here.',
     rpc_mismatch: 'Two independent RPC providers disagree about this contract, so nothing is sent.',
+    rpc_unavailable: 'The RPC provider did not answer while this contract was being read, so it could not be classified. Try again, or set another RPC in Settings.',
     invalid_address: 'That is not an address.',
   },
   v1Guard: {

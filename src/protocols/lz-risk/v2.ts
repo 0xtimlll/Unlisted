@@ -405,14 +405,12 @@ async function checkLimits(c: V2RiskContext): Promise<Outcome> {
   ])
   if (src.ok && src.value) return { state: { status: 'fail', reason: 'the source contract is paused' } }
   if (dst.ok && dst.value) return { state: { status: 'fail', reason: 'the destination contract is paused' } }
-  if (!src.ok && !dst.ok) {
-    // See the v1 note: a revert means there is no pause, an unreachable provider means this hard
-    // check was never made, and only the first of those may be called `skipped`.
-    const transport = [src.reason, dst.reason].filter(isTransportFailure)
-    return transport.length > 0
-      ? { state: { status: 'unchecked', reason: transport[0]! } }
-      : { state: { status: 'skipped', reason: 'neither side has a pause or a rate limit to read' } }
-  }
+  // See the v1 note: a revert means there is no pause, an unreachable provider means this hard
+  // check was never made — on EITHER side. One side reverting and the other timing out is still
+  // an unmade check, not a pass.
+  const transport = [src, dst].filter((a) => !a.ok).map((a) => a.reason).filter(isTransportFailure)
+  if (transport.length > 0) return { state: { status: 'unchecked', reason: transport[0]! } }
+  if (!src.ok && !dst.ok) return { state: { status: 'skipped', reason: 'neither side has a pause or a rate limit to read' } }
   return { state: { status: 'pass' } }
 }
 
@@ -435,6 +433,11 @@ async function checkHistory(c: V2RiskContext): Promise<Outcome> {
       state: { status: 'fail', reason: 'the destination contract logs deliveries the endpoint never made — nothing has been delivered on this route' },
       extra: { history: { kind: 'never' } },
     }
+  }
+  if (scan.status === 'found' && !nonce.ok) {
+    // The log is the contract's word; the endpoint's nonce is what confirms it, and it was not read.
+    const reason = `deliveries are logged, but the endpoint's inbound nonce could not be read (${nonce.reason})`
+    return { state: { status: 'unchecked', reason }, extra: { history: { kind: 'unknown', reason } } }
   }
   if (scan.status === 'unavailable') {
     if (nonce.ok && nonce.value > 0n) {

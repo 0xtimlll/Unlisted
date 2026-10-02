@@ -352,16 +352,13 @@ async function checkLimits(c: V1RiskContext): Promise<Outcome> {
   ])
   if (srcPaused.ok && srcPaused.value) return { state: { status: 'fail', reason: 'the source contract is paused' } }
   if (dstPaused.ok && dstPaused.value) return { state: { status: 'fail', reason: 'the destination contract is paused' } }
-  if (!srcPaused.ok && !dstPaused.ok) {
-    // Both reads failed, and why decides everything. A contract that reverts has no `paused()`, so
-    // there is nothing to check and `skipped` is honest. A provider that never answered leaves this
-    // hard check unmade, and calling that `skipped` would let the verdict reach OK on a route whose
-    // pause state nobody established.
-    const transport = [srcPaused.reason, dstPaused.reason].filter(isTransportFailure)
-    return transport.length > 0
-      ? { state: { status: 'unchecked', reason: transport[0]! } }
-      : { state: { status: 'skipped', reason: 'neither side has a pause or a rate limit to read' } }
-  }
+  // Why a read failed decides everything. A contract that reverts has no `paused()`, so there is
+  // nothing to check and `skipped` is honest. A provider that never answered — on either side —
+  // leaves this hard check unmade, and calling that `skipped` or `pass` would let the verdict
+  // reach OK on a route whose pause state nobody established.
+  const transport = [srcPaused, dstPaused].filter((a) => !a.ok).map((a) => a.reason).filter(isTransportFailure)
+  if (transport.length > 0) return { state: { status: 'unchecked', reason: transport[0]! } }
+  if (!srcPaused.ok && !dstPaused.ok) return { state: { status: 'skipped', reason: 'neither side has a pause or a rate limit to read' } }
   return { state: { status: 'pass' } }
 }
 

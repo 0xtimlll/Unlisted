@@ -150,10 +150,29 @@ describe('history is the endpoint’s nonce, not the contract’s events', () =>
     expect(input.history.kind).toBe('delivered')
   })
 
+  it('logs whose nonce could not be read are UNCHECKED — the contract’s word alone confirms nothing', async () => {
+    const input = await assessV2Route(withLogs(ctx({ dst: { inboundNonce: new Error('HTTP request failed') } })))
+    expect(input.checks.history.status).toBe('unchecked')
+    expect(input.history.kind).toBe('unknown')
+  })
+
   it('no logs in the window but a nonce above zero: delivered before the window, said as such', async () => {
     const input = await assessV2Route(ctx())
     expect(input.checks.history.status).toBe('pass')
     expect(input.checks.history.status === 'pass' && input.checks.history.note).toMatch(/none in the window searched/)
+  })
+})
+
+describe('limits: a pause nobody could read is an unmade hard check', () => {
+  it('passes when both sides revert (no pause to read) and is skipped, not unchecked', async () => {
+    const input = await assessV2Route(ctx())
+    expect(input.checks.limits.status).toBe('skipped')
+  })
+  it('is unchecked when ONE side reverts and the other never answered', async () => {
+    const input = await assessV2Route(ctx({ dst: { paused: new Error('HTTP request failed') } }))
+    expect(input.checks.limits.status).toBe('unchecked')
+    const verdict = assessRisk(input)
+    expect(verdict.tier).not.toBe('OK')
   })
 })
 

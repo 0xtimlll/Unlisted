@@ -6,7 +6,7 @@
  */
 import { verdictOf } from './severity'
 import { type Address, type Hex } from 'viem'
-import { applyBps } from './amounts'
+import { applyBps, trimDust } from './amounts'
 import { aboveFeeCeiling, byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions, inspectEnforcedOptions, receiveTotals, type EnforcedRisk } from './options'
@@ -259,9 +259,12 @@ export function g6MinAmount(i: GuardInput): GuardResult {
   if (!i.info) return fail(6, 'oft_missing')
   const { amountLD, minAmountLD } = i.plan.amounts
   if (minAmountLD > amountLD) return fail(6, 'min_gt_amount')
-  if (minAmountLD < applyBps(amountLD, 10000 - MAX_SLIPPAGE_BPS)) return fail(6, 'slippage_too_high')
   const rate = i.info.conversionRate
   if (rate <= 0n) return fail(6, 'not_multiple_of_rate', 'rate <= 0')
+  // The plan's minimum is rounded DOWN to the shared-decimals step (plan.ts), so the floor it is
+  // held against has to be rounded the same way: otherwise a legitimate 5% at an amount that is
+  // not a multiple of the step would read as "more than 5%" and hold the button.
+  if (minAmountLD < trimDust(applyBps(amountLD, 10000 - MAX_SLIPPAGE_BPS), rate)) return fail(6, 'slippage_too_high')
   if (amountLD % rate !== 0n) return fail(6, 'not_multiple_of_rate', 'amountLD')
   if (minAmountLD % rate !== 0n) return fail(6, 'not_multiple_of_rate', 'minAmountLD')
   return ok(6)

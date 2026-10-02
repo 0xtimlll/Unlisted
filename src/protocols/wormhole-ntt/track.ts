@@ -7,6 +7,7 @@
  * never "failed": the same rule the LayerZero tracker follows.
  */
 import { WORMHOLESCAN_API, type FetchLike } from './tokenList'
+import { sanitizeText } from '@/core/text'
 
 export const WORMHOLESCAN_UI = 'https://wormholescan.io'
 
@@ -35,7 +36,7 @@ export type NttTrackState = {
   recipientNttManager?: string
 }
 
-const str = (v: unknown, max = 128): string | undefined => (typeof v === 'string' ? v.slice(0, max) : undefined)
+const str = (v: unknown, max = 128): string | undefined => (typeof v === 'string' ? sanitizeText(v, max) : undefined)
 
 /** Pure parser. Everything is untrusted data. */
 export function parseNttOperations(json: unknown): NttTrackState {

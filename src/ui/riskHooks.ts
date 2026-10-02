@@ -71,8 +71,12 @@ export function useV2RouteRisk(
   const dstOft = info && plan ? dstOftOf(info, plan.dstEid) : undefined
   return useQuery<RiskOutcome>({
     queryKey: ['v2risk', src?.key, info?.oft, dstKey, plan?.amounts.amountLD.toString(), plan?.recipient, linkCrossChecked],
-    queryFn: () =>
-      assessRoute({
+    queryFn: () => {
+      // The peer on an EVM destination is not an address: there is no contract to run the checks
+      // against. Said as an error (guard 22: `risk_unavailable`, a yellow note), not left pending
+      // forever as `risk_unknown`; guard 17 already shows the peer itself in red.
+      if (!dstOft) throw new Error('the peer on the destination is not an EVM contract address')
+      return assessRoute({
         protocol: 'lz-oft',
         info: info!,
         plan: plan!,
@@ -80,10 +84,11 @@ export function useV2RouteRisk(
         dstChain: dstKey!,
         srcClient: srcClient!,
         dstClient: dstClient!,
-        dstOft: dstOft!,
+        dstOft,
         linkCrossChecked,
-      }),
-    enabled: !!info && !!plan && !!src && !!srcClient && !!dstClient && !!dstKey && !!dstOft,
+      })
+    },
+    enabled: !!info && !!plan && !!src && !!srcClient && !!dstClient && !!dstKey,
     staleTime: 60_000,
     retry: false,
   })

@@ -274,6 +274,17 @@ describe('the pool, asked twice (RPC quorum)', () => {
     expect(r.crossChecked).toBe(false)
   })
 
+  it('a second provider that times out reading the pool is an outage, never a "wrong pool" verdict', async () => {
+    const r = await quorum(answers(), answers({ [`${POOL.toLowerCase()}.getToken`]: new Error('HTTP request failed: 429') }))
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('the primary timing out reading the pool is "unreadable", not a mismatch', async () => {
+    const r = await quorum(answers({ [`${POOL.toLowerCase()}.getRouter`]: new Error('fetch failed') }))
+    expect(r).toMatchObject({ kind: 'unknown', reason: 'unreadable' })
+  })
+
   it('blocks when the second provider names a different pool', async () => {
     const other = answers({
       [`${getAddress(ETH.tokenAdminRegistry).toLowerCase()}.getPool`]: DST_POOL,
