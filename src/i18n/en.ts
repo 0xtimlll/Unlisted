@@ -58,7 +58,6 @@ export const en = {
     svmTitle: 'Solana',
     svmTag: 'SVM',
     svmHint: 'Connect a Solana or SVM compatible wallet',
-    svmHintSwitch: 'Connect a Solana wallet — the OFT form switches to Solana as the source',
     connected: 'Connected',
   },
   header: {

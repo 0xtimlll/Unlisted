@@ -3,7 +3,7 @@
  * In-house primitives (no UI kits). The visual language: pills for every button, grey panels in
  * steps (page → card → panel → control), 150ms ease transitions and a small scale on hover.
  */
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 import { CaretDownIcon, CloseIcon } from './icons'
 
 const focus = 'outline-none focus-visible:ring-2 focus-visible:ring-ink/30'
@@ -275,17 +275,19 @@ export function Modal({
   headerExtra?: ReactNode
 }) {
   const { leaving, dismiss } = useDismiss(onClose)
+  const titleId = useId()
   return (
     <div className={`overlay fixed inset-0 z-50 flex items-center justify-center p-6 ${leaving ? 'animate-fade-out' : 'animate-fade-in'}`} onMouseDown={dismiss}>
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         onMouseDown={(e) => e.stopPropagation()}
         className={`scroll-quiet flex max-h-[min(720px,calc(100vh-48px))] w-full flex-col overflow-hidden rounded-dialog bg-surface shadow-lg ${leaving ? 'animate-exit' : 'animate-enter'}`}
         style={{ maxWidth: width }}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 px-6 pb-4 pt-6">
-          <h2 className="pt-1.5 text-xl font-semibold text-ink">{title}</h2>
+          <h2 id={titleId} className="pt-1.5 text-xl font-semibold text-ink">{title}</h2>
           <div className="flex items-center gap-2">
             {headerExtra}
             <CloseButton onClick={dismiss} label={closeLabel} />

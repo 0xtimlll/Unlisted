@@ -3,7 +3,8 @@
  * Everything that is the same on every tab: the header (tabs, wallet, menu), the page frame,
  * Recent transfers across the full width, and the dialogs the header opens — the wallets sheet,
  * the address book, the settings, the Solana wallet picker. The active tab renders its own two
- * cards inside `children`.
+ * cards inside `children`. Either wallet can be connected at any time; the form uses the one its
+ * source chain needs.
  */
 import { useEffect, useState } from 'react'
 import type { ChainKey } from '@/core/chains'
@@ -24,7 +25,7 @@ export function AppShell({
   setStored,
   onTheme,
   srcVm,
-  onSolanaSource,
+  onEnableSvm,
   onTrack,
   children,
 }: {
@@ -35,8 +36,8 @@ export function AppShell({
   onTheme: (t: Theme) => void
   /** Which wallet the header shows — follows the active tab's source chain. */
   srcVm: 'evm' | 'svm'
-  /** Makes Solana the source (on the OFT tab), which is what loads the Solana wallet stack. */
-  onSolanaSource: () => void
+  /** Loads the Solana wallet stack without touching the form; it stays loaded from then on. */
+  onEnableSvm: () => void
   onTrack: (e: HistoryEntry) => void
   children: React.ReactNode
 }) {
@@ -60,7 +61,7 @@ export function AppShell({
       return
     }
     setSvmPickerPending(true)
-    onSolanaSource()
+    onEnableSvm()
   }
 
   return (
@@ -75,7 +76,7 @@ export function AppShell({
         </div>
       </main>
 
-      {walletsOpen ? <WalletsDialog onClose={() => setWalletsOpen(false)} svmAvailable={svm.ready} onConnectSvm={connectSvm} /> : null}
+      {walletsOpen ? <WalletsDialog onClose={() => setWalletsOpen(false)} onConnectSvm={connectSvm} /> : null}
       {svmPickerOpen ? (
         <SvmWalletPicker
           onClose={() => setSvmPickerOpen(false)}

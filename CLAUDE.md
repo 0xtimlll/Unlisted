@@ -145,7 +145,9 @@ approve — `core/approveFlow.ts` + `ui/useApproveFlow.ts`: симуляция p
 `components/Layout.tsx` (две карточки по 576px). Форма собрана из `components/FromTo.tsx`
 (`FromToRow` → `NetworkDialog`, `AmountPanel`, `RecipientPanel`) и `components/TokenStep.tsx`; шапка —
 `Header.tsx` + `Menu.tsx` (адресная книга, тема, настройки, GitHub) + `WalletsDialog.tsx` (правая
-панель: EVM через RainbowKit, Solana через `svm/SvmWalletButton.SvmWalletPicker`). CTA стоит под
+панель: EVM через RainbowKit, Solana через `svm/SvmWalletButton.SvmWalletPicker`; Solana-стек
+грузится по этому «Connect» или когда источник — Solana, и дальше остаётся смонтированным, так что
+оба кошелька могут быть подключены сразу, а форма берёт тот, который нужен её источнику). CTA стоит под
 карточкой формы, на фоне страницы — внутри карточки таблетка цвета карточки невидима. `next dev` и
 `npm run build` делят `.next` — не запускать одновременно.
 

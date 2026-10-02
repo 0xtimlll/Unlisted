@@ -113,15 +113,22 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
     : lightTheme({ accentColor: rk.accent, accentColorForeground: rk.on, borderRadius: 'large' })
 
   // Only the OFT tab can have a Solana source; the others are EVM-only, so the header shows the
-  // EVM wallet there and the Solana stack is not loaded.
+  // EVM wallet there. The Solana stack is loaded when Solana is the source or when the user asks
+  // to connect a Solana wallet, and it stays mounted from then on: a connected Solana wallet
+  // survives a switch to an EVM source and is simply used again when the source is Solana.
   const svmSource = tab === 'oft' && srcKey === 'solana'
+  const [svmWanted, setSvmWanted] = useState(false)
+  useEffect(() => {
+    if (svmSource) setSvmWanted(true)
+  }, [svmSource])
+  const svmEnabled = svmSource || svmWanted
 
   return (
     <WagmiProvider config={config} key={rpcKey}>
       <QueryClientProvider client={queryClient}>
         {/* RainbowKit otherwise follows the browser language; the whole app is English. */}
         <RainbowKitProvider theme={rkTheme} modalSize="compact" locale="en-US">
-          <SvmWalletHost enabled={svmSource}>
+          <SvmWalletHost enabled={svmEnabled}>
            <AddressBookProvider>
             <AppShell
               tab={tab}
@@ -130,11 +137,7 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
               setStored={setStored}
               onTheme={onTheme}
               srcVm={svmSource ? 'svm' : 'evm'}
-              onSolanaSource={() => {
-                // The Solana stack lives on the OFT tab: open it if needed, then make Solana the source.
-                if (tab !== 'oft') goTab('oft')
-                setSrcKey('solana')
-              }}
+              onEnableSvm={() => setSvmWanted(true)}
               onTrack={(e: HistoryEntry) => {
                 goTab(tabOfProtocol(entryProtocol(e)))
                 setTrackRequest(e)

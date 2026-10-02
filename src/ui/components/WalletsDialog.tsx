@@ -2,8 +2,8 @@
 /**
  * The wallets sheet: slides in from the right. Two rows, one per VM — connect, or the connected
  * address with a button to disconnect. The EVM row opens the wallet chooser (RainbowKit); the
- * Solana row opens the wallet picker, loading the Solana stack first when the active form is not
- * on Solana yet.
+ * Solana row opens the wallet picker, loading the Solana stack first if it is not loaded yet.
+ * Both wallets can stay connected; the form uses the one its source chain needs.
  */
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useDisconnect } from 'wagmi'
@@ -53,13 +53,10 @@ function Row({ icon, title, tag, hint, connected, onConnect, onDisconnect, conne
 
 export function WalletsDialog({
   onClose,
-  svmAvailable,
   onConnectSvm,
 }: {
   onClose: () => void
-  /** The Solana stack is loaded (Solana is the active form's source), so its picker can open at once. */
-  svmAvailable: boolean
-  /** Opens the Solana wallet picker, loading the stack first if it is not. */
+  /** Opens the Solana wallet picker, loading the stack first if it is not loaded yet. */
   onConnectSvm: () => void
 }) {
   const d = useDict()
@@ -94,7 +91,7 @@ export function WalletsDialog({
             icon={<ChainIcon chain="solana" size={32} />}
             title={d.wallets.svmTitle}
             tag={d.wallets.svmTag}
-            hint={svmAvailable ? d.wallets.svmHint : d.wallets.svmHintSwitch}
+            hint={d.wallets.svmHint}
             connected={svm.address ? short(svm.address, 4) : undefined}
             onConnect={() => {
               dismiss()
