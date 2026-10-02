@@ -122,7 +122,7 @@ export async function buildNttPlan(p: BuildNttPlanInput): Promise<NttPlan> {
       args: [srcWormholeChainId],
     })
   } catch {
-    inboundCapacity = undefined // reported as "unknown", which blocks in guards
+    inboundCapacity = undefined // reported as "unknown" (a pending note in guards, never a pass)
   }
 
   const src = requireEvm(byKey(v.chain))

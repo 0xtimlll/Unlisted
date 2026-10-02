@@ -175,10 +175,15 @@ describe('CCIP guards', () => {
     expect(over.results.find((r) => r.id === 7)).toMatchObject({ ok: false, code: 'fee_mismatch' })
   })
 
-  it('blocks on either rate limit, and when one cannot be read', () => {
+  it('the outbound limit holds the button (lockOrBurn reverts); the inbound one is a note (the delivery fails later)', () => {
     const plan = planFixture()
-    expect(runCcipGuards(guardInput({ plan: planFixture({ outbound: { tokens: 1n, capacity: 10n, isEnabled: true } }) })).results.find((r) => r.id === 6)).toMatchObject({ code: 'over_outbound_capacity' })
-    expect(runCcipGuards(guardInput({ plan: planFixture({ inbound: { tokens: 1n, capacity: 10n, isEnabled: true } }) })).results.find((r) => r.id === 6)).toMatchObject({ code: 'over_inbound_capacity' })
+    const out = runCcipGuards(guardInput({ plan: planFixture({ outbound: { tokens: 1n, capacity: 10n, isEnabled: true } }) }))
+    expect(out.results.find((r) => r.id === 6)).toMatchObject({ code: 'over_outbound_capacity' })
+    expect(out.blocks.map((b) => !b.ok && b.code)).toContain('over_outbound_capacity')
+    const inb = runCcipGuards(guardInput({ plan: planFixture({ inbound: { tokens: 1n, capacity: 10n, isEnabled: true } }) }))
+    expect(inb.results.find((r) => r.id === 6)).toMatchObject({ code: 'over_inbound_capacity' })
+    expect(inb.blocks.map((b) => !b.ok && b.code)).not.toContain('over_inbound_capacity')
+    expect(inb.notes.map((b) => !b.ok && b.code)).toContain('over_inbound_capacity')
     expect(runCcipGuards(guardInput({ plan: planFixture({ outbound: undefined }) })).results.find((r) => r.id === 6)).toMatchObject({ code: 'outbound_limit_unknown' })
     expect(runCcipGuards(guardInput({ plan: planFixture({ inbound: undefined }) })).results.find((r) => r.id === 6)).toMatchObject({ code: 'inbound_limit_unknown' })
     // A disabled bucket is not a limit at all.

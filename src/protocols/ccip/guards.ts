@@ -155,7 +155,9 @@ export function c5Amount(i: CcipGuardInput): CcipGuardResult {
   return ok(5)
 }
 
-// 6. the pool's rate limits, both directions
+// 6. the pool's rate limits, both directions. Outbound is consumed by lockOrBurn inside
+//    ccipSend, so the send itself reverts (a block); inbound is consumed by releaseOrMint on the
+//    destination, after the send — the delivery fails there until retried (a note).
 export function c6RateLimits(i: CcipGuardInput): CcipGuardResult {
   if (!i.plan) return fail(6, 'plan_missing')
   if (i.plan.outbound === undefined) return fail(6, 'outbound_limit_unknown')
@@ -163,7 +165,7 @@ export function c6RateLimits(i: CcipGuardInput): CcipGuardResult {
     return fail(6, 'over_outbound_capacity', i.plan.outbound.tokens.toString())
   }
   if (i.plan.dst.pool === undefined) {
-    // No pool on the other side to ask: the inbound limit is unknown, which blocks.
+    // No pool on the other side to ask: the inbound limit is unknown (a pending note, never a pass).
     return fail(6, 'inbound_limit_unknown')
   }
   if (i.plan.inbound === undefined) return fail(6, 'inbound_limit_unknown')

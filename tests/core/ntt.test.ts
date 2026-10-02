@@ -418,10 +418,15 @@ describe('NTT guards', () => {
     expect(nttApprovePlan(verifiedFixture(), planFixture(), planFixture().amount)).toBeNull()
   })
 
-  it('blocks on either rate limit, and on an unknown one', () => {
+  it('the outbound limit holds the button (the manager reverts); the inbound one is a note (the destination queues)', () => {
     const plan = planFixture()
-    expect(runNttGuards(guardInput({ plan: planFixture({ outboundCapacity: plan.amount - 1n }) })).results.find((x) => x.id === 6)).toMatchObject({ code: 'over_outbound_capacity' })
-    expect(runNttGuards(guardInput({ plan: planFixture({ inboundCapacity: 1n }) })).results.find((x) => x.id === 6)).toMatchObject({ code: 'over_inbound_capacity' })
+    const out = runNttGuards(guardInput({ plan: planFixture({ outboundCapacity: plan.amount - 1n }) }))
+    expect(out.results.find((x) => x.id === 6)).toMatchObject({ code: 'over_outbound_capacity' })
+    expect(out.blocks.map((b) => !b.ok && b.code)).toContain('over_outbound_capacity')
+    const inb = runNttGuards(guardInput({ plan: planFixture({ inboundCapacity: 1n }) }))
+    expect(inb.results.find((x) => x.id === 6)).toMatchObject({ code: 'over_inbound_capacity' })
+    expect(inb.blocks.map((b) => !b.ok && b.code)).not.toContain('over_inbound_capacity')
+    expect(inb.notes.map((b) => !b.ok && b.code)).toContain('over_inbound_capacity')
     expect(runNttGuards(guardInput({ plan: planFixture({ inboundCapacity: undefined }) })).results.find((x) => x.id === 6)).toMatchObject({ code: 'inbound_capacity_unknown' })
   })
 

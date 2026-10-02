@@ -63,7 +63,6 @@ const DELIBERATE_NOTES = new Set([
   'ntt_anchor_missing',
   'outbound_limit_unknown',
   'over_inbound_capacity',
-  'over_outbound_capacity',
   'peer_back_mismatch',
   'peer_back_unavailable',
   'recipient_is_contract',

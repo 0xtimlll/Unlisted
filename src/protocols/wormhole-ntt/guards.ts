@@ -181,7 +181,9 @@ export function n5Amount(i: NttGuardInput): NttGuardResult {
   return ok(5)
 }
 
-// 6. rate limits, both directions — the inbound one read on the destination's own RPC
+// 6. rate limits, both directions — the inbound one read on the destination's own RPC.
+//    Outbound is the manager's own revert (`shouldQueue` is false), so it holds the button;
+//    inbound acts on the destination after the send (the transfer queues there) — a note.
 export function n6RateLimits(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(6, 'plan_missing')
   if (i.plan.amount > i.plan.outboundCapacity) return fail(6, 'over_outbound_capacity', i.plan.outboundCapacity.toString())

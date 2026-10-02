@@ -77,6 +77,11 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'oft_fee_exceeds_amount',
   // The NTT manager reverts on dust rather than rounding it away.
   'amount_has_dust',
+  // The SOURCE contract's own rate limit: the NTT manager (shouldQueue is always false) and the
+  // CCIP token pool both revert the send itself. The inbound limit is the destination's and acts
+  // after the send has gone through (NTT queues, CCIP fails the delivery for a manual retry), so
+  // `over_inbound_capacity` stays a note.
+  'over_outbound_capacity',
 
   // ── the recipient cannot be encoded for the destination ──────────────────────
   'recipient_invalid',
