@@ -29,7 +29,6 @@ export function TokenStep(p: {
    */
   prefill?: string | undefined
   busy: boolean
-  recent: string[]
   info: SourceInfo | undefined
   flags: SuspiciousFlag[]
   error: string
@@ -99,25 +98,6 @@ export function TokenStep(p: {
           </div>
         ) : null}
         {svm && !p.info ? <p className="px-2 pb-2 pt-1 text-xs text-muted">{d.step1.storeHint}</p> : null}
-        {p.recent.length > 0 && !p.info ? (
-          <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2 pt-2 text-xs">
-            <span className="text-muted">{d.step1.recent}:</span>
-            {p.recent.map((a) => (
-              <Button
-                key={a}
-                variant="pill"
-                className="mono h-6 font-normal"
-                onClick={() => {
-                  setValue(a)
-                  const r = parseAnalysisInput(a)
-                  if (r.ok) p.onInput(r.input)
-                }}
-              >
-                {a.slice(0, 6)}…{a.slice(-4)}
-              </Button>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       {p.error ? <Alert kind="error">{p.error}</Alert> : null}

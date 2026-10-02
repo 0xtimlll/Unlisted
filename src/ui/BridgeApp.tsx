@@ -38,7 +38,7 @@ import { ContractFacts, TOKEN_INPUT_ID, TokenStep } from './components/TokenStep
 import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
-import { activeTransfer, pushHistory, pushRecent, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
+import { activeTransfer, pushHistory, setHistoryStatus, type HistoryEntry, type Stored } from './storage'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
@@ -351,12 +351,6 @@ export function BridgeApp({
     if (autoTarget) applyTarget(autoTarget)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoTarget?.address, autoTarget?.chain, autoTarget?.dstChain])
-
-  const infoId = info ? (info.vm === 'evm' ? info.oft : info.oftStore) : undefined
-  useEffect(() => {
-    if (infoId) setStored(pushRecent(stored, src.key, infoId))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [infoId])
 
   // ---- step 2: destination / amount / recipient -------------------------------
   const dstChain = dest.dstEid !== undefined ? byEid(dest.dstEid) : undefined
@@ -778,7 +772,6 @@ export function BridgeApp({
           onInput={onInput}
           prefill={handedOver}
           busy={analysis.isFetching || probe.isFetching || decode.isFetching || svmProbe.isFetching || svmDecode.isFetching || adapterSearch.isFetching}
-          recent={stored.recentContracts.filter((r) => r.chain === src.key).map((r) => r.address)}
           info={info}
           flags={flags}
           error={decodeProgramMismatch ? d.errors.decode_program_mismatch : probeError ? describeError(d, probeError) : decodeError ? describeError(d, decodeError) : ''}

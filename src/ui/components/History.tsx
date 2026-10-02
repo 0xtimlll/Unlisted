@@ -8,6 +8,7 @@ import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { protocolBadge, useDict } from '@/i18n'
 import { entryProtocol, filterHistory, type HistoryEntry, type HistoryFilter } from '../storage'
 import { ChainIcon } from './ChainIcon'
+import { CheckIcon } from './icons'
 import { Shell, Tabs } from './ui'
 
 /** Full-width list under the two columns: every transfer, whichever tab made it. */
@@ -62,7 +63,13 @@ function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: H
         </span>
         <span className="block text-xs text-muted">
           {new Date(e.at).toLocaleString()}
-          {e.status === 'delivered' ? <span className="ml-2 text-ok">✓ {d.tracker.delivered}</span> : e.status === 'failed' ? <span className="ml-2 text-danger">{d.tracker.failed}</span> : null}
+          {e.status === 'delivered' ? (
+            <span className="ml-2 inline-flex items-center gap-1 align-middle text-ok">
+              <CheckIcon className="h-3 w-3" /> {d.tracker.delivered}
+            </span>
+          ) : e.status === 'failed' ? (
+            <span className="ml-2 text-danger">{d.tracker.failed}</span>
+          ) : null}
         </span>
       </span>
       <button type="button" onClick={() => onTrack(e)} className="h-7 shrink-0 rounded-full bg-surface px-3 text-xs font-semibold text-ink transition hover:scale-105">

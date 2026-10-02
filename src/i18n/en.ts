@@ -86,7 +86,6 @@ export const en = {
     storeHint: 'On Solana an OFT is identified by its OFT Store account, not by the mint. It is in the project’s LayerZero deployment or in the EVM contract’s “Available destinations” list.',
     decodedHint: 'Prefilled from the transaction: contract and destination. Recipient and fee are always yours.',
     decodedFailedHint: 'That sample transaction failed on-chain. Its contract and destination were still used as a hint.',
-    recent: 'Recent contracts',
     adapterSearching: 'Not a LayerZero OFT on {chain}. Looking for its adapter: asking the same address on {n} other networks which contract on {chain} it names as its peer…',
     adapterFound: 'This address is the token, not the bridge. Its OFT on {foundOn} names this adapter for {chain}, and the adapter was then checked like any pasted contract: it locks exactly this token.',
     adapterSeveral: 'This address is the token, not the bridge. Several adapters for it were found on {chain} — pick one:',

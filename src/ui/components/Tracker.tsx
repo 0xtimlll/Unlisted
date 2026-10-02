@@ -7,6 +7,7 @@ import { fmt, useDict } from '@/i18n'
 import { useSourceReceipt, useTrack } from '../hooks'
 import { useSvmSignatureStatus } from '../svmHooks'
 import { ChainIcon } from './ChainIcon'
+import { CheckIcon } from './icons'
 import { Alert, Box, BoxLabel, Button, Spinner } from './ui'
 
 function useElapsed(since: number): string {
@@ -121,7 +122,7 @@ export function Tracker(p: {
                 st.state === 'done' ? 'bg-ok text-solid-ink' : st.state === 'failed' ? 'bg-danger text-solid-ink' : st.state === 'active' ? 'bg-accent text-page' : 'bg-surface-2 text-muted'
               }`}
             >
-              {st.state === 'done' ? '✓' : st.state === 'failed' ? '!' : st.state === 'active' ? <Spinner /> : i + 1}
+              {st.state === 'done' ? <CheckIcon className="h-4 w-4" /> : st.state === 'failed' ? <span className="text-sm">!</span> : st.state === 'active' ? <Spinner /> : i + 1}
             </span>
             <span className="truncate text-xs text-ink">{st.label}</span>
             {i < steps.length - 1 ? <span className="h-px flex-1 bg-line" /> : null}
@@ -168,7 +169,11 @@ export function Tracker(p: {
       {!final ? <div className="mt-2 text-xs text-muted">{fmt(d.tracker.eta, { chain: p.src.name, minutes, confs: p.src.srcConfirmationsHint })}</div> : null}
       {phase === 'delivered' ? (
         <div className="mt-3">
-          <Alert kind="ok">✓ {d.tracker.delivered}</Alert>
+          <Alert kind="ok">
+            <span className="inline-flex items-center gap-2">
+              <CheckIcon className="h-4 w-4" /> {d.tracker.delivered}
+            </span>
+          </Alert>
         </div>
       ) : null}
       {phase === 'failed' ? (
