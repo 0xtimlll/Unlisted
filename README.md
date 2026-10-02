@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="Unlisted — CT read from its OFTAdapter on Ethereum, route to BNB Chain in order, ready to approve 25 CT" width="820">
+  <img src="docs/screenshot.png" alt="Unlisted — the bridge as it opens: a field for the contract, Ethereum as the source, the destination and the amount still to choose" width="820">
 </p>
 
 <p align="center">
-  <sub>Nothing in that panel was typed in or looked up in a list — every field was read from the contracts, and the green chip is eight on-chain checks of the route. The wallet address is masked.</sub>
+  <sub>Paste a contract and everything else — the token, its destinations, the quote and every check — is read from the chain and shown in the panel on the right.</sub>
 </p>
 
 ---
