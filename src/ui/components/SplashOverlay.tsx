@@ -1,7 +1,7 @@
 'use client'
 /**
  * The welcome screen at /. The bridge is already mounted underneath it (the root layout owns it),
- * so this is only a blurred sheet over a running app with one card on it: leaving is a dissolve
+ * so this is only a blurred sheet over a running app with one small card on it: leaving is a dissolve
  * and a change of address, never a reload, and whatever was connected stays connected.
  *
  * It exists only on this route. /bridge is served without it, which is what makes that address
@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from 'react'
 import { tabPath } from '@/core/protocols'
 import { useDict } from '@/i18n'
 import { loadLastTab } from '../tabs'
-import { InfoIcon, WarningIcon } from './icons'
 import { Button } from './ui'
 
 /** Kept in step with the dissolve in globals.css. */
@@ -98,15 +97,7 @@ export function SplashOverlay() {
           </h2>
           <p className="text-xs font-semibold text-muted">{d.splash.subtitle}</p>
         </div>
-        <div className="flex flex-col gap-6 p-6">
-          <div className="flex items-start gap-3">
-            <InfoIcon className="mt-0.5 h-6 w-6 shrink-0 text-ink" />
-            <p className="text-sm leading-6 text-ink">{d.splash.how}</p>
-          </div>
-          <div className="flex items-start gap-3">
-            <WarningIcon className="mt-0.5 h-6 w-6 shrink-0 text-ink" />
-            <p className="text-sm leading-6 text-ink">{d.footer.disclaimer}</p>
-          </div>
+        <div className="flex flex-col gap-6 p-6 pt-8">
           {/* The bridge's own call-to-action button, in its "ready" tone. */}
           <Button variant="cta" data-tone="primary" className="h-12" onClick={enter}>
             {d.splash.start}

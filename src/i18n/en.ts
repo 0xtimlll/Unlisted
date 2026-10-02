@@ -8,7 +8,6 @@ export const en = {
   splash: {
     start: 'Start Bridging',
     subtitle: 'Non-custodial bridge for unlisted tokens',
-    how: 'Paste the token or bridge contract, pick a network and an amount. Everything else is read from the contract itself — nothing is held, nothing is custodied.',
     /** The link out to the source, under the button on the welcome screen. */
     source: 'View the source on GitHub',
     sourceLabel: 'GitHub',
