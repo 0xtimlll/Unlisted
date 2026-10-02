@@ -106,7 +106,7 @@ describe('every code a guard emits has been classified on purpose', () => {
   it('holds exactly what the header of severity.ts says is impossible', () => {
     const impossible = [
       'wallet_not_connected', 'chain_mismatch', 'insufficient_balance', 'insufficient_native',
-      'peer_missing', 'route_missing', 'route_unsupported', 'manager_unverified',
+      'peer_missing', 'route_missing', 'route_unsupported', 'manager_unverified', 'ntt_unvouched',
       'amount_zero', 'amount_rounds_to_zero', 'delivered_zero', 'oft_fee_exceeds_amount', 'amount_has_dust',
       'recipient_invalid', 'recipient_vm_mismatch', 'recipient_unconfirmed',
     ]
@@ -201,6 +201,9 @@ describe('2. an NTT manager nothing on the source chain vouches for', () => {
     [`${m(NTT.TRANSCEIVER)}.isSpecialRelayingEnabled`]: false,
     [`${m(token)}.minter`]: new Error('locking hub: nothing mints'),
     [`${m(token)}.MINTER_ROLE`]: new Error('no role'),
+    // What a real hub has that a fake does not: the supply that circulates on its spokes.
+    [`${m(token)}.balanceOf`]: 120_000n * 10n ** 18n,
+    [`${m(token)}.totalSupply`]: 1_000_000n * 10n ** 18n,
   })
   const dstFor = (manager: Address) => ({
     [`${m(DST_MANAGER)}.getPeer`]: { peerAddress: pad(m(manager) as Address, { size: 32 }), tokenDecimals: 18 },
@@ -216,11 +219,12 @@ describe('2. an NTT manager nothing on the source chain vouches for', () => {
       tokenList,
     })
 
-  it('verifies, finds no anchor, and lands as a RED note — the send is still possible', async () => {
+  it('verifies, finds no anchor but a locked share, and lands as a RED note — the send is still possible', async () => {
     const r = await verify(NTT.MANAGER, NTT.TOKEN)
     expect(r.ok).toBe(true)
     if (!r.ok) return
     expect(r.verified.anchor).toBeNull()
+    expect(r.verified.lockedBps).toBe(1200)
 
     const rep = runNttGuards(nttInput({ verification: r }))
     expect(codesOf(rep.notes)).toEqual(['ntt_anchor_missing'])

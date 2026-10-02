@@ -242,15 +242,8 @@ describe('the four-part gate', () => {
     expect(r).toMatchObject({ ok: false, code: 'unverifiable' })
   })
 
-  it('leaves a fake manager UNVOUCHED FOR: right token(), matching peers, real-looking history, no anchor', async () => {
-    // Everything a fake can control is correct here: it reports the real token, its own peer on the
-    // other side points back at it, it has a Wormhole transceiver on the real core bridge, and it
-    // could easily have one self-made transfer indexed by Wormholescan. The one thing it cannot
-    // forge is the token naming it — and that is exactly what comes back as `anchor: null`.
-    //
-    // Unlisted informs rather than refuses (core/severity.ts), so verification succeeds and the
-    // protection is guard 2b: `ntt_anchor_missing`, a note the indicator shows in red with one
-    // visible line. The send stays possible; the person decides.
+  /** Everything a fake can control, done right: the real token, peers that match, a transceiver on the real core bridge. */
+  const fakeManager = (over: Answers = {}) => {
     const FAKE = getAddress('0xdeadbeef00000000000000000000000000000001')
     const FAKE_DST = getAddress('0xdeadbeef00000000000000000000000000000002')
     const src: Answers = {
@@ -268,6 +261,8 @@ describe('the four-part gate', () => {
       [`${TOKEN.toLowerCase()}.minter`]: MANAGER,
       [`${TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
       [`${TOKEN.toLowerCase()}.hasRole`]: false,
+      [`${TOKEN.toLowerCase()}.totalSupply`]: 1_000_000n * 10n ** 18n,
+      ...over,
     }
     const dst: Answers = {
       [`${FAKE_DST.toLowerCase()}.getPeer`]: { peerAddress: pad(FAKE.toLowerCase() as Address, { size: 32 }), tokenDecimals: 18 },
@@ -276,22 +271,43 @@ describe('the four-part gate', () => {
       [`${DST_TOKEN.toLowerCase()}.MINTER_ROLE`]: MINTER_ROLE,
       [`${DST_TOKEN.toLowerCase()}.hasRole`]: false,
     }
-    const r = await verifyNttManager({
-      srcChain: 'ethereum',
-      dstChain: 'bsc',
-      manager: FAKE,
-      srcClient: mockClient(src),
-      dstClient: mockClient(dst),
-      tokenList: listWithBoth,
-    })
-    expect(r.ok).toBe(true)
-    if (r.ok) expect(r.verified.anchor).toBeNull()
+    return verifyNttManager({ srcChain: 'ethereum', dstChain: 'bsc', manager: FAKE, srcClient: mockClient(src), dstClient: mockClient(dst), tokenList: listWithBoth })
+  }
 
-    // The protection that remains, and the one that matters: guard 2b says so, in red.
+  it('refuses a fake manager that holds none of the real token: right token(), matching peers, no anchor, nothing locked', async () => {
+    // The one thing it cannot forge is the token naming it — `anchor: null` — and the one thing it
+    // will not pay for is holding the supply. Verification still succeeds (the facts are facts);
+    // guard 2b holds the button, because the approve would name a spender nothing accounts for.
+    const r = await fakeManager({ [`${TOKEN.toLowerCase()}.balanceOf`]: 0n })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.verified.anchor).toBeNull()
+    expect(r.verified.lockedBps).toBe(0)
+    const rep = runNttGuards(guardInput({ verification: r }))
+    expect(rep.blocks.map((b) => !b.ok && b.code)).toContain('ntt_unvouched')
+    expect(rep.canSend).toBe(false)
+  })
+
+  it('a token that will not say how much the manager holds counts as nothing — an outage is not a pass', async () => {
+    const r = await fakeManager({ [`${TOKEN.toLowerCase()}.balanceOf`]: new Error('rpc down') })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.verified.lockedBps).toBeUndefined()
+    const rep = runNttGuards(guardInput({ verification: r }))
+    expect(rep.blocks.map((b) => !b.ok && b.code)).toContain('ntt_unvouched')
+  })
+
+  it('a locking hub that holds the supply circulating on its spokes stays a RED note, and the send is possible', async () => {
+    // 5% of the supply sits in the manager: money the deployer of a fake would have to spend. The
+    // token still cannot vouch (nothing mints on a locking hub), so the indicator stays red — but
+    // the owner's rule applies: inform, do not refuse.
+    const r = await fakeManager({ [`${TOKEN.toLowerCase()}.balanceOf`]: 50_000n * 10n ** 18n })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.verified.lockedBps).toBe(500)
     const rep = runNttGuards(guardInput({ verification: r }))
     expect(rep.notes.map((w) => !w.ok && w.code)).toContain('ntt_anchor_missing')
-    // It is a NOTE, not a block — the owner's decision, see core/severity.ts.
-    expect(rep.blocks.map((b) => !b.ok && b.code)).not.toContain('ntt_anchor_missing')
+    expect(rep.blocks.map((b) => !b.ok && b.code)).not.toContain('ntt_unvouched')
     expect(rep.canSend).toBe(true)
   })
 })

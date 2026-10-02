@@ -17,7 +17,7 @@ import { aboveFeeCeiling } from '../../core/chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from '../../core/encoding'
 import { receivedAmount } from './amounts'
 import type { NttPlan } from './plan'
-import type { NttVerification } from './verify'
+import { NTT_MIN_LOCKED_BPS, type NttVerification } from './verify'
 
 export type NttGuardCode =
   | 'wallet_not_connected'
@@ -25,6 +25,7 @@ export type NttGuardCode =
   | 'plan_missing'
   | 'manager_unverified'
   | 'ntt_anchor_missing'
+  | 'ntt_unvouched'
   | 'recipient_invalid'
   | 'recipient_unconfirmed'
   | 'recipient_lookalike'
@@ -127,13 +128,21 @@ export function n2Verified(i: NttGuardInput): NttGuardResult {
 
 /**
  * 2b. Nothing on the SOURCE chain vouches for this manager: the token grants it no minter role.
- * Verified in every other respect, so this is a note rather than a refusal — a genuine locking hub
- * looks exactly like this, and so does a fake. The indicator shows it red (core/indicator.ts).
+ * A genuine locking hub looks exactly like this from the token's side — and so does a fake. What
+ * tells them apart is money: a real hub holds the supply that circulates on its spokes, a fake
+ * manager for a real token holds nothing. Below NTT_MIN_LOCKED_BPS of the supply (or when the
+ * share could not be read) the button is held (`ntt_unvouched`, owner's decision 2026-10-02):
+ * the approve would name a spender nothing on this chain can account for. Above it the send is
+ * possible and the indicator shows the missing anchor in red (core/indicator.ts).
  */
 export function n2Anchored(i: NttGuardInput): NttGuardResult {
   const v = i.verification
   if (!v || !v.ok) return ok(2) // guard 2 has already reported that there is no verdict to read
-  return v.verified.anchor === null ? fail(2, 'ntt_anchor_missing') : ok(2)
+  if (v.verified.anchor !== null) return ok(2)
+  const bps = v.verified.lockedBps
+  if (bps === undefined) return fail(2, 'ntt_unvouched', 'locked share unreadable')
+  if (bps < NTT_MIN_LOCKED_BPS) return fail(2, 'ntt_unvouched', `${bps / 100}% of supply held, ${NTT_MIN_LOCKED_BPS / 100}% needed`)
+  return fail(2, 'ntt_anchor_missing', `${bps / 100}% of supply held`)
 }
 
 // 3. recipient valid; anything other than the connected wallet must be confirmed

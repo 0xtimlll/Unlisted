@@ -34,6 +34,7 @@ export const erc20Abi = parseAbi([
   'function symbol() view returns (string)',
   'function name() view returns (string)',
   'function balanceOf(address account) view returns (uint256)',
+  'function totalSupply() view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 value) returns (bool)',
 ])

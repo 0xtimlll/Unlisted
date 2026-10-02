@@ -11,8 +11,12 @@
  *      minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens, with the
  *      role read from the token itself. This is the only fact in the whole gate the manager's
  *      deployer cannot write, so it is the only one that can establish trust (CLAUDE.md rule 2).
- *      A locking hub has no minter, so nothing on the source chain can establish it; the route
- *      still verifies, and the indicator says in red that the manager is vouched for by nothing.
+ *      A locking hub has no minter, so the token cannot establish it. What can is money: the share
+ *      of the token's supply the manager holds (`balanceOf(manager) / totalSupply()`, both read from
+ *      the token). A real hub holds what circulates on its spokes; a fake manager for a real token
+ *      holds nothing, and buying 0.1% of a real token's supply to pass is not worth the theft. Below
+ *      that share, guard 2b holds the button (`ntt_unvouched`, owner's decision 2026-10-02); above
+ *      it the route verifies and the indicator says in red that no one but the balance vouches.
  *   3. Peers in both directions: source.getPeer(dst) == destination manager AND
  *      destination.getPeer(src) == source manager, read on the destination's own RPC.
  *   4. A Wormhole transceiver: it reports the Wormhole type and points at the core bridge whose
@@ -67,6 +71,12 @@ export type NttRejectionCode =
 export type AnchorSide = 'source'
 export type AnchorKind = 'minter' | 'role'
 
+/**
+ * The share of the token's supply a manager with no token-side anchor must hold to be given an
+ * approve: 0.1%, the same floor the LayerZero adapters use (lz-risk/adapters.ts). In basis points.
+ */
+export const NTT_MIN_LOCKED_BPS = 10
+
 export type VerifiedNttManager = {
   chain: ChainKey
   manager: Address
@@ -100,6 +110,13 @@ export type VerifiedNttManager = {
    * one thing nobody could confirm is the contract itself.
    */
   anchor: { side: AnchorSide; kind: AnchorKind } | null
+  /**
+   * How much of the token's supply this manager holds, in basis points — read from the token when
+   * it names no minter, because then the balance is the only fact the manager's deployer cannot
+   * write. Absent when the anchor made it unnecessary, or when the token did not answer; guard 2b
+   * treats "not readable" like "nothing".
+   */
+  lockedBps?: number
   /**
    * The destination token also names the destination manager. Context for the details panel only:
    * we reached that token through this manager's own `getPeer()`, so it says nothing about whether
@@ -211,6 +228,18 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
   // that as a note the indicator shows in red (core/indicator.ts) rather than a refusal.
   const anchor: { side: AnchorSide; kind: AnchorKind } | null = srcAnchor ? { side: 'source', kind: srcAnchor } : null
 
+  // ---- 2b. with no anchor, the only fact left is money: the share of supply the manager holds.
+  // Both numbers come from the token, not from the manager (CLAUDE.md rule 3). Not read when the
+  // token already vouched; unreadable counts as nothing, which guard 2b turns into a refusal.
+  let lockedBps: number | undefined
+  if (!srcAnchor) {
+    const [held, supply] = await Promise.all([
+      read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [manager] })),
+      read(() => p.srcClient.readContract({ address: token, abi: erc20Abi, functionName: 'totalSupply' })),
+    ])
+    if (held !== undefined && supply !== undefined) lockedBps = supply === 0n ? 0 : Number((held * 10_000n) / supply)
+  }
+
   // ---- 4. a Wormhole transceiver with automatic delivery --------------------
   const transceivers = await read(() => p.srcClient.readContract({ ...base, functionName: 'getTransceivers' }))
   if (!transceivers) return fail('unverifiable', 'manager.getTransceivers()')
@@ -264,6 +293,7 @@ export async function verifyNttManager(p: VerifyInput): Promise<NttVerification>
       dst: { chain: p.dstChain, wormholeChainId: dstWh, manager: dstManager, token: dstToken, tokenDecimals: peer.tokenDecimals },
       transceiver: wormholeTransceiver,
       anchor,
+      ...(lockedBps !== undefined ? { lockedBps } : {}),
       alsoOnDestination: !!dstAnchor,
     },
   }
@@ -363,5 +393,12 @@ export async function verifyNttManagerQuorum(p: VerifyInput, second: NttSecondOp
   // rather than refusing it: a hiccup must not look like a finding, and a missing anchor is a
   // warning anyway (guard 2b).
   const anchor = first.verified.anchor && other.verified.anchor ? first.verified.anchor : null
-  return withFlag({ ok: true, verified: { ...first.verified, anchor } }, true)
+  // The locked share is money, so two readings are reconciled downwards: the smaller one stands.
+  // One provider failing to read it is an outage, and the other's reading is kept.
+  const a = first.verified.lockedBps
+  const b = other.verified.lockedBps
+  const lockedBps = a !== undefined && b !== undefined ? Math.min(a, b) : (a ?? b)
+  const { lockedBps: _drop, ...rest } = first.verified
+  void _drop
+  return withFlag({ ok: true, verified: { ...rest, anchor, ...(lockedBps !== undefined ? { lockedBps } : {}) } }, true)
 }

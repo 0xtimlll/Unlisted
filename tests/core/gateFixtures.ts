@@ -261,6 +261,9 @@ export const nttVerified = (anchor: Extract<NttVerification, { ok: true }>['veri
     dst: { chain: 'bsc', wormholeChainId: 4, manager: NTT.DST_MANAGER, token: NTT.DST_TOKEN, tokenDecimals: 18 },
     transceiver: NTT.TRANSCEIVER,
     anchor,
+    // An anchorless fixture is a funded locking hub: 12% of the supply held, so guard 2b notes
+    // rather than refuses (an unfunded one is `ntt_unvouched`, covered in ntt.test.ts).
+    ...(anchor === null ? { lockedBps: 1200 } : {}),
   },
 })
 

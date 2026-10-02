@@ -72,7 +72,9 @@ self-check still blocks a `bytes` recipient that is not exactly 20 bytes.
 **What** The owner's spec makes a locking hub green when it holds ≥ 0.1% of the token's supply and
 has ≥ 20 outbound messages — the same rule the LayerZero adapters already follow. The NTT side does
 not implement it yet: any manager the source token does not name as minter is red, so a genuine hub
-(L3 on Ethereum, for example) shows "High risk". Nothing is blocked; only the colour is wrong.
+(L3 on Ethereum, for example) shows "High risk". Only the colour is wrong. Since 2026-10-02 the
+locked share IS read (`lockedBps` in `verify.ts`) and decides between the red note and the
+`ntt_unvouched` block; it does not yet make a hub green, and the history part is not read at all.
 
 **Why it was left alone** Deferred by the owner on 2026-10-01 until an outside review. The spec
 also needs one decision first: a real hub usually has an anchor only on the destination side, which

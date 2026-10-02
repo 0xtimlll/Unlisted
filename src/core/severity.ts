@@ -64,6 +64,10 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'route_missing',
   'route_unsupported',
   'manager_unverified',
+  // An NTT manager neither the token nor a share of its supply vouches for: the approve would
+  // name a spender nothing on this chain can account for (owner's decision 2026-10-02; the
+  // fake-manager-for-a-real-token case from the audit).
+  'ntt_unvouched',
 
   // ── the amount does not survive the trip ─────────────────────────────────────
   'amount_zero',

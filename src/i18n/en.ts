@@ -420,7 +420,9 @@ export const en = {
     plan_missing: 'Preparing…',
     manager_unverified: 'The manager has not passed verification',
     ntt_anchor_missing:
-      'Nothing on the source chain vouches for this bridge contract: the token grants it no minter role. If it is a fake, everything sent through it is lost',
+      'The token grants this bridge contract no minter role; only the share of supply it holds speaks for it. If it is a fake, everything sent through it is lost',
+    ntt_unvouched:
+      'Nothing on this network vouches for this bridge contract: the token grants it no minter role and it holds less than 0.1% of the supply — the approve would go to a contract no one can account for',
     recipient_invalid: 'Recipient is not a valid address',
     recipient_unconfirmed: 'Confirm the recipient’s last 6 characters',
     recipient_lookalike: 'Looks like a saved address but is a DIFFERENT one — possible address substitution',
