@@ -16,5 +16,11 @@
     "package": "elliptic",
     "reason": "ECDSA signature-verification flaws (malleability, malformed signatures accepted). Unlike the other two entries this code IS in the shipped bundle: @layerzerolabs/oft-v2-solana-sdk -> lz-v2-utilities -> @ethersproject/abi drags in the whole ethers signing stack for its ABI coder alone. It is unreachable in practice: this app never creates or verifies a signature — the wallet signs, and nothing here calls signing-key, recoverAddress, verifyMessage or ecrecover (scripts/check-whitelist.mjs forbids every signing primitive by name). The advisory only matters to code that VERIFIES a signature and trusts the result; nothing here does. Revisit if the ethers ABI coder is ever replaced, which would drop the dependency entirely.",
     "expires": "2027-03-22"
+  },
+  {
+    "id": "GHSA-vfj7-8cjw-p6xm",
+    "package": "braces",
+    "reason": "Stack exhaustion when micromatch expands a deeply nested brace pattern. braces reaches this project only through eslint-config-next -> @next/eslint-plugin-next -> fast-glob -> micromatch: a lint-time tool whose only inputs are this repository's own glob patterns, run by developers and CI, never by users — nothing from it is in the shipped export (it is not a runtime dependency at all). braces 3.0.3 is the latest release and no fixed version exists; npm's only suggestion is a major downgrade of eslint-config-next. Revisit when braces publishes a fix or Next's lint plugin drops fast-glob.",
+    "expires": "2027-04-04"
   }
 ]
