@@ -8,8 +8,10 @@
  *
  * Connecting is the provider's job (`autoConnect`): after `select(name)` it calls the adapter's
  * `connect()`, and at start-up with a remembered wallet it calls `autoConnect()` — a silent connect
- * that trusted wallets answer without a prompt and untrusted ones refuse, which clears the memory.
- * A failed connect is reported through `onError` and shown as `error`.
+ * that trusted, unlocked wallets answer without a prompt. A refusal (locked, untrusted) makes the
+ * provider forget the wallet; the app's own memory (svm/stored.ts) outlives that, so the next
+ * start-up tries again. Only a connect the user asked for reports its failure as `error`: a refused
+ * silent connect on page load is not news to show anyone.
  *
  * Render discipline matters here. The host re-renders on every state this component pushes up, and
  * WalletProvider builds a fresh context object and re-wraps its adapters on every render it gets. If
@@ -21,26 +23,39 @@
  */
 import { WalletProvider, useWallet } from '@solana/wallet-adapter-react'
 import { WalletReadyState, type Adapter } from '@solana/wallet-adapter-base'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SvmWallet } from './context'
-import { SVM_WALLET_STORAGE_KEY } from './stored'
+import { forgetSvmWallet, rememberSvmWallet, SVM_WALLET_STORAGE_KEY } from './stored'
 import { shortError } from '../hooks'
 
 const NO_ADAPTERS: Adapter[] = []
 
 export default memo(function SolanaStack({ onState }: { onState: (s: SvmWallet) => void }) {
   const [error, setError] = useState('')
-  const onError = useCallback((e: unknown) => setError(shortError(e)), [])
+  // True between the user's pick and the outcome of that pick; errors outside it are the
+  // provider's own silent start-up attempt, which stays quiet.
+  const userAsked = useRef(false)
+  const onError = useCallback((e: unknown) => {
+    if (userAsked.current) setError(shortError(e))
+  }, [])
   return (
     <WalletProvider wallets={NO_ADAPTERS} autoConnect localStorageKey={SVM_WALLET_STORAGE_KEY} onError={onError}>
-      <Bridge onState={onState} error={error} setError={setError} />
+      <Bridge onState={onState} error={error} setError={setError} userAsked={userAsked} />
     </WalletProvider>
   )
 })
 
 /** Reads the adapter context and pushes a plain, trimmed view of it up to the host. */
-function Bridge({ onState, error, setError }: { onState: (s: SvmWallet) => void; error: string; setError: (m: string) => void }) {
+function Bridge({ onState, error, setError, userAsked }: { onState: (s: SvmWallet) => void; error: string; setError: (m: string) => void; userAsked: React.MutableRefObject<boolean> }) {
   const { wallets, wallet, publicKey, connected, connecting, signTransaction, select, connect, disconnect } = useWallet()
+
+  // A wallet that really connected is remembered by the app itself, until the user disconnects.
+  useEffect(() => {
+    if (connected && wallet) {
+      rememberSvmWallet(wallet.adapter.name)
+      userAsked.current = false
+    }
+  }, [connected, wallet, userAsked])
 
   const options = useMemo(
     () => wallets.map((x) => ({ name: x.adapter.name, icon: x.adapter.icon, installed: x.readyState === WalletReadyState.Installed || x.readyState === WalletReadyState.Loadable })),
@@ -56,6 +71,7 @@ function Bridge({ onState, error, setError }: { onState: (s: SvmWallet) => void;
       signer: publicKey && signTransaction ? { publicKey, signTransaction } : undefined,
       connect: async (name: string) => {
         setError('')
+        userAsked.current = true
         if (wallet?.adapter.name === name) {
           // The same wallet again (after a refusal): the provider only auto-connects once per
           // selection, so this time connect by hand.
@@ -67,6 +83,7 @@ function Bridge({ onState, error, setError }: { onState: (s: SvmWallet) => void;
       },
       disconnect: async () => {
         setError('')
+        forgetSvmWallet()
         // One call only. The provider forgets the wallet itself on the adapter's `disconnect`
         // event; a `select(null)` after this ran `adapter.disconnect()` a second time through a
         // stale closure, and the extension was asked to disconnect twice.
@@ -74,7 +91,7 @@ function Bridge({ onState, error, setError }: { onState: (s: SvmWallet) => void;
       },
       error,
     }),
-    [options, wallet, publicKey, connected, connecting, signTransaction, select, connect, disconnect, error, setError],
+    [options, wallet, publicKey, connected, connecting, signTransaction, select, connect, disconnect, error, setError, userAsked],
   )
 
   useEffect(() => onState(state), [state, onState])
