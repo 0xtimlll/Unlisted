@@ -88,6 +88,15 @@ export const WORMHOLE_CHAINS: Partial<Record<ChainKey, WormholeChainConfig>> = {
     wormholeChainId: 72,
     coreBridge: '0x141fBa8AD5D61bdaB45A047cF60b5Ad9784987FB',
   },
+  ink: {
+    // [46, "Ink"] in chains.ts; both addresses from the Mainnet tables. Confirmed on chain: the core
+    // bridge answers chainId() with 46 and carries the same guardian set index as Ethereum's, the
+    // token bridge answers chainId() 46 and wormhole() with this core bridge, and Wormholescan
+    // holds VAAs signed for emitter chain 46.
+    wormholeChainId: 46,
+    coreBridge: '0xCa1D5a146B03f6303baF59e5AD5615ae0b9d146D',
+    tokenBridge: '0x3Ff72741fd67D6AD0668d93B41a09248F4700560',
+  },
   // scroll: Wormhole does not list a chain id for Scroll.
 }
 
@@ -135,5 +144,7 @@ export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
   scroll: 'scroll',
   hyperevm: 'hyperevm',
   robinhood: 'robinhood',
+  // The key Wormholescan's NTT token list uses for Ink (it lists USDC.s, ezETH and others there).
+  ink: 'ink',
   solana: 'solana',
 }

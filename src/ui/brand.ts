@@ -26,5 +26,7 @@ export const BRAND: Record<ChainKey, Brand> = {
   linea: { bg: '#61DFFF', dark: true },
   scroll: { bg: '#FFEEDA', dark: true },
   robinhood: { bg: '#000000' },
+  // The purple inkonchain.com itself is set in (its most-used accent).
+  ink: { bg: '#7538F5' },
   solana: { bg: 'linear-gradient(0deg, #1A1622, #121212)' },
 }

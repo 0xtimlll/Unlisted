@@ -15,6 +15,7 @@ export type ChainKey =
   | 'linea'
   | 'scroll'
   | 'robinhood'
+  | 'ink'
   | 'solana'
 
 /**
@@ -310,6 +311,34 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     // 20 confirmations, and a block is ~0.101s, so the wait is seconds rather than minutes.
     srcConfirmationsHint: 20,
     blockTimeSec: 0.1,
+    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
+  },
+  {
+    vm: 'evm',
+    key: 'ink',
+    name: 'Ink',
+    chainId: 57073,
+    // From LayerZero's metadata (chainKey "ink"), read back on chain: eid() on this address answers
+    // 30339 on all three RPCs below.
+    endpointV2: '0xca29f3A6f966Cb2fc0dE625F8f325c0C46dbE958',
+    eid: 30339,
+    nativeSymbol: 'ETH',
+    // Ink's own documentation (docs.inkonchain.com/general/network-information) names the operator
+    // behind each of its two public endpoints — Gelato and QuickNode — so they are two opinions,
+    // not one host twice; drpc is a third. All three answer eth_chainId 57073, carry Multicall3,
+    // support eth_simulateV1 and allow browser origins.
+    rpcs: [
+      { url: 'https://rpc-gel.inkonchain.com', provider: 'gelato.network' },
+      { url: 'https://rpc-qnd.inkonchain.com', provider: 'quicknode.com' },
+      { url: 'https://ink.drpc.org', provider: 'drpc.org' },
+    ],
+    explorerTxUrl: 'https://explorer.inkonchain.com/tx/',
+    explorerAddrUrl: 'https://explorer.inkonchain.com/address/',
+    feeStepWei: 10n ** 13n,
+    // Read from the chain: the default ULN send config for Ink → Ethereum / Arbitrum / Base asks
+    // for 20 confirmations, and Ink produces a block every second (measured over 20 blocks).
+    srcConfirmationsHint: 20,
+    blockTimeSec: 1,
     feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
   },
   {

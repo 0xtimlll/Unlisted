@@ -131,6 +131,17 @@ export const CCIP_CHAINS: Partial<Record<ChainKey, CcipChainConfig>> = {
     tokenAdminRegistry: '0x1912C3cFafE8A76A32a92861d815aC2837F237Ca',
     tokenAdminRegistryVersion: '1.5.0',
   },
+  ink: {
+    selector: 3461204551265785888n,
+    registryName: 'ethereum-mainnet-ink-1',
+    directoryKey: 'ethereum-mainnet-ink-1',
+    // Both answer typeAndVersion() with these versions on chain; the router reports Ethereum and
+    // Arbitrum as supported and Ethereum's router reports Ink back.
+    router: '0xca7c90A52B44E301AC01Cb5EB99b2fD99339433A',
+    routerVersion: '1.2.0',
+    tokenAdminRegistry: '0xEb062d21c713A3d940BB0FaECFdC387d6Ea23697',
+    tokenAdminRegistryVersion: '1.5.0',
+  },
   // solana: CCIP serves Solana, but this app only bridges EVM to EVM over CCIP.
 }
 

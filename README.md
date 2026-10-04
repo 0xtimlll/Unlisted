@@ -45,6 +45,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 | Base | 30184 | | Linea | 30183 |
 | BNB Chain | 30102 | | Scroll | 30214 |
 | Solana | 30168 | | Robinhood Chain | 30416 |
+| Ink | 30339 | | | |
 
 Any OFT (LayerZero V2) deployed on these chains works, in both directions between EVM and Solana:
 
@@ -104,7 +105,7 @@ Everything else v1 needs is read from the contracts too:
 
 The chain ids and endpoints come from LayerZero's own metadata through
 [`scripts/gen-lz-v1.mjs`](scripts/gen-lz-v1.mjs) into a committed JSON, never fetched at runtime.
-All eleven EVM networks have a v1 deployment, and each id is verified against
+All twelve EVM networks have a v1 deployment, and each id is verified against
 `UltraLightNodeV2.localChainId` — the contract that actually stamps the source chain into every
 packet. The Endpoint's own `getChainId()` is *not* the authority: on the six first-wave chains it
 still returns the number it was deployed with before LayerZero renumbered mainnet (Ethereum answers
@@ -112,8 +113,8 @@ still returns the number it was deployed with before LayerZero renumbered mainne
 
 **A deployed endpoint is not a working network.** The generator also asks each endpoint for its
 `defaultSendLibrary` and `defaultReceiveLibraryAddress`; a chain where either is the zero address
-has nothing to route a message through, and is written as `v1Active: false` with the reason. Ten of
-the eleven are active — Robinhood Chain has the endpoint deployed and answering `getChainId()` with
+has nothing to route a message through, and is written as `v1Active: false` with the reason. Eleven of
+the twelve are active — Robinhood Chain has the endpoint deployed and answering `getChainId()` with
 416, and neither library set, so it is offered as neither a source nor a destination for v1. Its V2
 routes are unaffected. `npm run check:lz-v1` re-asks, so "LayerZero wired it up since" becomes a
 failing check rather than a silent gap.

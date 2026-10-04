@@ -95,6 +95,7 @@ describe('the committed v1 chain table', () => {
     expect(lzV1('arbitrum')?.v1ChainId).toBe(110)
     expect(lzV1('optimism')?.v1ChainId).toBe(111)
     expect(lzV1('robinhood')?.v1ChainId).toBe(416)
+    expect(lzV1('ink')?.v1ChainId).toBe(339)
   })
 
   it('never confuses a v1 chain id with a V2 eid', () => {
