@@ -74,6 +74,7 @@ export function RouteIndicator(p: {
         ) : null}
       </div>
       {headline ? <p className="text-xs font-semibold text-danger">{headline.text}</p> : null}
+      {p.indicator.preview ? <p className="text-xs text-muted">{reasons.find((r) => r.code === 'preview_unsimulated')?.text}</p> : null}
     </div>
   )
 }

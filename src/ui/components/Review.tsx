@@ -30,6 +30,8 @@ export function Details(p: {
   svmInfo?: SvmOftInfo | undefined
   /** Right-hand panel: show the breakdown expanded, without the summary toggle. */
   flat?: boolean
+  /** The plan is a preview for a probe amount: said above the numbers. */
+  previewText?: string | undefined
 }) {
   const d = useDict()
   const [open, setOpen] = useState(false)
@@ -56,6 +58,7 @@ export function Details(p: {
     <div>
           {plan ? (
             <>
+              {p.previewText ? <p className="pb-1 text-xs text-muted">{p.previewText}</p> : null}
               <Row label={d.step3.sending}>
                 <b className="tnum">{formatAmount(plan.amounts.amountLD, dec)} {sym}</b>
                 <div className="mono text-xs text-muted">amountLD {plan.amounts.amountLD.toString()}</div>

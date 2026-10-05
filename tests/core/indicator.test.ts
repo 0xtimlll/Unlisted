@@ -199,3 +199,23 @@ describe('the issuer fee colours the indicator at its size, and holds nothing', 
     for (const c of ['oft_fee_notice', 'oft_fee_high', 'oft_fee_extreme', 'oft_fee_unknown']) expect(isBlockingCode(c), c).toBe(false)
   })
 })
+
+describe('a preview judges the route without the funds, and never calls it green', () => {
+  it('ignores the hold and the reads that wait for funds, says so in yellow', () => {
+    const r = assessIndicator(base({ held: true, preview: 'Preview for 1 TEST', results: [failed('simulation_missing'), failed('balance_unknown')] }))
+    expect(r.level).toBe('yellow')
+    expect(r.preview).toBe(true)
+    expect(r.reasons.map((x) => x.code)).toContain('preview_unsimulated')
+  })
+  it('red stays red, with the headline, in a preview', () => {
+    const r = assessIndicator(base({ held: true, preview: 'Preview for 1 TEST', results: [failed('peer_back_mismatch')] }))
+    expect(r.level).toBe('red')
+    expect(r.headline?.code).toBe('peer_back_mismatch')
+  })
+  it('a provider still reading is still pending, even in a preview', () => {
+    expect(assessIndicator(base({ preview: 'Preview', results: [failed('peer_back_unknown')] })).level).toBe('pending')
+  })
+  it('without a preview a hold still means "not assessed" (the old rule)', () => {
+    expect(assessIndicator(base({ held: true, results: [failed('simulation_missing')] })).level).toBe('none')
+  })
+})

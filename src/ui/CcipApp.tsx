@@ -46,6 +46,8 @@ import { useCcipCheck, useCcipPlan, useCcipRemote, useCcipToken, useTokenMeta } 
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { pushHistory, type HistoryEntry, type SetStored, type Stored } from './storage'
 
+import { PREVIEW_ADDRESS, PREVIEW_RECIPIENT, previewAmountRaw, previewCaption } from './preview'
+
 export function CcipApp({
   stored,
   setStored,
@@ -223,6 +225,9 @@ export function CcipApp({
   const recipientConfirmed =
     recipientCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6))
 
+  // The preview (ui/preview.ts): with no amount, no wallet or no recipient yet, the plan is built
+  // for one whole token and stand-ins, so the route's colour is known before the token is bought.
+  const previewing = !amountError && !!meta.data && !!pool && !!dstChain && (amountInput.trim() === '' || !wallet || !recipient)
   const plan = useCcipPlan({
     chain: srcKey,
     dstChain,
@@ -230,12 +235,13 @@ export function CcipApp({
     meta: meta.data,
     pool,
     remote: remote.data,
-    sender: wallet,
-    recipient,
-    amount,
+    sender: wallet ?? (previewing ? PREVIEW_ADDRESS : undefined),
+    recipient: recipient ?? (previewing ? PREVIEW_RECIPIENT : undefined),
+    amount: amount ?? (previewing && meta.data ? previewAmountRaw(meta.data.decimals) : undefined),
     customRpc: stored.customRpc,
   })
   const planData = plan.data
+  const isPreview = previewing && !!planData
 
   const tokenBalance = useTokenBalance(evmSrc, token, wallet)
   const nativeBalance = useNativeBalance(evmSrc, wallet)
@@ -283,6 +289,7 @@ export function CcipApp({
     hasPlan: !!planData,
     results: report.results,
     held: impossible !== undefined,
+    preview: meta.data && (isPreview || (impossible !== undefined && planData)) ? previewCaption(d, isPreview ? 'probe' : 'held', meta.data.decimals, meta.data.symbol) : undefined,
     label: ccipLabel,
     flags: token && pool && discovery.data?.crossChecked === false ? ['not_cross_checked'] : [],
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
@@ -457,7 +464,7 @@ export function CcipApp({
   const amountNote = amountError ? (
     <span className="text-danger">{amountError}</span>
   ) : planData ? (
-    <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.decimals ?? dec, { maxFraction: 6 }), symbol: sym })}</span>
+    isPreview ? undefined : <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.decimals ?? dec, { maxFraction: 6 }), symbol: sym })}</span>
   ) : undefined
   const analysing = discovery.isFetching || analysis.isFetching
 
@@ -630,6 +637,7 @@ export function CcipApp({
 
           {planData ? (
             <PanelSection title={d.ui.section_quote}>
+              {isPreview ? <p className="pb-1 text-xs text-muted">{fmt(d.step3.previewQuote, { amount: `${formatAmount(previewAmountRaw(dec), dec)} ${sym}` })}</p> : null}
               <Row label={d.step3.sending}>
                 <b className="tnum">{formatAmount(planData.amount, planData.decimals)} {sym}</b>
               </Row>

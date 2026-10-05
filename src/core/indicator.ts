@@ -39,7 +39,17 @@ export type Indicator = {
   reasons: IndicatorReason[]
   /** The one line printed without a hover. Present exactly when the level is red. */
   headline: IndicatorReason | undefined
+  /** The route was assessed without the funds to send: see IndicatorInput.preview. */
+  preview: boolean
 }
+
+/**
+ * Reads that wait for FUNDS rather than for a provider: the balance, the allowance, the exact
+ * simulation and the self-check behind it. In a preview they are not "still checking" — they
+ * will not happen until the tokens are there — so they neither hold the colour at grey nor
+ * count as pending.
+ */
+const FUNDS_PENDING: ReadonlySet<string> = new Set(['balance_unknown', 'native_balance_unknown', 'allowance_unknown', 'simulation_missing', 'selfcheck_missing'])
 
 /**
  * The guard notes that are RED: the money would go to the wrong place, or the far side is not what
@@ -127,16 +137,26 @@ export type IndicatorInput = {
   /** LayerZero V2: only one party attests to messages on this route. */
   dvnWeak?: boolean
   dvnWeakText?: string
+  /**
+   * The assessment is a PREVIEW: the plan was built for a probe amount, a placeholder sender, or
+   * the transfer is held by something the route cannot answer for (no balance, no wallet, wrong
+   * chain). Everything that does not need the funds — peers, DVNs, the eight checks, the contract's
+   * fee, the quote — is judged as usual; the exact simulation is not, and that is said as a yellow
+   * reason (this text), so a preview is never green. A person deciding whether to BUY the token can
+   * see red before holding any of it.
+   */
+  preview?: string | undefined
 }
 
 const RANK: Record<ReasonLevel, number> = { red: 0, yellow: 1, info: 2 }
 
 export function assessIndicator(i: IndicatorInput): Indicator {
-  if (!i.hasDestination) return { level: 'none', reasons: [], headline: undefined }
+  const preview = i.preview !== undefined
+  if (!i.hasDestination) return { level: 'none', reasons: [], headline: undefined, preview: false }
   if (!i.hasPlan) {
-    if (!i.planError) return { level: 'none', reasons: [], headline: undefined }
+    if (!i.planError) return { level: 'none', reasons: [], headline: undefined, preview: false }
     const reason: IndicatorReason = { level: 'red', code: 'quote_failed', text: i.planError }
-    return { level: 'red', reasons: [reason], headline: reason }
+    return { level: 'red', reasons: [reason], headline: reason, preview }
   }
 
   const reasons: IndicatorReason[] = []
@@ -146,7 +166,7 @@ export function assessIndicator(i: IndicatorInput): Indicator {
     if (r.ok) continue
     if (RISK_CODES.has(r.code)) continue
     if (isPendingCode(r.code)) {
-      pending = true
+      if (!(preview && FUNDS_PENDING.has(r.code))) pending = true
       continue
     }
     if (!isNoteCode(r.code)) continue // a block is said under the button, not here
@@ -170,8 +190,12 @@ export function assessIndicator(i: IndicatorInput): Indicator {
 
   for (const f of i.flags) reasons.push({ level: flagLevel(f), code: `flag_${f}`, text: i.flagLabel(f) })
 
+  // A preview says so, in yellow: the one thing it could not do is the exact simulation.
+  if (preview) reasons.push({ level: 'yellow', code: 'preview_unsimulated', text: i.preview! })
+
   reasons.sort((a, b) => RANK[a.level] - RANK[b.level])
   const headline = reasons.find((r) => r.level === 'red')
-  const level: IndicatorLevel = headline ? 'red' : pending ? (i.held ? 'none' : 'pending') : reasons.some((r) => r.level === 'yellow') ? 'yellow' : 'green'
-  return { level, reasons, headline }
+  const held = i.held && !preview
+  const level: IndicatorLevel = headline ? 'red' : pending ? (held ? 'none' : 'pending') : reasons.some((r) => r.level === 'yellow') ? 'yellow' : 'green'
+  return { level, reasons, headline, preview }
 }

@@ -40,6 +40,7 @@ import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, setHistoryStatus, type HistoryEntry, type SetStored, type Stored } from './storage'
 import { guardLabel } from './guardLabel'
+import { PREVIEW_ADDRESS, PREVIEW_AMOUNT_INPUT, PREVIEW_RECIPIENT, previewAmountRaw, previewCaption } from './preview'
 import { issuerFee } from '@/core/oftFee'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
@@ -448,14 +449,21 @@ export function BridgeApp({
 
   const planAmount = amountError || (dstVm === 'svm' && !svmOptions) ? '' : dest.amountInput
   const planOptions = dstVm === 'svm' ? (svmOptions?.extraOptions ?? '0x') : dest.extraOptions
+  // The preview (ui/preview.ts): with no amount, no wallet or no recipient yet, the plan is built
+  // for a probe amount and stand-ins, so the route's colour is known before the token is bought.
+  // A Solana source needs its own wallet to quote; a Solana destination needs a real recipient.
+  const noAmount = dest.amountInput.trim() === ''
+  const previewing =
+    !amountError && !!info && dest.dstEid !== undefined && (svmSource ? !!svmWallet.address && noAmount : noAmount || !wallet || (!recipient && dstVm === 'evm'))
+  const previewAmount = previewing && noAmount ? PREVIEW_AMOUNT_INPUT : planAmount
   const evmPlan = usePlan({
     info: info?.vm === 'evm' ? info : undefined,
     src: evmSrc,
     dstEid: dest.dstEid,
     // For Solana, wait until the options are known: the quoted SendParam must be the one we send.
-    amountInput: planAmount,
-    sender: wallet,
-    recipient,
+    amountInput: previewAmount,
+    sender: wallet ?? (previewing ? PREVIEW_ADDRESS : undefined),
+    recipient: recipient ?? (previewing && dstVm === 'evm' ? PREVIEW_RECIPIENT : undefined),
     slippageBps: dest.slippageBps,
     feeBufferBps: dest.feeBufferBps,
     extraOptions: planOptions,
@@ -465,7 +473,7 @@ export function BridgeApp({
     ctx: svmCtx.data,
     info: info?.vm === 'svm' ? info : undefined,
     dstEid: dest.dstEid,
-    amountInput: planAmount,
+    amountInput: previewAmount,
     sender: svmWallet.address,
     recipient,
     slippageBps: dest.slippageBps,
@@ -474,6 +482,8 @@ export function BridgeApp({
   })
   const planData = svmSource ? svmPlan.data : evmPlan.data
   const planError = svmSource ? (svmPlan.error ?? svmCtx.error) : evmPlan.error
+  /** The plan in hand was built for the probe amount or a stand-in: numbers to look at, not to send. */
+  const isPreview = previewing && !!planData
 
   const evmTokenBalance = useTokenBalance(evmSrc, info?.vm === 'evm' ? info.token : undefined, wallet)
   const svmTokenBalance = useSvmTokenBalance(info?.vm === 'svm' ? info : undefined, svmWallet.address, stored.customRpc['solana'])
@@ -563,6 +573,8 @@ export function BridgeApp({
     planError: planError ? describeError(d, planError) : undefined,
     results: report.results,
     held: impossible !== undefined,
+    // Judged without the funds: for a probe amount, or for a real amount the wallet cannot send yet.
+    preview: info && (isPreview || (impossible !== undefined && planData)) ? previewCaption(d, isPreview ? 'probe' : 'held', info.decimals, info.symbol) : undefined,
     label: (c) => guardLabel(d.guard, c, feeCtx),
     flags: report.warnings,
     flagLabel: (f) => d.card[`flag_${f}` as keyof typeof d.card] ?? f,
@@ -760,7 +772,7 @@ export function BridgeApp({
     <span className="text-warn">
       {d.step2.dustTrimmed} <span className="mono">{formatAmount(planData.amounts.dustTrimmed, info.decimals)}</span> {info.symbol}
     </span>
-  ) : planData && info ? (
+  ) : planData && info && !isPreview ? (
     <span className="tnum">{fmt(d.ui.receiveAtLeast, { amount: formatAmount(planData.amounts.minAmountLD, info.decimals, { maxFraction: 6 }), symbol: info.symbol })}</span>
   ) : undefined
 
@@ -920,7 +932,7 @@ export function BridgeApp({
                 <ContractFacts chain={src} info={info} />
               </PanelSection>
               <PanelSection title={d.ui.section_quote}>
-                <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat />
+                <Details src={src} info={info} plan={planData} state={dest} onChange={setDest} svmOptions={svmOptions} svmInfo={svmDestInfo} flat previewText={isPreview ? fmt(d.step3.previewQuote, { amount: `${formatAmount(previewAmountRaw(info.decimals), info.decimals)} ${info.symbol}` }) : undefined} />
               </PanelSection>
               <PanelFold title={d.indicator.details}>
                 <IndicatorReasons indicator={indicator} />

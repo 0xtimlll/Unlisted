@@ -15,6 +15,7 @@ import { formatAmount } from '@/core/amounts'
 import { assessIndicator } from '@/core/indicator'
 import { classifyFee, formatBps, issuerFee } from '@/core/oftFee'
 import { guardLabel, type FeeContext } from './guardLabel'
+import { PREVIEW_ADDRESS, PREVIEW_AMOUNT_INPUT, PREVIEW_RECIPIENT, previewAmountRaw, previewCaption } from './preview'
 import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
 import { approveBusy } from '@/core/approveFlow'
@@ -135,17 +136,21 @@ export function BridgeV1({
   // the simulation does not depend on the adapter params it informs, and the risk query's key is
   // the route and the amount, neither of which this changes.
   const [dstGasEstimate, setDstGasEstimate] = useState<bigint | undefined>(undefined)
+  // The preview (ui/preview.ts): with no amount, no wallet or no recipient yet, the plan is built
+  // for one whole token and stand-ins, so the route's colour is known before the token is bought.
+  const previewing = dstKey !== undefined && (amountInput.trim() === '' || !wallet || !recipient)
   const plan = useV1Plan({
     info,
     dstKey,
-    amountInput,
-    sender: wallet,
-    recipient,
+    amountInput: previewing && amountInput.trim() === '' ? PREVIEW_AMOUNT_INPUT : amountInput,
+    sender: wallet ?? (previewing ? PREVIEW_ADDRESS : undefined),
+    recipient: recipient ?? (previewing ? PREVIEW_RECIPIENT : undefined),
     slippageBps,
     feeBufferBps,
     dstGasEstimate,
   })
   const planData = plan.data
+  const isPreview = previewing && !!planData
 
   const tokenBalance = useTokenBalance(src, info.token, wallet)
   const nativeBalance = useNativeBalance(src, wallet)
@@ -216,6 +221,7 @@ export function BridgeV1({
     hasPlan: !!planData,
     results: report.results,
     held: impossible !== undefined,
+    preview: isPreview || (impossible !== undefined && planData) ? previewCaption(d, isPreview ? 'probe' : 'held', info.decimals, info.symbol) : undefined,
     label: (c) => guardLabel(d.v1Guard as Record<string, string>, c, feeCtx),
     flags: report.warnings,
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
@@ -490,6 +496,7 @@ export function BridgeV1({
         {plan.error ? <Alert kind="error">{shortError(plan.error)}</Alert> : null}
         {planData ? (
           <PanelSection title={d.ui.section_quote}>
+            {isPreview ? <p className="pb-1 text-xs text-muted">{fmt(d.step3.previewQuote, { amount: `${formatAmount(previewAmountRaw(info.decimals), info.decimals)} ${info.symbol}` })}</p> : null}
             <Row label={d.v1.sends} mono>
               {formatAmount(planData.amounts.amountLD, info.decimals, { maxFraction: 8 })} {info.symbol}
             </Row>

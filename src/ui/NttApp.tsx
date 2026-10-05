@@ -44,6 +44,8 @@ import { useAnalysis } from './useAnalysis'
 import { nttDestinations, useNttCheck, useNttDiscovery, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
 import { pushHistory, type HistoryEntry, type SetStored, type Stored } from './storage'
 
+import { PREVIEW_ADDRESS, PREVIEW_RECIPIENT, previewAmountRaw, previewCaption } from './preview'
+
 export function NttApp({
   stored,
   setStored,
@@ -227,8 +229,18 @@ export function NttApp({
   const recipientConfirmed =
     recipientCustom && recipient !== undefined && (bookConfirms(bookVerdict) || confirmsTail(recipient, confirmLast6))
 
-  const plan = useNttPlan({ verification: verification.data, sender: wallet, recipient, amountRaw, customRpc: stored.customRpc })
+  // The preview (ui/preview.ts): with no amount, no wallet or no recipient yet, the plan is built
+  // for one whole token and stand-ins, so the route's colour is known before the token is bought.
+  const previewing = !amountError && !!verified && !!dstChain && (amountInput.trim() === '' || !wallet || !recipient)
+  const plan = useNttPlan({
+    verification: verification.data,
+    sender: wallet ?? (previewing ? PREVIEW_ADDRESS : undefined),
+    recipient: recipient ?? (previewing ? PREVIEW_RECIPIENT : undefined),
+    amountRaw: amountRaw ?? (previewing && verified ? previewAmountRaw(verified.tokenDecimals) : undefined),
+    customRpc: stored.customRpc,
+  })
   const planData = plan.data
+  const isPreview = previewing && !!planData
 
   const tokenBalance = useTokenBalance(evmSrc, verified?.token, wallet)
   const nativeBalance = useNativeBalance(evmSrc, wallet)
@@ -277,6 +289,7 @@ export function NttApp({
     hasPlan: !!planData,
     results: report.results,
     held: impossible !== undefined,
+    preview: verified && (isPreview || (impossible !== undefined && planData)) ? previewCaption(d, isPreview ? 'probe' : 'held', verified.tokenDecimals, verified.tokenSymbol) : undefined,
     label: nttLabel,
     flags: verification.data?.ok && verification.data.crossChecked === false ? ['not_cross_checked'] : [],
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
@@ -453,7 +466,7 @@ export function NttApp({
   ) : planData && verified && planData.dust > 0n ? (
     <span className="text-warn">{fmt(d.ntt.dust, { amount: formatAmount(planData.dust, planData.trim.step > 1n ? verified.tokenDecimals : 0), symbol: verified.tokenSymbol })}</span>
   ) : planData && verified ? (
-    <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.tokenDecimals, { maxFraction: 6 }), symbol: verified.tokenSymbol })}</span>
+    isPreview ? undefined : <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.tokenDecimals, { maxFraction: 6 }), symbol: verified.tokenSymbol })}</span>
   ) : undefined
   const analysing = discovery.isFetching || tokenList.isLoading || analysis.isFetching
 
@@ -610,6 +623,7 @@ export function NttApp({
           </PanelSection>
           {planData ? (
             <PanelSection title={d.ui.section_quote}>
+              {isPreview ? <p className="pb-1 text-xs text-muted">{fmt(d.step3.previewQuote, { amount: `${formatAmount(previewAmountRaw(verified.tokenDecimals), verified.tokenDecimals)} ${verified.tokenSymbol}` })}</p> : null}
               <Row label={d.step3.sending}>
                 <b className="tnum">{formatAmount(planData.amount, verified.tokenDecimals)} {verified.tokenSymbol}</b>
               </Row>
