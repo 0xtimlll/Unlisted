@@ -56,6 +56,9 @@ const RED_NOTES: ReadonlySet<string> = new Set([
   // NTT: nothing on the source chain vouches for the manager (at most the destination does, and we
   // only know the destination through the manager's own peer).
   'ntt_anchor_missing',
+  // The contract keeps more than 3% of the amount (core/oftFee.ts): said aloud, decided by the person.
+  'oft_fee_high',
+  'oft_fee_extreme',
 ])
 
 /** Which colour a guard note gives the indicator. */
@@ -94,6 +97,12 @@ export type IndicatorInput = {
   hasDestination: boolean
   /** Nothing to assess until there is a plan (an amount, a recipient, a quote). */
   hasPlan: boolean
+  /**
+   * The quote failed (the contract refused `quoteSend`, the RPC did not answer): there is no plan,
+   * but that is a finding about this route, not an input still missing — said in red, with the
+   * decoded reason, instead of a grey "enter an amount".
+   */
+  planError?: string | undefined
   /** Every guard result of the tab, ok or not; the fold picks what it needs. */
   results: readonly ({ ok: true } | { ok: false; code: string; detail?: string })[]
   /** The tab's own guard dictionary, since each protocol names its codes separately. */
@@ -123,7 +132,12 @@ export type IndicatorInput = {
 const RANK: Record<ReasonLevel, number> = { red: 0, yellow: 1, info: 2 }
 
 export function assessIndicator(i: IndicatorInput): Indicator {
-  if (!i.hasDestination || !i.hasPlan) return { level: 'none', reasons: [], headline: undefined }
+  if (!i.hasDestination) return { level: 'none', reasons: [], headline: undefined }
+  if (!i.hasPlan) {
+    if (!i.planError) return { level: 'none', reasons: [], headline: undefined }
+    const reason: IndicatorReason = { level: 'red', code: 'quote_failed', text: i.planError }
+    return { level: 'red', reasons: [reason], headline: reason }
+  }
 
   const reasons: IndicatorReason[] = []
   let pending = false

@@ -7,6 +7,7 @@
 import { verdictOf } from './severity'
 import { type Address, type Hex } from 'viem'
 import { applyBps, trimDust } from './amounts'
+import { classifyFee, formatBps, issuerFee } from './oftFee'
 import { aboveFeeCeiling, byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions, inspectEnforcedOptions, receiveTotals, type EnforcedRisk } from './options'
@@ -43,6 +44,10 @@ export type GuardCode =
   | 'insufficient_native'
   | 'received_lt_min'
   | 'amount_out_of_limits'
+  | 'oft_fee_notice'
+  | 'oft_fee_high'
+  | 'oft_fee_extreme'
+  | 'oft_fee_unknown'
   | 'allowance_unknown'
   | 'needs_approve'
   | 'approve_amount_mismatch'
@@ -253,18 +258,22 @@ export function g5Amount(i: GuardInput): GuardResult {
   return ok(5)
 }
 
-// 6. minAmountLD <= amountLD; both multiples of conversionRate
+// 6. the minimum is at most 5% below what the contract quotes it delivers; everything aligned to the rate
 export function g6MinAmount(i: GuardInput): GuardResult {
   if (!i.plan) return fail(6, 'plan_missing')
   if (!i.info) return fail(6, 'oft_missing')
   const { amountLD, minAmountLD } = i.plan.amounts
-  if (minAmountLD > amountLD) return fail(6, 'min_gt_amount')
+  const { quote } = i.plan
+  // The minimum is derived from the quoted receive (plan.ts), which an issuer fee makes smaller
+  // than the sent amount and a bonus makes larger; with no quote it is derived from the amount.
+  const delivered = quote.unavailable ? amountLD : quote.amountReceivedLD
+  if (minAmountLD > (delivered > amountLD ? delivered : amountLD)) return fail(6, 'min_gt_amount')
   const rate = i.info.conversionRate
   if (rate <= 0n) return fail(6, 'not_multiple_of_rate', 'rate <= 0')
   // The plan's minimum is rounded DOWN to the shared-decimals step (plan.ts), so the floor it is
   // held against has to be rounded the same way: otherwise a legitimate 5% at an amount that is
   // not a multiple of the step would read as "more than 5%" and hold the button.
-  if (minAmountLD < trimDust(applyBps(amountLD, 10000 - MAX_SLIPPAGE_BPS), rate)) return fail(6, 'slippage_too_high')
+  if (minAmountLD < trimDust(applyBps(delivered, 10000 - MAX_SLIPPAGE_BPS), rate)) return fail(6, 'slippage_too_high')
   if (amountLD % rate !== 0n) return fail(6, 'not_multiple_of_rate', 'amountLD')
   if (minAmountLD % rate !== 0n) return fail(6, 'not_multiple_of_rate', 'minAmountLD')
   return ok(6)
@@ -295,17 +304,31 @@ export function g8Native(i: GuardInput): GuardResult {
   return ok(8)
 }
 
-// 9. quoteOFT.amountReceivedLD >= minAmountLD; amount within OFT limits
+// 9. the contract's quote: amount within its limits, receive not below the minimum, and the issuer's
+//    fee said at its size. The fee notes never hold the button (CLAUDE.md rule 2): the contract keeps
+//    what it keeps, the indicator shows it, the person decides.
 export function g9Quote(i: GuardInput): GuardResult {
   if (!i.plan) return fail(9, 'plan_missing')
   const { quote, amounts } = i.plan
+  if (quote.unavailable) return fail(9, 'oft_fee_unknown', quote.unavailable)
   if (amounts.amountLD < quote.limitMinLD || amounts.amountLD > quote.limitMaxLD) {
     return fail(9, 'amount_out_of_limits', `[${quote.limitMinLD}, ${quote.limitMaxLD}]`)
   }
   if (quote.amountReceivedLD < amounts.minAmountLD) {
     return fail(9, 'received_lt_min', `${quote.amountReceivedLD} < ${amounts.minAmountLD}`)
   }
-  return ok(9)
+  const fee = issuerFee(quote)
+  const detail = `${fee.feeLD} (${formatBps(fee.feeBps)})`
+  switch (classifyFee(fee.feeBps)) {
+    case 'extreme':
+      return fail(9, 'oft_fee_extreme', detail)
+    case 'high':
+      return fail(9, 'oft_fee_high', detail)
+    case 'notice':
+      return fail(9, 'oft_fee_notice', detail)
+    default:
+      return ok(9)
+  }
 }
 
 // 10. if approvalRequired: allowance >= amountLD (else approve exactly amountLD)

@@ -14,7 +14,8 @@ import type { Recipient } from './recipient'
 import type { SvmSendPlan } from './svm/plan'
 import type { OftInfo } from './types'
 
-export const DEFAULT_SLIPPAGE_BPS = 0
+/** Half a percent below what the contract quotes it will deliver (quoteOFT), see buildSendPlan. */
+export const DEFAULT_SLIPPAGE_BPS = 50
 export const DEFAULT_FEE_BUFFER_BPS = 4000 // +40%
 /** Same cap as guards.MAX_SLIPPAGE_BPS (kept here to avoid an import cycle). */
 export const MAX_SLIPPAGE_BPS_PLAN = 500
@@ -43,6 +44,13 @@ export type SendQuote = {
   feeDetails: { amountLD: bigint; description: string }[]
   /** quoteSend().nativeFee, before buffer. */
   nativeFee: bigint
+  /**
+   * Set when `quoteOFT` could not be read (reverted, or not implemented by a custom contract):
+   * the amounts above are then the NOMINAL ones (received = sent), not the contract's word, and
+   * the minimum was taken from the sent amount. Guard 9 says so (`oft_fee_unknown`), and no
+   * screen may show the receive as known while this is set. The value is the decoded reason.
+   */
+  unavailable?: string
 }
 
 export type EvmSendPlan = {
@@ -192,37 +200,53 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
   if (p.recipient.vm !== dst.vm) throw new PlanError('recipient_vm_mismatch', `${p.recipient.vm} recipient for a ${dst.vm} destination`)
   if (slippageBps > MAX_SLIPPAGE_BPS_PLAN) throw new PlanError('slippage_too_high', `${slippageBps} bps > ${MAX_SLIPPAGE_BPS_PLAN}`)
 
-  const amounts = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
-  if (amounts.amountLD <= 0n) throw new PlanError('amount_zero')
-
+  const provisional = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
+  if (provisional.amountLD <= 0n) throw new PlanError('amount_zero')
+  const rate = p.info.conversionRate
   const to = p.recipient.to
-  const sendParam = buildSendParam({
-    dstEid: p.dstEid,
-    to,
-    amountLD: amounts.amountLD,
-    minAmountLD: amounts.minAmountLD,
-    extraOptions,
-  })
+  const param = (minAmountLD: bigint) => buildSendParam({ dstEid: p.dstEid, to, amountLD: provisional.amountLD, minAmountLD, extraOptions })
 
-  let oftQuote, feeQuote
+  // 1. What the contract will actually deliver. Asked with no minimum at all, so an issuer fee in
+  //    `_debitView` cannot turn the question into a SlippageExceeded revert — the fee is the
+  //    answer we are after, not an error to hide. A contract that cannot answer (reverts, has no
+  //    quoteOFT) leaves the receive unknown; that is said (`unavailable`), never assumed to be zero.
+  let quote: Omit<SendQuote, 'nativeFee'>
   try {
-    ;[oftQuote, feeQuote] = await Promise.all([
-      client.readContract({ address: p.info.oft, abi: oftAbi, functionName: 'quoteOFT', args: [sendParam] }),
-      client.readContract({ address: p.info.oft, abi: oftAbi, functionName: 'quoteSend', args: [sendParam, false] }),
-    ])
+    const [limit, feeDetails, receipt] = await client.readContract({ address: p.info.oft, abi: oftAbi, functionName: 'quoteOFT', args: [param(0n)] })
+    quote = {
+      amountSentLD: receipt.amountSentLD,
+      amountReceivedLD: receipt.amountReceivedLD,
+      limitMinLD: limit.minAmountLD,
+      limitMaxLD: limit.maxAmountLD,
+      feeDetails: feeDetails.map((d) => ({ amountLD: d.feeAmountLD, description: sanitizeLabel(d.description, 64) })),
+    }
+  } catch (e) {
+    quote = {
+      amountSentLD: provisional.amountLD,
+      amountReceivedLD: provisional.amountLD,
+      limitMinLD: 0n,
+      limitMaxLD: 2n ** 256n - 1n,
+      feeDetails: [],
+      unavailable: sanitizeLabel(e instanceof Error ? e.message.split('\n')[0]! : String(e), 160),
+    }
+  }
+
+  // 2. The minimum is the slippage below what the contract said it delivers — so an issuer fee is
+  //    accepted as quoted and shown, while a worse delivery than quoted still reverts. With no
+  //    quote to lean on, the minimum stays the slippage below the sent amount (the old rule).
+  const amounts: AmountBreakdown = quote.unavailable
+    ? provisional
+    : { ...provisional, minAmountLD: trimDust(applyBps(quote.amountReceivedLD, 10000 - slippageBps), rate) }
+  const sendParam = param(amounts.minAmountLD)
+
+  // 3. The LayerZero fee for exactly the SendParam that will be signed — the same minimum included.
+  let feeQuote
+  try {
+    feeQuote = await client.readContract({ address: p.info.oft, abi: oftAbi, functionName: 'quoteSend', args: [sendParam, false] })
   } catch (e) {
     throw new PlanError('quote_failed', e instanceof Error ? e.message : String(e))
   }
-  const [limit, feeDetails, receipt] = oftQuote
-
-  const quote: SendQuote = {
-    amountSentLD: receipt.amountSentLD,
-    amountReceivedLD: receipt.amountReceivedLD,
-    limitMinLD: limit.minAmountLD,
-    limitMaxLD: limit.maxAmountLD,
-    feeDetails: feeDetails.map((d) => ({ amountLD: d.feeAmountLD, description: sanitizeLabel(d.description, 64) })),
-    nativeFee: feeQuote.nativeFee,
-  }
+  const fullQuote: SendQuote = { ...quote, nativeFee: feeQuote.nativeFee }
 
   return {
     vm: 'evm',
@@ -237,8 +261,8 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
     slippageBps,
     feeBufferBps,
     extraOptions,
-    quote,
-    value: computeValue(quote.nativeFee, feeBufferBps, p.src.feeStepWei),
+    quote: fullQuote,
+    value: computeValue(fullQuote.nativeFee, feeBufferBps, p.src.feeStepWei),
   }
 }
 

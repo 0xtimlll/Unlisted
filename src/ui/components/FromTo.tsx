@@ -180,7 +180,7 @@ export function AmountPanel({
         <div className="flex shrink-0 items-center gap-2">
           {token && balance !== undefined ? (
             <>
-              <span className="tnum text-muted">{fmt(d.ui.available, { amount: formatAmount(balance, token.decimals, { maxFraction: 6 }), symbol })}</span>
+              <span className="tnum text-muted">{fmt(d.ui.available, { amount: formatAmount(balance, token.decimals), symbol })}</span>
               <Button variant="pill" className="h-6" onClick={onMax} disabled={disabled}>
                 {d.ui.max}
               </Button>

@@ -1,5 +1,5 @@
 /**
- * §5.2: the SendParam handed to quoteOFT/quoteSend must be BYTE-IDENTICAL to the one that goes
+ * §5.2: the SendParam handed to quoteSend must be BYTE-IDENTICAL to the one that goes
  * into send(). A fake client records the quoted struct; assembleSendArgs(plan) rebuilds the sent
  * one; both are ABI-encoded and compared.
  */
@@ -65,9 +65,15 @@ describe('quoted SendParam === sent SendParam', () => {
       recipient: c.recipient,
       ...(c.extraOptions ? { extraOptions: c.extraOptions } : {}),
     })
-    expect(quoted).toHaveLength(2) // quoteOFT + quoteSend
+    expect(quoted).toHaveLength(2) // quoteOFT, then quoteSend
     const [sent] = assembleSendArgs(plan)
-    for (const q of quoted) expect(enc(q)).toBe(enc(sent))
+    // quoteOFT is asked with NO minimum, on purpose: it is how the contract's own fee is read instead
+    // of turning into a SlippageExceeded revert (plan.ts). Everything else about it is the sent param.
+    const [oftQ, sendQ] = quoted as [SendParam, SendParam]
+    expect(oftQ.minAmountLD).toBe(0n)
+    expect(enc({ ...oftQ, minAmountLD: sent.minAmountLD })).toBe(enc(sent))
+    // The fee was quoted for exactly the SendParam that is signed — the minimum included.
+    expect(enc(sendQ)).toBe(enc(sent))
     expect(sent.to).toBe(c.recipient.to)
     expect(sent.extraOptions).toBe(c.extraOptions ?? '0x')
     expect(plan.recipientVm).toBe(c.recipient.vm)

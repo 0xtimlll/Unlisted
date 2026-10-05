@@ -33,6 +33,7 @@ import {
   type GuardResult,
 } from '@/core/guards'
 import { computeAmounts } from '@/core/plan'
+import { applyBps, trimDust } from '@/core/amounts'
 import { assembleSendArgs, encodeSendCalldata } from '@/core/plan'
 import {
   ENDPOINT_HYPER,
@@ -262,12 +263,75 @@ describe('6. minAmountLD <= amountLD, both multiples of rate', () => {
   })
 })
 
+describe('6c. the slippage floor is measured from what the contract quotes it delivers', () => {
+  it('an 84% issuer fee with 0.5% slippage below the quoted receive passes', () => {
+    const p = treadPlan()
+    const received = (p.amounts.amountLD * 16n) / 100n
+    p.quote = { ...p.quote, amountReceivedLD: received }
+    p.amounts = { ...p.amounts, minAmountLD: trimDust(applyBps(received, 9950), treadOftInfo().conversionRate) }
+    expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('ok')
+  })
+  it('a minimum more than 5% under the quoted receive is still refused', () => {
+    const p = treadPlan()
+    const received = (p.amounts.amountLD * 16n) / 100n
+    p.quote = { ...p.quote, amountReceivedLD: received }
+    p.amounts = { ...p.amounts, minAmountLD: trimDust(applyBps(received, 9400), treadOftInfo().conversionRate) }
+    expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('slippage_too_high')
+  })
+  it('a bonus (received above sent) does not read as "minimum exceeds amount"', () => {
+    const p = treadPlan()
+    const received = (p.amounts.amountLD * 110n) / 100n
+    p.quote = { ...p.quote, amountReceivedLD: received }
+    p.amounts = { ...p.amounts, minAmountLD: trimDust(applyBps(received, 9950), treadOftInfo().conversionRate) }
+    expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('ok')
+  })
+  it('with no quote the floor is measured from the amount, as before', () => {
+    const p = treadPlan()
+    p.quote = { ...p.quote, unavailable: 'execution reverted' }
+    expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('ok')
+  })
+})
+
+describe('9b. the issuer fee is said at its size and never holds the button', () => {
+  const withFee = (bps: bigint) => {
+    const p = treadPlan()
+    const received = p.amounts.amountLD - (p.amounts.amountLD * bps) / 10_000n
+    p.quote = { ...p.quote, amountReceivedLD: received, feeDetails: [{ amountLD: received - p.amounts.amountLD, description: 'Bridge fee' }] }
+    p.amounts = { ...p.amounts, minAmountLD: trimDust(applyBps(received, 9950), treadOftInfo().conversionRate) }
+    return p
+  }
+  it('below 0.5%: nothing to say', () => {
+    expect(code(g9Quote(goodInput({ plan: withFee(49n) })))).toBe('ok')
+  })
+  it('0.5% to 3%: a notice', () => {
+    expect(code(g9Quote(goodInput({ plan: withFee(50n) })))).toBe('oft_fee_notice')
+    expect(code(g9Quote(goodInput({ plan: withFee(300n) })))).toBe('oft_fee_notice')
+  })
+  it('above 3%: high; above 20%: extreme — both notes, so canSend is untouched', () => {
+    expect(code(g9Quote(goodInput({ plan: withFee(301n) })))).toBe('oft_fee_high')
+    const r = g9Quote(goodInput({ plan: withFee(8400n) }))
+    expect(code(r)).toBe('oft_fee_extreme')
+    expect(!r.ok && r.detail).toMatch(/84%/)
+    const rep = runGuards(goodInput({ plan: withFee(8400n) }))
+    expect(rep.canSend).toBe(true)
+    expect(rep.blocks).toEqual([])
+    expect(rep.notes.map((n) => !n.ok && n.code)).toContain('oft_fee_extreme')
+  })
+  it('a quote the contract would not give is said, not assumed to be free', () => {
+    const p = treadPlan()
+    p.quote = { ...p.quote, unavailable: 'execution reverted' }
+    expect(code(g9Quote(goodInput({ plan: p })))).toBe('oft_fee_unknown')
+    expect(runGuards(goodInput({ plan: p })).canSend).toBe(true)
+  })
+})
+
 describe('6b. slippage cap', () => {
   it('5% passes, 5.01% fails, 100% fails', () => {
     const info = treadOftInfo()
     const mk = (bps: number) => {
       const p = treadPlan()
       p.amounts = computeAmounts('100', info.decimals, info.conversionRate, bps)
+      p.quote = quoteFor(p.amounts.amountLD)
       return p
     }
     expect(code(g6MinAmount(goodInput({ plan: mk(MAX_SLIPPAGE_BPS) })))).toBe('ok')
@@ -281,6 +345,7 @@ describe('6b. slippage cap', () => {
     for (const amount of ['1.000001', '0.000003', '123.456789']) {
       const p = treadPlan()
       p.amounts = computeAmounts(amount, info.decimals, info.conversionRate, MAX_SLIPPAGE_BPS)
+      p.quote = quoteFor(p.amounts.amountLD)
       expect(code(g6MinAmount(goodInput({ plan: p })))).toBe('ok')
     }
   })

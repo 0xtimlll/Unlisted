@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { formatAmount } from '@/core/amounts'
+import { classifyFee, formatBps, issuerFee } from '@/core/oftFee'
 import { describeOptions, receiveTotals, type OptionItem } from '@/core/options'
 import { byEid, type ChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
@@ -14,6 +15,7 @@ import type { SourceInfo } from '@/core/types'
 import { fmt, useDict } from '@/i18n'
 import { Address } from './Address'
 import type { DestinationState } from './FromTo'
+import { guardLabel, type FeeContext } from '../guardLabel'
 import { WalletIcon } from './icons'
 import { Button, Disclosure, Input, Row, Spinner } from './ui'
 
@@ -58,15 +60,18 @@ export function Details(p: {
                 <b className="tnum">{formatAmount(plan.amounts.amountLD, dec)} {sym}</b>
                 <div className="mono text-xs text-muted">amountLD {plan.amounts.amountLD.toString()}</div>
               </Row>
-              <Row label={d.step3.receiveMin}>
-                <b className="tnum">{formatAmount(plan.amounts.minAmountLD, dec)} {sym}</b>
+              <IssuerFeeRow plan={plan} dec={dec} sym={sym} />
+              <Row label={d.step3.youReceive}>
+                {plan.quote.unavailable ? (
+                  <span className="text-warn">{d.step3.receiveUnknown}</span>
+                ) : (
+                  <b className="tnum">{formatAmount(plan.quote.amountReceivedLD, dec)} {sym}</b>
+                )}
+              </Row>
+              <Row label={`${d.step3.minAfterSlippage} (${formatBps(BigInt(plan.slippageBps))})`}>
+                <span className="tnum">{formatAmount(plan.amounts.minAmountLD, dec)} {sym}</span>
                 <div className="mono text-xs text-muted">minAmountLD {plan.amounts.minAmountLD.toString()}</div>
               </Row>
-              {plan.quote.amountReceivedLD !== plan.amounts.amountLD ? (
-                <Row label={d.step3.receiveQuoted}>
-                  <span className="tnum">{formatAmount(plan.quote.amountReceivedLD, dec)} {sym}</span>
-                </Row>
-              ) : null}
               <Row label={d.step3.lzFee}>
                 <b className="tnum">{fmtNative(plan.quote.nativeFee)}</b>
                 <div className="text-xs text-muted">
@@ -111,17 +116,6 @@ export function Details(p: {
               <Row label={plan.vm === 'evm' ? d.step3.refund : d.step3.feePayer} mono>
                 <Address value={plan.sender} short />
               </Row>
-              {plan.quote.feeDetails.length > 0 ? (
-                <Row label={d.step3.feeDetails}>
-                  <ul className="mono text-xs">
-                    {plan.quote.feeDetails.map((f, i) => (
-                      <li key={i}>
-                        {formatAmount(f.amountLD, dec)} {sym} — {f.description}
-                      </li>
-                    ))}
-                  </ul>
-                </Row>
-              ) : null}
               {/*
                 * What the CONTRACT adds to every send, decoded. The Solana block below covers
                 * compute units for that destination; this row is the same thing for all of them,
@@ -211,10 +205,53 @@ function optionLine(o: OptionItem, d: ReturnType<typeof useDict>): string {
 
 
 /**
+ * The issuer's fee, read from the contract's quote: what it keeps, as a share of what is sent, in
+ * the colour of its size (core/oftFee.ts), with the contract's own labels for it underneath. The
+ * fee is the owner's setting, not a market rate — said right here, every time.
+ */
+function IssuerFeeRow({ plan, dec, sym }: { plan: SendPlan; dec: number; sym: string }) {
+  const d = useDict()
+  if (plan.quote.unavailable) {
+    return (
+      <Row label={d.step3.issuerFee}>
+        <span className="text-warn">{d.step3.issuerFeeUnknown}</span>
+        <div className="mono text-xs text-muted">{plan.quote.unavailable}</div>
+      </Row>
+    )
+  }
+  const fee = issuerFee(plan.quote)
+  const cls = classifyFee(fee.feeBps)
+  const tone = cls === 'high' || cls === 'extreme' ? 'text-danger' : cls === 'notice' ? 'text-warn' : 'text-ink'
+  const labels = plan.quote.feeDetails.filter((f) => f.amountLD !== 0n)
+  return (
+    <Row label={d.step3.issuerFee}>
+      {fee.feeLD === 0n ? (
+        <span className="tnum">{d.step3.issuerFeeNone}</span>
+      ) : (
+        <b className={`tnum ${tone}`}>
+          {fee.feeLD < 0n ? `${d.step3.issuerFeeBonus} ` : ''}
+          {formatAmount(fee.feeLD < 0n ? -fee.feeLD : fee.feeLD, dec)} {sym} ({formatBps(fee.feeBps < 0n ? -fee.feeBps : fee.feeBps)})
+        </b>
+      )}
+      {labels.length > 0 ? (
+        <ul className="mono text-xs text-muted">
+          {labels.map((f, i) => (
+            <li key={i}>
+              {f.amountLD < 0n ? '−' : '+'}{formatAmount(f.amountLD < 0n ? -f.amountLD : f.amountLD, dec)} {sym} — {f.description}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {fee.feeLD !== 0n ? <div className="text-xs text-muted">{d.step3.issuerFeeHint}</div> : null}
+    </Row>
+  )
+}
+
+/**
  * The guard list, for the details fold: passes in green, reads in flight in grey, the approve step
  * neutral, notes in amber, blocks in red. Nothing here is a control — there is nothing to tick.
  */
-export function Checks(p: { report: GuardReport; show: boolean }) {
+export function Checks(p: { report: GuardReport; show: boolean; feeCtx?: FeeContext | undefined }) {
   const d = useDict()
   const results = p.report.results
   const pending = results.filter((r) => isPending(r))
@@ -235,7 +272,7 @@ export function Checks(p: { report: GuardReport; show: boolean }) {
       </div>
       <ul className="grid gap-x-3 gap-y-0.5 text-xs">
         {results.map((r) => {
-          const label = r.ok ? okLabel(r.id, d) : d.guard[r.code]
+          const label = r.ok ? okLabel(r.id, d) : guardLabel(d, r.code, p.feeCtx)
           if (!label) return null
           const pend = isPending(r)
           const tone = r.ok ? 'text-ok' : pend ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'

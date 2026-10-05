@@ -48,6 +48,9 @@ describe('grey', () => {
   })
   it('no plan yet → none', () => {
     expect(assessIndicator(base({ hasPlan: false })).level).toBe('none')
+    const failed = assessIndicator(base({ hasPlan: false, planError: 'The contract refused to quote this transfer. (SlippageExceeded)' }))
+    expect(failed.level).toBe('red')
+    expect(failed.headline?.code).toBe('quote_failed')
   })
   it('a read in flight and nothing red known → pending', () => {
     expect(assessIndicator(base({ results: [failed('simulation_missing')] })).level).toBe('pending')
@@ -182,5 +185,17 @@ describe('what does not change the colour', () => {
     const rep = runGuards(goodInput({ info: treadOftInfo({ routes: goodInput().info!.routes }), peerBack: { status: 'mismatch', theirPeer: `0x${'0'.repeat(64)}` } }))
     expect(rep.canSend).toBe(true)
     expect(assessIndicator(base({ results: rep.results })).level).toBe('red')
+  })
+})
+
+describe('the issuer fee colours the indicator at its size, and holds nothing', () => {
+  it('a notice is yellow, high and extreme are red with the headline, unknown is yellow', () => {
+    expect(assessIndicator(base({ results: [failed('oft_fee_notice')] })).level).toBe('yellow')
+    const high = assessIndicator(base({ results: [failed('oft_fee_high')] }))
+    expect(high.level).toBe('red')
+    expect(high.headline?.code).toBe('oft_fee_high')
+    expect(assessIndicator(base({ results: [failed('oft_fee_extreme')] })).headline?.code).toBe('oft_fee_extreme')
+    expect(assessIndicator(base({ results: [failed('oft_fee_unknown')] })).level).toBe('yellow')
+    for (const c of ['oft_fee_notice', 'oft_fee_high', 'oft_fee_extreme', 'oft_fee_unknown']) expect(isBlockingCode(c), c).toBe(false)
   })
 })

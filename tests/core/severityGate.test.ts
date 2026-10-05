@@ -61,6 +61,11 @@ const DELIBERATE_NOTES = new Set([
   'no_executor_gas',
   'no_executor_options_svm',
   'ntt_anchor_missing',
+  // The issuer's fee, at any size, is information (core/oftFee.ts); so is a fee that could not be read.
+  'oft_fee_notice',
+  'oft_fee_high',
+  'oft_fee_extreme',
+  'oft_fee_unknown',
   'outbound_limit_unknown',
   'over_inbound_capacity',
   'peer_back_mismatch',

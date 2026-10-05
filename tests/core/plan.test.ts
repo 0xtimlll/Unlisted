@@ -11,7 +11,11 @@ import {
   DEFAULT_FEE_BUFFER_BPS,
   encodeSendCalldata,
 } from '@/core/plan'
-import { ETH_EID, HYPER_FEE_STEP, NATIVE_FEE, OTHER, treadPlan, WALLET } from './fixtures'
+import { ETH_EID, HYPER_FEE_STEP, NATIVE_FEE, OTHER, treadOftInfo, treadPlan, WALLET } from './fixtures'
+import { buildSendPlan, PlanError } from '@/core/plan'
+import { evmByKey } from '@/core/chains'
+import { evmRecipient } from '@/core/recipient'
+import type { ReadClient } from '@/core/client'
 
 const RATE = 10n ** 12n
 
@@ -136,5 +140,78 @@ describe('encode/decode send calldata', () => {
 describe('write whitelist', () => {
   it('is exactly approve + send', () => {
     expect([...WRITE_WHITELIST]).toEqual(['approve', 'send'])
+  })
+})
+
+describe('buildSendPlan quotes in two phases, so an issuer fee is read instead of reverting', () => {
+  type Call = { functionName: string; args: readonly unknown[] }
+  /** A contract with a fee: it delivers `received` of whatever is sent; quoteSend reverts when minAmountLD > received. */
+  function feeContract(received: (sent: bigint) => bigint, opts: { noQuoteOft?: boolean } = {}) {
+    const calls: Call[] = []
+    const client = {
+      readContract: async ({ functionName, args }: Call) => {
+        calls.push({ functionName, args })
+        const sp = args[0] as { amountLD: bigint; minAmountLD: bigint }
+        if (functionName === 'quoteOFT') {
+          if (opts.noQuoteOft) throw new Error('execution reverted')
+          const r = received(sp.amountLD)
+          return [{ minAmountLD: 0n, maxAmountLD: 2n ** 128n }, [{ feeAmountLD: r - sp.amountLD, description: 'Bridge fee' }], { amountSentLD: sp.amountLD, amountReceivedLD: r }] as const
+        }
+        if (functionName === 'quoteSend') {
+          if (sp.minAmountLD > received(sp.amountLD)) throw new Error('execution reverted: SlippageExceeded')
+          return { nativeFee: NATIVE_FEE, lzTokenFee: 0n }
+        }
+        throw new Error('unexpected ' + functionName)
+      },
+    } as unknown as ReadClient
+    return { client, calls }
+  }
+  const info = treadOftInfo({ routes: [{ eid: ETH_EID, peer: addressToBytes32(OTHER) }] })
+  const input = (over: Partial<Parameters<typeof buildSendPlan>[1]> = {}) => ({ info, src: evmByKey('hyperevm'), dstEid: ETH_EID, amountInput: '6000', sender: WALLET, recipient: evmRecipient(WALLET), ...over })
+
+  it('an 84% fee: quoteOFT is asked with no minimum, the minimum is 99.5% of the quoted receive, quoteSend gets that minimum', async () => {
+    const { client, calls } = feeContract((sent) => (sent * 16n) / 100n)
+    const plan = await buildSendPlan(client, input({ slippageBps: 50 }))
+    expect(calls.map((c) => c.functionName)).toEqual(['quoteOFT', 'quoteSend'])
+    expect((calls[0]!.args[0] as { minAmountLD: bigint }).minAmountLD).toBe(0n)
+    const sent = plan.amounts.amountLD
+    const received = (sent * 16n) / 100n
+    expect(plan.quote.amountReceivedLD).toBe(received)
+    expect(plan.amounts.minAmountLD).toBe((received * 9950n) / 10_000n)
+    expect((calls[1]!.args[0] as { minAmountLD: bigint }).minAmountLD).toBe(plan.amounts.minAmountLD)
+    // What is signed is what was quoted: the same minimum goes into send().
+    expect(assembleSendArgs(plan)[0].minAmountLD).toBe(plan.amounts.minAmountLD)
+    expect(plan.quote.unavailable).toBeUndefined()
+    expect(plan.quote.feeDetails[0]?.description).toBe('Bridge fee')
+  })
+
+  it('no fee: the minimum is the slippage below the amount, exactly as before', async () => {
+    const { client } = feeContract((sent) => sent)
+    const plan = await buildSendPlan(client, input({ slippageBps: 50 }))
+    expect(plan.quote.amountReceivedLD).toBe(plan.amounts.amountLD)
+    expect(plan.amounts.minAmountLD).toBe((plan.amounts.amountLD * 9950n) / 10_000n)
+  })
+
+  it('a contract with no quoteOFT: the receive is marked unknown, not assumed, and quoteSend is still asked', async () => {
+    const { client, calls } = feeContract((sent) => sent, { noQuoteOft: true })
+    const plan = await buildSendPlan(client, input({ slippageBps: 50 }))
+    expect(plan.quote.unavailable).toMatch(/reverted/)
+    expect(plan.quote.amountReceivedLD).toBe(plan.amounts.amountLD)
+    expect(plan.amounts.minAmountLD).toBe((plan.amounts.amountLD * 9950n) / 10_000n)
+    expect(calls.map((c) => c.functionName)).toEqual(['quoteOFT', 'quoteSend'])
+  })
+
+  it('quoteSend refusing the final SendParam is still a plan error', async () => {
+    const { client } = feeContract((sent) => sent, { noQuoteOft: true })
+    // With no quote the minimum is 100% of the amount at slippage 0; a contract that actually keeps a
+    // fee then refuses — which is the honest answer when it would not say how much it keeps.
+    const feeButNoQuote = { readContract: async ({ functionName, args }: Call) => {
+      if (functionName === 'quoteOFT') throw new Error('execution reverted')
+      const sp = args[0] as { amountLD: bigint; minAmountLD: bigint }
+      if (sp.minAmountLD > sp.amountLD / 2n) throw new Error('execution reverted: SlippageExceeded')
+      return { nativeFee: NATIVE_FEE, lzTokenFee: 0n }
+    } } as unknown as ReadClient
+    void client
+    await expect(buildSendPlan(feeButNoQuote, input({ slippageBps: 0 }))).rejects.toBeInstanceOf(PlanError)
   })
 })

@@ -39,6 +39,7 @@ import { VerdictCard } from './components/Verdict'
 import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, setHistoryStatus, type HistoryEntry, type SetStored, type Stored } from './storage'
+import { guardLabel } from './guardLabel'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
@@ -553,12 +554,15 @@ export function BridgeApp({
   const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
 
   // The route indicator: one colour from everything above. It decides nothing (core/indicator.ts).
+  const feeCtx = info ? { plan: planData, decimals: info.decimals, symbol: info.symbol } : undefined
   const indicator = assessIndicator({
     hasDestination: dest.dstEid !== undefined,
     hasPlan: !!planData,
+    // A failed quote is a finding about the route (red, with the decoded reason), not a missing input.
+    planError: planError ? describeError(d, planError) : undefined,
     results: report.results,
     held: impossible !== undefined,
-    label: (c) => d.guard[c as keyof typeof d.guard] ?? c,
+    label: (c) => guardLabel(d, c, feeCtx),
     flags: report.warnings,
     flagLabel: (f) => d.card[`flag_${f}` as keyof typeof d.card] ?? f,
     risk: risk.data?.risk,
@@ -920,7 +924,7 @@ export function BridgeApp({
               <PanelFold title={d.indicator.details}>
                 <IndicatorReasons indicator={indicator} />
                 {riskCovered ? <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} /> : <RiskNotAssessed />}
-                <Checks report={report} show={!!planData} />
+                <Checks report={report} show={!!planData} feeCtx={feeCtx} />
                 <SimulationNote check={evmData} />
                 <DvnNote config={dvn.data} />
               </PanelFold>
