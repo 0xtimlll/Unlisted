@@ -19,7 +19,8 @@ import { walletAdapterIdentity } from '@metaplex-foundation/umi-signer-wallet-ad
 import type { PublicKey as Web3PublicKey, Transaction as Web3Transaction, VersionedTransaction as Web3VersionedTransaction } from '@solana/web3.js'
 import type { Hex } from 'viem'
 import { byEid, byKey } from '../chains'
-import { computeAmounts, computeValue, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, EMPTY_BYTES, MAX_SLIPPAGE_BPS_PLAN, PlanError, type SendQuote } from '../plan'
+import { computeAmounts, computeValue, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, EMPTY_BYTES, MAX_SLIPPAGE_BPS_PLAN, PlanError, type AmountBreakdown, type SendQuote } from '../plan'
+import { applyBps, trimDust } from '../amounts'
 import type { Recipient } from '../recipient'
 import { sanitizeLabel } from '../text'
 import { encodeBase58 } from './base58'
@@ -105,8 +106,8 @@ export async function buildSvmSendPlan(ctx: SvmSendContext, p: BuildSvmSendPlanI
   if (slippageBps > MAX_SLIPPAGE_BPS_PLAN) throw new PlanError('slippage_too_high', `${slippageBps} bps > ${MAX_SLIPPAGE_BPS_PLAN}`)
   if (src.vm !== 'svm') throw new Error('unreachable: solana is svm')
 
-  const amounts = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
-  if (amounts.amountLD <= 0n) throw new PlanError('amount_zero')
+  const provisional = computeAmounts(p.amountInput, p.info.decimals, p.info.conversionRate, slippageBps)
+  if (provisional.amountLD <= 0n) throw new PlanError('amount_zero')
 
   const to = hexToBytes(p.recipient.to)
   const peerAddr = hexToBytes(route.peer)
@@ -114,29 +115,50 @@ export async function buildSvmSendPlan(ctx: SvmSendContext, p: BuildSvmSendPlanI
   const escrow = publicKey(p.info.tokenEscrow)
   const program = publicKey(p.info.programId)
   const payer = publicKey(p.sender)
-  const params = { dstEid: p.dstEid, to, amountLd: amounts.amountLD, minAmountLd: amounts.minAmountLD, options: hexToBytes(extraOptions) }
+  const paramsWith = (minAmountLd: bigint) => ({ dstEid: p.dstEid, to, amountLd: provisional.amountLD, minAmountLd, options: hexToBytes(extraOptions) })
   const peerConfig = peerConfigPda(p.info.oftStore, p.info.programId, p.dstEid)
 
-  let quoteOft, fee, fees
+  // 1. What the program will deliver — asked with no minimum, so a fee the OFT store charges is the
+  //    answer rather than a slippage error (the same two-phase rule as buildSendPlan()). A program
+  //    that cannot answer leaves the receive unknown, said as such.
+  let partial: Omit<SendQuote, 'nativeFee'>
+  const [quoteOftRes, fees] = await Promise.all([
+    oft.quoteOft(ctx.umi.rpc, { payer, tokenMint: mint, tokenEscrow: escrow }, paramsWith(0n), program).then(
+      (q) => ({ ok: true as const, q }),
+      (e: unknown) => ({ ok: false as const, reason: sanitizeLabel(e instanceof Error ? (e.message.split('\n')[0] ?? '') : String(e), 160) }),
+    ),
+    ctx.rpc.getRecentPrioritizationFees([p.info.oftStore, p.info.tokenEscrow, peerConfig]).catch(() => [] as bigint[]),
+  ])
+  if (quoteOftRes.ok) {
+    const quoteOft = quoteOftRes.q
+    partial = {
+      amountSentLD: quoteOft.oftReceipt.amountSentLd,
+      amountReceivedLD: quoteOft.oftReceipt.amountReceivedLd,
+      limitMinLD: quoteOft.oftLimits.minAmountLd,
+      limitMaxLD: quoteOft.oftLimits.maxAmountLd,
+      feeDetails: quoteOft.oftFeeDetails.map((d) => ({ amountLD: d.feeAmountLd, description: sanitizeLabel(d.description, 64) })),
+    }
+  } else {
+    partial = { amountSentLD: provisional.amountLD, amountReceivedLD: provisional.amountLD, limitMinLD: 0n, limitMaxLD: 2n ** 64n - 1n, feeDetails: [], unavailable: quoteOftRes.reason }
+  }
+
+  // 2. The minimum is the slippage below what the program said it delivers (or below the amount,
+  //    with no quote to lean on) — and it is the minimum the instruction will carry.
+  const amounts: AmountBreakdown = partial.unavailable
+    ? provisional
+    : { ...provisional, minAmountLD: trimDust(applyBps(partial.amountReceivedLD, 10000 - slippageBps), p.info.conversionRate) }
+  const params = paramsWith(amounts.minAmountLD)
+
+  // 3. The LayerZero fee for exactly that instruction.
+  let fee
   try {
-    ;[quoteOft, fee, fees] = await Promise.all([
-      oft.quoteOft(ctx.umi.rpc, { payer, tokenMint: mint, tokenEscrow: escrow }, params, program),
-      oft.quote(ctx.umi.rpc, { payer, tokenMint: mint, tokenEscrow: escrow, peerAddr }, params, { oft: program }, undefined, ctx.lookupTable.publicKey),
-      ctx.rpc.getRecentPrioritizationFees([p.info.oftStore, p.info.tokenEscrow, peerConfig]).catch(() => [] as bigint[]),
-    ])
+    fee = await oft.quote(ctx.umi.rpc, { payer, tokenMint: mint, tokenEscrow: escrow, peerAddr }, params, { oft: program }, undefined, ctx.lookupTable.publicKey)
   } catch (e) {
     throw new PlanError('quote_failed', e instanceof Error ? e.message : String(e))
   }
   if (fee.lzTokenFee !== 0n) throw new PlanError('quote_failed', 'lzTokenFee != 0')
 
-  const quote: SendQuote = {
-    amountSentLD: quoteOft.oftReceipt.amountSentLd,
-    amountReceivedLD: quoteOft.oftReceipt.amountReceivedLd,
-    limitMinLD: quoteOft.oftLimits.minAmountLd,
-    limitMaxLD: quoteOft.oftLimits.maxAmountLd,
-    feeDetails: quoteOft.oftFeeDetails.map((d) => ({ amountLD: d.feeAmountLd, description: sanitizeLabel(d.description, 64) })),
-    nativeFee: fee.nativeFee,
-  }
+  const quote: SendQuote = { ...partial, nativeFee: fee.nativeFee }
 
   const plan: SvmSendPlan = {
     vm: 'svm',

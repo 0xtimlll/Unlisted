@@ -40,6 +40,7 @@ import { Tracker } from './components/Tracker'
 import { isUserRejection, shortError, useAllowance, useCheck, useDvn, useScanDelivered, useAdapterSearch, type CheckResult, useDecode, useNativeBalance, usePeerBack, usePlan, useProbe, useSvmDestination, useSvmRecipient, useTokenBalance } from './hooks'
 import { activeTransfer, pushHistory, setHistoryStatus, type HistoryEntry, type SetStored, type Stored } from './storage'
 import { guardLabel } from './guardLabel'
+import { issuerFee } from '@/core/oftFee'
 import { useSvmWallet } from './svm/context'
 import { SvmWalletPicker } from './svm/SvmWalletButton'
 import { useSvmCheck, useSvmContext, useSvmDecode, useSvmNativeBalance, useSvmPlan, useSvmProbe, useSvmSend, useSvmTokenBalance } from './svmHooks'
@@ -554,7 +555,7 @@ export function BridgeApp({
   const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
 
   // The route indicator: one colour from everything above. It decides nothing (core/indicator.ts).
-  const feeCtx = info ? { plan: planData, decimals: info.decimals, symbol: info.symbol } : undefined
+  const feeCtx = info ? { fee: planData ? issuerFee(planData.quote) : undefined, decimals: info.decimals, symbol: info.symbol } : undefined
   const indicator = assessIndicator({
     hasDestination: dest.dstEid !== undefined,
     hasPlan: !!planData,
@@ -562,7 +563,7 @@ export function BridgeApp({
     planError: planError ? describeError(d, planError) : undefined,
     results: report.results,
     held: impossible !== undefined,
-    label: (c) => guardLabel(d, c, feeCtx),
+    label: (c) => guardLabel(d.guard, c, feeCtx),
     flags: report.warnings,
     flagLabel: (f) => d.card[`flag_${f}` as keyof typeof d.card] ?? f,
     risk: risk.data?.risk,

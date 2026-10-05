@@ -10,6 +10,7 @@
  * Pure functions over a snapshot. Text lives in i18n; these return codes.
  */
 import { verdictOf } from '../../core/severity'
+import { classifyFee, formatBps, issuerFee } from '../../core/oftFee.ts'
 import { isAddressEqual, type Address, type Hex } from 'viem'
 import { aboveFeeCeiling, byKey } from '../../core/chains'
 import type { SuspiciousFlag } from '../../core/types'
@@ -43,6 +44,9 @@ export type V1GuardCode =
   | 'native_balance_unknown'
   | 'insufficient_native'
   | 'oft_fee_exceeds_amount'
+  | 'oft_fee_notice'
+  | 'oft_fee_high'
+  | 'oft_fee_extreme'
   | 'delivered_zero'
   | 'allowance_unknown'
   | 'needs_approve'
@@ -253,14 +257,27 @@ export function v1g8Native(i: V1GuardInput): V1GuardResult {
   return ok(8)
 }
 
-// 9. the contract's own fee does not eat the transfer
+// 9. the contract's own fee does not eat the transfer — and, where it keeps one (`bytes32_fee`,
+//    read from quoteOFTFee), its size is said at the same thresholds as V2 (core/oftFee.ts). The
+//    other two standards have no fee hook at all, so there is nothing to read and nothing to say.
 export function v1g9OftFee(i: V1GuardInput): V1GuardResult {
   if (!i.plan) return fail(9, 'plan_missing')
   const { oftFee, amountRaw, delivered } = i.plan.amounts
   if (oftFee < 0n) return fail(9, 'oft_fee_exceeds_amount', 'negative fee')
   if (oftFee >= amountRaw) return fail(9, 'oft_fee_exceeds_amount', `${oftFee} >= ${amountRaw}`)
   if (delivered <= 0n) return fail(9, 'delivered_zero')
-  return ok(9)
+  const fee = issuerFee({ amountSentLD: amountRaw, amountReceivedLD: amountRaw - oftFee })
+  const detail = `${fee.feeLD} (${formatBps(fee.feeBps)})`
+  switch (classifyFee(fee.feeBps)) {
+    case 'extreme':
+      return fail(9, 'oft_fee_extreme', detail)
+    case 'high':
+      return fail(9, 'oft_fee_high', detail)
+    case 'notice':
+      return fail(9, 'oft_fee_notice', detail)
+    default:
+      return ok(9)
+  }
 }
 
 // 10. an adapter needs its allowance — for exactly the amount in the calldata

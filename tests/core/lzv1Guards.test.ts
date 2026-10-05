@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { getAddress, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
+import { isBlockingCode } from '@/core/severity'
 import { evmRecipient } from '@/core/recipient'
 import { encodeAdapterParamsType1 } from '@/protocols/lz-v1/adapterParams'
 import type { OftV1Info, V1Route } from '@/protocols/lz-v1/detect'
@@ -19,6 +20,7 @@ import {
   v1g15AdapterParams,
   v1g20StoredPayload,
   type V1GuardInput,
+  v1g9OftFee,
 } from '@/protocols/lz-v1/guards'
 import { buildV1SendPlan, encodeV1SendCalldata, toWireRecipient, V1PlanError, type V1SendPlan } from '@/protocols/lz-v1/plan'
 import { v1SelfCheck } from '@/protocols/lz-v1/selfcheck'
@@ -184,6 +186,19 @@ describe('building a v1 plan', () => {
     expect(p.amounts.amountLD).toBe(10n ** 18n)
     expect(p.amounts.delivered).toBe(99n * 10n ** 16n)
     expect(p.amounts.minAmountLD).toBe(p.amounts.delivered)
+  })
+
+  it('says the fee at its size — a note, never a hold: 1% is a notice, 84% is extreme, both leave canSend alone', async () => {
+    const withFee = info({ standard: { wire: 'bytes32_fee', kind: 'OFT' } })
+    const mk = (oftFee: bigint) => buildV1SendPlan({ info: withFee, dstKey: 'arbitrum', amountInput: '1', sender: WALLET, recipient: evmRecipient(RECIPIENT), client: stubClient({ oftFee }) })
+    const one = v1g9OftFee({ plan: await mk(10n ** 16n) } as unknown as V1GuardInput)
+    expect(!one.ok && one.code).toBe('oft_fee_notice')
+    const extreme = v1g9OftFee({ plan: await mk(84n * 10n ** 16n) } as unknown as V1GuardInput)
+    expect(!extreme.ok && extreme.code).toBe('oft_fee_extreme')
+    expect(!extreme.ok && extreme.detail).toMatch(/84%/)
+    const tiny = v1g9OftFee({ plan: await mk(10n ** 14n) } as unknown as V1GuardInput) // 0.01%
+    expect(tiny.ok).toBe(true)
+    for (const c of ['oft_fee_notice', 'oft_fee_high', 'oft_fee_extreme']) expect(isBlockingCode(c), c).toBe(false)
   })
 
   it('refuses slippage on a standard whose sendFrom has no minimum to enforce it with', async () => {

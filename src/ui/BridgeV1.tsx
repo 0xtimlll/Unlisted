@@ -13,6 +13,8 @@ import { useAccount, useGasPrice, useSwitchChain, useWriteContract } from 'wagmi
 import { byKey, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { formatAmount } from '@/core/amounts'
 import { assessIndicator } from '@/core/indicator'
+import { classifyFee, formatBps, issuerFee } from '@/core/oftFee'
+import { guardLabel, type FeeContext } from './guardLabel'
 import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
 import { approveBusy } from '@/core/approveFlow'
@@ -43,10 +45,9 @@ import { RiskChecks } from './components/RiskPanel'
 import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
 import { Cta, type CtaState } from './components/Review'
 
-const GUARD_LABEL = (d: Dict, code: string): string => (d.v1Guard as Record<string, string>)[code] ?? code
 
 /** The guard list for the details fold: blocks in red, the approve step neutral, notes in amber, reads in flight in grey. */
-function V1Checks({ results }: { results: V1GuardResult[] }) {
+function V1Checks({ results, feeCtx }: { results: V1GuardResult[]; feeCtx?: FeeContext | undefined }) {
   const d = useDict()
   const failing = results.filter((r) => !r.ok && !isV1Pending(r) && !isStepCode(r.code) && !isNoteCode(r.code))
   const noted = results.filter((r) => !r.ok && isNoteCode(r.code))
@@ -68,13 +69,15 @@ function V1Checks({ results }: { results: V1GuardResult[] }) {
       </div>
       {[...failing, ...stepping, ...noted, ...pending].map((r) => (
         <div key={r.id} className={`text-xs ${tone(r)}`}>
-          {glyph(r)} {!r.ok ? GUARD_LABEL(d, r.code) : null}
+          {glyph(r)} {!r.ok ? GUARD_LABEL(d, r.code, feeCtx) : null}
           {!r.ok && r.detail ? <span className="mono ml-1 opacity-70">{r.detail}</span> : null}
         </div>
       ))}
     </div>
   )
 }
+
+const GUARD_LABEL = (d: Dict, code: string, ctx?: FeeContext): string => guardLabel(d.v1Guard as Record<string, string>, code, ctx)
 
 export function BridgeV1({
   src,
@@ -206,12 +209,14 @@ export function BridgeV1({
   const impossible = shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]
 
   // The route indicator: one colour from everything above. It decides nothing (core/indicator.ts).
+  const v1Fee = planData ? issuerFee({ amountSentLD: planData.amounts.amountRaw, amountReceivedLD: planData.amounts.amountRaw - planData.amounts.oftFee }) : undefined
+  const feeCtx = { fee: v1Fee, decimals: info.decimals, symbol: info.symbol }
   const indicator = assessIndicator({
     hasDestination: dstKey !== undefined,
     hasPlan: !!planData,
     results: report.results,
     held: impossible !== undefined,
-    label: (c) => GUARD_LABEL(d, c),
+    label: (c) => guardLabel(d.v1Guard as Record<string, string>, c, feeCtx),
     flags: report.warnings,
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
     risk: risk.data?.risk,
@@ -314,10 +319,10 @@ export function BridgeV1({
                 ? { kind: 'send', enabled: false, reason: shortError(plan.error) }
                 : { kind: 'quote' }
               : approveIntent
-                ? { kind: 'approve', intent: approveIntent, enabled: waitsOnlyForApprove(report.blocks), ...(impossible ? { reason: GUARD_LABEL(d, impossible.code) } : {}) }
+                ? { kind: 'approve', intent: approveIntent, enabled: waitsOnlyForApprove(report.blocks), ...(impossible ? { reason: GUARD_LABEL(d, impossible.code, feeCtx) } : {}) }
                 : !report.canSend && report.results.every((r) => r.ok || isV1Pending(r))
                   ? { kind: 'checking' }
-                  : { kind: 'send', enabled: report.canSend, ...(impossible ? { reason: GUARD_LABEL(d, impossible.code) } : {}) }
+                  : { kind: 'send', enabled: report.canSend, ...(impossible ? { reason: GUARD_LABEL(d, impossible.code, feeCtx) } : {}) }
   const onCta = () => {
     switch (cta.kind) {
       case 'switch':
@@ -488,11 +493,20 @@ export function BridgeV1({
             <Row label={d.v1.sends} mono>
               {formatAmount(planData.amounts.amountLD, info.decimals, { maxFraction: 8 })} {info.symbol}
             </Row>
-            {planData.amounts.oftFee > 0n ? (
-              <Row label={d.v1.oftFee} mono>
-                {formatAmount(planData.amounts.oftFee, info.decimals, { maxFraction: 8 })} {info.symbol}
-              </Row>
-            ) : null}
+            <Row label={d.v1.oftFee} mono>
+              {info.standard.wire !== 'bytes32_fee' ? (
+                <span className="text-muted">{d.v1.noFeeHook}</span>
+              ) : planData.amounts.oftFee === 0n ? (
+                d.v1.oftFeeNone
+              ) : (
+                <>
+                  <b className={classifyFee(v1Fee!.feeBps) === 'notice' ? 'text-warn' : classifyFee(v1Fee!.feeBps) === 'none' ? 'text-ink' : 'text-danger'}>
+                    {formatAmount(planData.amounts.oftFee, info.decimals)} {info.symbol} ({formatBps(v1Fee!.feeBps)})
+                  </b>
+                  <div className="text-xs text-muted">{d.step3.issuerFeeHint}</div>
+                </>
+              )}
+            </Row>
             <Row label={d.v1.arrives} mono>
               {formatAmount(planData.amounts.delivered, info.decimals, { maxFraction: 8 })} {info.symbol}
             </Row>
@@ -529,7 +543,7 @@ export function BridgeV1({
         <PanelFold title={d.indicator.details}>
           <IndicatorReasons indicator={indicator} />
           <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} />
-          <V1Checks results={report.results} />
+          <V1Checks results={report.results} feeCtx={feeCtx} />
           {simulation.data?.status === 'reverted' ? <p className="mono text-xs text-warn">{formatRevert(simulation.data.revert)}</p> : null}
         </PanelFold>
 

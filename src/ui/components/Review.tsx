@@ -272,7 +272,7 @@ export function Checks(p: { report: GuardReport; show: boolean; feeCtx?: FeeCont
       </div>
       <ul className="grid gap-x-3 gap-y-0.5 text-xs">
         {results.map((r) => {
-          const label = r.ok ? okLabel(r.id, d) : guardLabel(d, r.code, p.feeCtx)
+          const label = r.ok ? okLabel(r.id, d) : guardLabel(d.guard, r.code, p.feeCtx)
           if (!label) return null
           const pend = isPending(r)
           const tone = r.ok ? 'text-ok' : pend ? 'text-muted' : isStepCode(r.code) ? 'text-ink' : isNoteCode(r.code) ? 'text-warn' : 'text-danger'
