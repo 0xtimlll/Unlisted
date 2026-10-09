@@ -5,6 +5,15 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Unlisted',
   description: 'Bridge any LayerZero OFT token. Non-custodial, static, no backend.',
+  // Tab icon only (white U on a black disc); the page itself shows no logo. The PNGs are renders
+  // of public/icon.svg for browsers that do not take an SVG favicon.
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-32.png', type: 'image/png', sizes: '32x32' },
+    ],
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 /**
