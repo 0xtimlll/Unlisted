@@ -13,8 +13,9 @@
  *     API is a payload someone else chose. Scan is a fine place to *look*, which is why the tab links
  *     to it — but the bytes come from the source chain's own logs.
  *   - NTT and CCIP rescue is not here. Both have their own redeem paths, both are a different shape
- *     of problem, and the place for them is a runner alongside `diagnose`. What they must not do is
- *     borrow these four actions, which are LayerZero's.
+ *     of problem. Their STATUS is read by runners of their own — `wormhole-ntt/status.ts` and
+ *     `ccip/status.ts`, which the tab runs beside this one — and what those must not do is borrow
+ *     these four actions, which are LayerZero's.
  */
 import { byKey, isEvm, type ChainKey } from '../../core/chains'
 import { makeReadClient, type ReadClient } from '../../core/client'

@@ -86,6 +86,34 @@ export const wormholeTransceiverAbi = parseAbi([
 export const WORMHOLE_TRANSCEIVER_TYPE = 'wormhole'
 
 /**
+ * Status reads on the DESTINATION manager (the Status tab). All view; none moves a token.
+ *   isMessageExecuted, isMessageApproved, messageAttestations   evm/src/interfaces/IManagerBase.sol
+ *   getInboundQueuedTransfer, InboundQueuedTransfer             evm/src/interfaces/IRateLimiter.sol
+ *   rateLimitDuration                                           evm/src/libraries/RateLimiter.sol
+ *                                                               (`uint64 public immutable`)
+ * `TrimmedAmount` is `type TrimmedAmount is uint72` (evm/src/libraries/TrimmedAmount.sol): the
+ * amount in the upper 64 bits, its decimals in the low 8 — so the struct's first field is a uint72.
+ */
+export const nttStatusAbi = parseAbi([
+  'struct InboundQueuedTransfer { uint72 amount; uint64 txTimestamp; address recipient; }',
+
+  'function isMessageExecuted(bytes32 digest) view returns (bool)',
+  'function isMessageApproved(bytes32 digest) view returns (bool)',
+  'function messageAttestations(bytes32 digest) view returns (uint8 count)',
+  'function getInboundQueuedTransfer(bytes32 digest) view returns (InboundQueuedTransfer)',
+  'function rateLimitDuration() view returns (uint64)',
+])
+
+/**
+ * Wire prefixes, from the contracts that check them:
+ *   NTT_PREFIX                      evm/src/libraries/TransceiverStructs.sol ("0x99'N''T''T'")
+ *   WH_TRANSCEIVER_PAYLOAD_PREFIX   evm/src/Transceiver/WormholeTransceiver/WormholeTransceiverState.sol
+ * Both unchanged since v1.1.0+evm, the build deployed on mainnet.
+ */
+export const NTT_PREFIX: Hex = '0x994e5454'
+export const WH_TRANSCEIVER_PAYLOAD_PREFIX: Hex = '0x9945ff10'
+
+/**
  * The token-side anchor (§the manager must be named by the TOKEN, not only name the token).
  * `minter()` is what the reference NTT token exposes; AccessControl tokens answer
  * `hasRole(MINTER_ROLE, manager)` instead, with the role read from the token itself.

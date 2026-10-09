@@ -2,13 +2,16 @@
 /**
  * §5: Status / Rescue.
  *
- * Paste the hash of a transaction that sent a LayerZero message and this says what became of it, and
- * — for the four states that have one — offers the single call that would finish it.
+ * Paste the hash of a transaction that sent a cross-chain message and this says what became of it.
+ * Three protocols are read — LayerZero (v1 and V2), Wormhole NTT and Chainlink CCIP — each from the
+ * source transaction's own logs and the destination's own state, never from an indexer. For the four
+ * LayerZero states that have one, it also offers the single call that would finish the message.
  *
  * What this screen does NOT do is as much the point as what it does. It does not build a transfer, it
  * does not approve anything, and it never offers a button for a call it has not just executed against
  * the chain. The four actions it can submit are the four §5 names, each confined to
- * `src/protocols/lz-rescue/` by the build's own check, and each submitted with no value.
+ * `src/protocols/lz-rescue/` by the build's own check, and each submitted with no value. NTT and CCIP
+ * are status only: their redeem paths belong to their own contracts and tools, which each card names.
  */
 import { useCallback, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
@@ -27,6 +30,10 @@ import {
   type RescueReport,
   type RescueSimulation,
 } from '@/protocols/lz-rescue'
+import { lookupNttStatus, type NttDiagnosis } from '@/protocols/wormhole-ntt/status'
+import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
+import { lookupCcipStatus, type CcipDiagnosis } from '@/protocols/ccip/status'
+import { ccipMessageUrl } from '@/protocols/ccip/track'
 import { fmt, useDict, type Dict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
 import { Panel, TwoColumn } from './components/Layout'
@@ -35,12 +42,14 @@ import { ChainRow } from './components/FromTo'
 import { isUserRejection, shortError } from './hooks'
 import type { Stored } from './storage'
 
-type Lookup = { reports: RescueReport[]; unserved: number; searched: ChainKey }
+type Lookup = { reports: RescueReport[]; ntt: NttDiagnosis[]; ccip: CcipDiagnosis[]; unserved: number; searched: ChainKey; hash: string }
 
 /** The state names, as sentences rather than identifiers. */
 function stateLabel(d: Dict, kind: string): string {
   return (d.rescue.states as Record<string, string>)[kind] ?? kind
 }
+
+const when = (unixSeconds: number): string => new Date(unixSeconds * 1000).toLocaleString()
 
 export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKey: ChainKey; setSrcKey: (k: ChainKey) => void }) {
   const d = useDict()
@@ -56,8 +65,9 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
   const [sent, setSent] = useState<Record<number, string>>({})
   const [actionError, setActionError] = useState<Record<number, string>>({})
 
-  // Only chains whose v1/V2 endpoints this app knows: a rescue reads the destination's own state,
-  // and there is nothing to read on a chain the registry does not serve.
+  // Only chains whose endpoints, core bridges and routers this app knows: every state here is read
+  // from the destination's own contracts, and there is nothing to read on a chain the registry does
+  // not serve.
   const chains = useMemo(() => evmChains(), [])
   const srcDef = byKey(srcKey)
   const write = useWriteContract()
@@ -69,7 +79,8 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
     setSimBusy({})
     setSent({})
     setActionError({})
-    if (!isTxHash(hash.trim())) {
+    const h = hash.trim()
+    if (!isTxHash(h)) {
       setError(d.rescue.badHash)
       return
     }
@@ -80,9 +91,22 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
     setBusy(true)
     try {
       const client = makeReadClient(srcDef, stored.customRpc[srcKey])
-      const receipt = await client.getTransactionReceipt({ hash: hash.trim() as `0x${string}` })
-      const result = await lookupRescue(receipt.logs, srcKey, (c) => rescueClientFor(c, stored.customRpc))
-      setLookup({ reports: result.reports, unserved: result.unservedDestinations.length, searched: srcKey })
+      const receipt = await client.getTransactionReceipt({ hash: h as `0x${string}` })
+      const clientFor = (c: ChainKey) => rescueClientFor(c, stored.customRpc)
+      // One receipt, three readers: a transaction can carry any of them, and the tab is not told which.
+      const [lz, ntt, ccip] = await Promise.all([
+        lookupRescue(receipt.logs, srcKey, clientFor),
+        lookupNttStatus(receipt.logs, srcKey, clientFor),
+        lookupCcipStatus(receipt.logs, srcKey, client, clientFor),
+      ])
+      setLookup({
+        reports: lz.reports,
+        ntt: ntt.reports,
+        ccip: ccip.reports,
+        unserved: lz.unservedDestinations.length + ntt.unserved.length + ccip.unserved.length,
+        searched: srcKey,
+        hash: h,
+      })
     } catch (e) {
       setError(shortError(e))
     } finally {
@@ -172,11 +196,13 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
     </div>
   )
 
+  const nothingFound = lookup !== null && lookup.reports.length === 0 && lookup.ntt.length === 0 && lookup.ccip.length === 0
+
   const right = (
     <Panel title={d.rescue.found}>
       {!lookup ? (
         <p className="text-xs text-muted">{d.rescue.empty}</p>
-      ) : lookup.reports.length === 0 ? (
+      ) : nothingFound ? (
         <Alert kind="info">{lookup.unserved > 0 ? fmt(d.rescue.unserved, { n: lookup.unserved }) : d.rescue.noMessages}</Alert>
       ) : (
         <div className="space-y-4">
@@ -287,6 +313,101 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
               </div>
             )
           })}
+
+          {lookup.ntt.map((r, i) => {
+            const t = r.transfer
+            const src = byKey(t.srcChain)
+            const dst = t.dstChain ? byKey(t.dstChain) : undefined
+            const s = r.state
+            const tone = s.kind === 'delivered' ? 'text-ok' : s.kind === 'unknown' ? 'text-muted' : 'text-warn'
+            const counts = s.kind === 'in_flight' || s.kind === 'attested_not_executed' ? s : undefined
+            return (
+              <div key={`ntt-${i}`} className="space-y-2 rounded-card bg-surface-2 p-4">
+                <div className="text-xs font-semibold text-ink">
+                  {d.rescue.ntt} · {src.name} → {dst?.name ?? d.rescue.unknownChain}
+                </div>
+                <Row label={d.rescue.state}>
+                  <span className={tone}>{(d.rescue.nttStates as Record<string, string>)[s.kind] ?? s.kind}</span>
+                </Row>
+                {s.kind === 'unknown' ? <p className="text-xs text-muted">{s.reason}</p> : null}
+                {counts && counts.attestations !== undefined && counts.threshold !== undefined ? (
+                  <Row label={d.rescue.attestations}>{fmt(d.rescue.attestationsOf, { n: counts.attestations, threshold: counts.threshold })}</Row>
+                ) : null}
+                {s.kind === 'queued' ? (
+                  <Alert kind="warn">
+                    {fmt(d.rescue.nttQueued, {
+                      queuedAt: when(s.queuedAt),
+                      recipient: s.recipient,
+                      after: s.releaseAt !== undefined ? fmt(d.rescue.nttQueuedAfter, { releaseAt: when(s.releaseAt) }) : '',
+                    })}
+                  </Alert>
+                ) : null}
+                {r.peerOk === false ? <Alert kind="error">{d.rescue.nttPeerMismatch}</Alert> : null}
+                {t.digestConfirmed === false ? <Alert kind="warn">{d.rescue.nttDigestUnconfirmed}</Alert> : null}
+                <Row label={d.rescue.srcManager} mono>
+                  {t.srcManager ? <AddressView value={t.srcManager} href={src.explorerAddrUrl + t.srcManager} short /> : <span className="break-all">{t.srcManagerRaw}</span>}
+                </Row>
+                <Row label={d.rescue.dstManager} mono>
+                  {t.dstManager ? <AddressView value={t.dstManager} href={dst ? dst.explorerAddrUrl + t.dstManager : undefined} short /> : <span className="break-all">{t.dstManagerRaw}</span>}
+                </Row>
+                <Row label={d.rescue.digest} mono>
+                  <span className="break-all">{t.digest}</span>
+                </Row>
+                <Row label={d.rescue.wormholeSequence} mono>
+                  {t.sequence.toString()}
+                </Row>
+                <p className="text-xs text-faint">
+                  {d.rescue.readFromChainNtt}
+                  {t.digestConfirmed ? ` ${d.rescue.nttDigestConfirmed}` : ''}
+                </p>
+                <a href={wormholescanTxUrl(lookup.hash)} target="_blank" rel="noopener noreferrer" className="block text-xs text-accent-ink underline">
+                  {d.rescue.onWormholescan}
+                </a>
+              </div>
+            )
+          })}
+
+          {lookup.ccip.map((r, i) => {
+            const m = r.send
+            const src = byKey(m.srcChain)
+            const dst = m.dstChain ? byKey(m.dstChain) : undefined
+            const s = r.state
+            const tone = s.kind === 'delivered' ? 'text-ok' : s.kind === 'failed' ? 'text-danger' : s.kind === 'unknown' ? 'text-muted' : 'text-warn'
+            return (
+              <div key={`ccip-${i}`} className="space-y-2 rounded-card bg-surface-2 p-4">
+                <div className="text-xs font-semibold text-ink">
+                  {d.rescue.ccip} · {src.name} → {dst?.name ?? d.rescue.unknownChain} · {fmt(d.rescue.ccipGeneration, { version: m.version })}
+                </div>
+                <Row label={d.rescue.state}>
+                  <span className={tone}>{(d.rescue.ccipStates as Record<string, string>)[s.kind] ?? s.kind}</span>
+                </Row>
+                {s.kind === 'unknown' ? <p className="text-xs text-muted">{s.reason}</p> : null}
+                {s.kind === 'failed' ? <Alert kind="warn">{d.rescue.ccipFailed}</Alert> : null}
+                <Row label={d.rescue.messageId} mono>
+                  <span className="break-all">{m.messageId}</span>
+                </Row>
+                {m.sequenceNumber !== undefined ? (
+                  <Row label={d.rescue.sequence} mono>
+                    {m.sequenceNumber.toString()}
+                  </Row>
+                ) : null}
+                <Row label={d.rescue.onRamp} mono>
+                  <AddressView value={m.onRamp} href={src.explorerAddrUrl + m.onRamp} short />
+                </Row>
+                {s.kind !== 'unknown' ? (
+                  <Row label={d.rescue.offRamp} mono>
+                    <span className="text-muted">{fmt(d.rescue.ccipOffRampIs, { version: s.offRampVersion })} </span>
+                    <AddressView value={s.offRamp} href={dst ? dst.explorerAddrUrl + s.offRamp : undefined} short />
+                  </Row>
+                ) : null}
+                <p className="text-xs text-faint">{d.rescue.readFromChainCcip}</p>
+                <a href={ccipMessageUrl(m.messageId)} target="_blank" rel="noopener noreferrer" className="block text-xs text-accent-ink underline">
+                  {d.rescue.onCcipExplorer}
+                </a>
+              </div>
+            )
+          })}
+
           {lookup.unserved > 0 ? <Alert kind="info">{fmt(d.rescue.unserved, { n: lookup.unserved })}</Alert> : null}
         </div>
       )}

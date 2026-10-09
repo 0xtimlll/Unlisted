@@ -107,6 +107,60 @@ export const tokenPoolAbi = parseAbi([
 ])
 
 /**
+ * Status reads (the Status tab). All view; none moves a token. Sources:
+ *   getOnRamp, getOffRamps, OffRamp   Router.sol — the same in release/contracts-ccip-1.5.0 of
+ *                                     smartcontractkit/ccip and in chains/evm/contracts/Router.sol of
+ *                                     smartcontractkit/chainlink-ccip (tag contracts-ccip-v1.6.0 and
+ *                                     main); every deployed router answers typeAndVersion "Router 1.2.0"
+ *   typeAndVersion                    shared/interfaces/ITypeAndVersion.sol, implemented by every ramp —
+ *                                     how the destination's off-ramp generation is told apart
+ */
+export const ccipRouterRampsAbi = parseAbi([
+  'struct OffRamp { uint64 sourceChainSelector; address offRamp; }',
+  'function getOnRamp(uint64 destChainSelector) view returns (address)',
+  'function getOffRamps() view returns (OffRamp[])',
+])
+
+export const typeAndVersionAbi = parseAbi(['function typeAndVersion() view returns (string)'])
+
+/**
+ * Three off-ramp generations, one per on-ramp generation above, each keyed differently:
+ *   1.5  EVM2EVMOffRamp: one lane per contract, state by sequence number; `getStaticConfig().onRamp`
+ *        names the on-ramp it serves           offRamp/EVM2EVMOffRamp.sol (release/contracts-ccip-1.5.0)
+ *   1.6  OffRamp: every source chain in one contract, state by (sourceChainSelector, sequenceNumber);
+ *        `getSourceChainConfig(src).onRamp` is the abi-encoded on-ramp
+ *                                              chains/evm/contracts/offRamp/OffRamp.sol (contracts-ccip-v1.6.0)
+ *   2.0  OffRamp: state by messageId; `getSourceChainConfig(src).onRamps` lists the allowed on-ramps,
+ *        "for EVM source chains … abi-encoded (32 bytes)"
+ *                                              chains/evm/contracts/offRamp/OffRamp.sol (main, "OffRamp 2.0.0")
+ * `Internal.MessageExecutionState` has the same four members in all three releases' Internal.sol:
+ * UNTOUCHED, IN_PROGRESS, SUCCESS, FAILURE — an enum is a uint8 on the wire.
+ */
+export const ccipOffRamp15Abi = parseAbi([
+  'struct StaticConfig { address commitStore; uint64 chainSelector; uint64 sourceChainSelector; address onRamp; address prevOffRamp; address rmnProxy; address tokenAdminRegistry; }',
+  'function getExecutionState(uint64 sequenceNumber) view returns (uint8)',
+  'function getStaticConfig() view returns (StaticConfig)',
+])
+
+export const ccipOffRamp16Abi = parseAbi([
+  'struct SourceChainConfig { address router; bool isEnabled; uint64 minSeqNr; bool isRMNVerificationDisabled; bytes onRamp; }',
+  'function getExecutionState(uint64 sourceChainSelector, uint64 sequenceNumber) view returns (uint8)',
+  'function getSourceChainConfig(uint64 sourceChainSelector) view returns (SourceChainConfig)',
+])
+
+export const ccipOffRamp20Abi = parseAbi([
+  'struct SourceChainConfig { address router; bool isEnabled; bytes[] onRamps; address[] defaultCCVs; address[] laneMandatedCCVs; }',
+  'function getExecutionState(bytes32 messageId) view returns (uint8)',
+  'function getSourceChainConfig(uint64 sourceChainSelector) view returns (SourceChainConfig)',
+])
+
+export const CCIP_EXECUTION_STATES = ['UNTOUCHED', 'IN_PROGRESS', 'SUCCESS', 'FAILURE'] as const
+export type CcipExecutionState = (typeof CCIP_EXECUTION_STATES)[number]
+export function ccipExecutionState(raw: number): CcipExecutionState | undefined {
+  return CCIP_EXECUTION_STATES[raw]
+}
+
+/**
  * `bytes4(keccak256("CCIP EVMExtraArgsV2"))` — cross-checked against @noble/hashes, not copied.
  * The newer releases rename the struct to GenericExtraArgsV2; the tag is the same.
  */

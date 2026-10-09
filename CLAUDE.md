@@ -270,6 +270,25 @@ DVN сравниваются **по id оператора, а не по адре
 `RelayerParams` — только с ULN из `lz-v1/chains.json` (когда он известен), пары RelayerParams→Packet
 собираются по порядку логов, а endpoint назначения для `commitVerification` / `lzReceive` — из реестра.
 
+**Status / Rescue читает три протокола (2026-10-09).** Один хеш, один receipt, три читателя рядом:
+`lz-rescue/` (как раньше, с четырьмя действиями), `wormhole-ntt/status.ts` и `ccip/status.ts` —
+только статус, без единого write. Индексеры не спрашиваются; каждая карточка лишь ссылается на свой
+explorer. NTT: сообщение берётся из `LogMessagePublished` **реестрового** core bridge (payload —
+transceiver message с префиксом `0x9945ff10`), digest считается сами как
+`keccak256(abi.encodePacked(uint16 srcWormholeChainId, nttManagerPayload))` из байтов лога и chain id
+**из нашей таблицы**, и, когда менеджер достаточно новый, сверяется с его `TransferSent(digest)`;
+состояние — `isMessageExecuted` / `messageAttestations` vs `getThreshold` / `getInboundQueuedTransfer`
+у менеджера, которому сообщение адресовано (`executed` без очереди — delivered, `executed` с
+`txTimestamp ≠ 0` — queued, релиз через `completeInboundQueuedTransfer`, который мы не отправляем).
+CCIP: три поколения on-ramp (1.5 / 1.6 / 2.0) дают разный набор полей; на destination
+**реестровый** router отдаёт `getOffRamps()`, и спрашивается только тот off-ramp, который сам
+называет on-ramp, эмитировавший событие (`getStaticConfig().onRamp` у 1.5, `getSourceChainConfig(src).onRamp`
+у 1.6, `.onRamps` у 2.0) — на одном source-селекторе во время апгрейда lane висят два off-ramp'а с
+разными счётчиками. `getExecutionState` (`uint64` / `(uint64,uint64)` / `bytes32` по поколению) →
+`UNTOUCHED | IN_PROGRESS | SUCCESS | FAILURE`. Destination 1.5-сообщения (событие его не несёт)
+ищется через `getOnRamp` source-router'а по всем нашим селекторам; старый on-ramp, которого router
+уже не называет, — честный `unknown`.
+
 **Кворум RPC.** Primary в `clientPair` падает назад **только внутри своего оператора**: иначе
 primary с упавшим первым URL тихо отвечал бы с URL secondary, и «два оператора согласны» было бы
 одним оператором дважды.

@@ -250,6 +250,14 @@ for (const file of walk(SRC)) {
       // §5 rescue, read-only side. See src/protocols/lz-rescue/abi.ts for the source of each.
       'storedPayload', 'failedMessages', 'lazyInboundNonce', 'inboundPayloadHash', 'verifiable',
       'initializable', 'hashLookup',
+      // Status tab, NTT side (src/protocols/wormhole-ntt/status.ts): what the destination manager
+      // says about a digest. All view — IManagerBase / IRateLimiter / RateLimiter.
+      'isMessageExecuted', 'isMessageApproved', 'messageAttestations', 'getInboundQueuedTransfer',
+      'rateLimitDuration',
+      // Status tab, CCIP side (src/protocols/ccip/status.ts): the router's ramps and the off-ramp's
+      // execution state. All view — Router, ITypeAndVersion, EVM2EVMOffRamp / OffRamp 1.6 / OffRamp 2.0.
+      'getOnRamp', 'getOffRamps', 'typeAndVersion', 'getExecutionState', 'getStaticConfig',
+      'getSourceChainConfig',
     ])
     if (!writeAllowed(n, rel) && !KNOWN_READS.has(n) && !simulatedOnly(n, rel)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
