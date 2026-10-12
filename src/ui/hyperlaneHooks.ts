@@ -1,7 +1,7 @@
 'use client'
 /** Queries for the Hyperlane tab. */
-import { useQuery } from '@tanstack/react-query'
-import type { Hash, Hex } from 'viem'
+import { useQueries, useQuery } from '@tanstack/react-query'
+import type { Address, Hash, Hex } from 'viem'
 import { evmByKey, type ChainKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
 import { clientPair, independentSecondary } from '@/core/quorum'
@@ -36,6 +36,24 @@ export function useWarpRoute(chain: ChainKey, address: string | null, customRpc:
     enabled: !!address,
     staleTime: 60_000,
     retry: false,
+  })
+}
+
+/**
+ * Every router the registry hint table names for a pasted token, each probed exactly like a
+ * pasted address (same query key as `useWarpRoute`, so a candidate the person then picks is not
+ * read twice). The screen keeps only the ones that answer as a router holding exactly that token;
+ * the registry's word alone never puts a candidate on screen.
+ */
+export function useWarpRouteCandidates(chain: ChainKey, routers: readonly Address[], enabled: boolean, customRpc: Partial<Record<ChainKey, string>>) {
+  return useQueries({
+    queries: routers.map((router) => ({
+      queryKey: ['warpRoute', chain, router.toLowerCase()],
+      queryFn: (): Promise<HyperlaneDiscoveryQuorum> => discoverWarpRouteQuorum(clientFor(chain, customRpc), secondFor(chain, customRpc), chain, router),
+      enabled,
+      staleTime: 60_000,
+      retry: false,
+    })),
   })
 }
 

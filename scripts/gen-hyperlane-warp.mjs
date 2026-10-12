@@ -53,9 +53,9 @@ for (const c of CHAINS) {
 
 const isAddress = (v) => typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v)
 
-/** chainKey -> { tokens: { lowercased collateral token -> [entry] }, native: [entry] } */
+/** chainKey -> { tokens: { lowercased collateral token -> [entry] } } */
 const chains = {}
-for (const key of keyOfRegistryName.values()) chains[key] = { tokens: {}, native: [] }
+for (const key of keyOfRegistryName.values()) chains[key] = { tokens: {} }
 
 let kept = 0
 for (const [routeId, cfg] of Object.entries(configs)) {
@@ -73,14 +73,10 @@ for (const [routeId, cfg] of Object.entries(configs)) {
       symbol: typeof t.symbol === 'string' ? t.symbol.slice(0, 32) : '',
       route: routeId,
     }
-    if (standard === 'EvmHypNative') {
-      chains[key].native.push(entry)
-      kept++
-      continue
-    }
-    // A synthetic token is its own router: pasting it needs no hint. Everything else holds some
-    // other token, which the registry names as the collateral.
-    if (standard === 'EvmHypSynthetic' || standard === 'EvmHypSyntheticRebase') continue
+    // A native route has no token to look up and is pasted by its own address; a synthetic token
+    // is its own router, so pasting it needs no hint. Everything else holds some other token,
+    // which the registry names as the collateral — that is the lookup this table exists for.
+    if (standard === 'EvmHypNative' || standard === 'EvmHypSynthetic' || standard === 'EvmHypSyntheticRebase') continue
     if (!isAddress(t.collateralAddressOrDenom)) continue
     const token = t.collateralAddressOrDenom.toLowerCase()
     ;(chains[key].tokens[token] ??= []).push(entry)
@@ -94,7 +90,7 @@ const out = { source: SOURCE, chains: {} }
 for (const key of Object.keys(chains).sort()) {
   const tokens = {}
   for (const token of Object.keys(chains[key].tokens).sort()) tokens[token] = chains[key].tokens[token].sort(byRouter)
-  out.chains[key] = { tokens, native: chains[key].native.sort(byRouter) }
+  out.chains[key] = { tokens }
 }
 const text = JSON.stringify(out, null, 2) + '\n'
 

@@ -34,7 +34,7 @@ import { hyperlaneApprovePlan, isHyperlanePending, runHyperlaneGuards, type Hype
 import { assembleTransferRemoteArgs, HyperlanePlanError, routeFeeBps } from '@/protocols/hyperlane/plan'
 import { hyperlaneSelfCheck } from '@/protocols/hyperlane/preview'
 import { hyperlaneMessageUrl, hyperlaneTxUrl } from '@/protocols/hyperlane/track'
-import { nativeWarpRouteHints, warpRouteHints } from '@/protocols/hyperlane/warpRoutes'
+import { warpRouteHints } from '@/protocols/hyperlane/warpRoutes'
 import { ADAPTER_MIN_LOCKED_BPS, ADAPTER_MIN_OUTBOUND_NONCE } from '@/protocols/lz-risk/adapters'
 import { fmt, useDict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
@@ -49,7 +49,7 @@ import { approveBusy } from '@/core/approveFlow'
 import { reverseHyperlane } from '@/core/reverse'
 import { Cta, type CtaState } from './components/Review'
 import { useAnalysis } from './useAnalysis'
-import { useHyperlaneCheck, useHyperlaneDelivery, useHyperlanePlan, useWarpRemote, useWarpRoute, useWarpStanding } from './hyperlaneHooks'
+import { useHyperlaneCheck, useHyperlaneDelivery, useHyperlanePlan, useWarpRemote, useWarpRoute, useWarpRouteCandidates, useWarpStanding } from './hyperlaneHooks'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { pushHistory, setHistoryStatus, type HistoryEntry, type SetStored, type Stored } from './storage'
 
@@ -190,12 +190,35 @@ export function HyperlaneApp({
   const typed = useWarpRoute(srcKey, target, stored.customRpc)
   const typedData = typed.data
   const typedToken = typedData?.kind === 'token' ? typedData : undefined
-  // The registry's candidates for a pasted token: a search hint, never a fact.
+  // The registry's candidates for a pasted token: a search hint, never a fact. Every one of them
+  // is probed; only those that answer as a router holding exactly this token are ever shown.
   const hints = useMemo(() => (typedToken ? warpRouteHints(srcKey, typedToken.token) : []), [srcKey, typedToken])
-  useEffect(() => {
-    if (typedToken && hints.length === 1 && !pickedRouter) setPickedRouter(hints[0]!.router)
+  const candidateRouters = useMemo(() => hints.map((h) => h.router), [hints])
+  const candidates = useWarpRouteCandidates(srcKey, candidateRouters, !!typedToken, stored.customRpc)
+  const candidatesSettled = candidates.every((q) => q.data !== undefined || q.isError)
+  const passing = useMemo(
+    () =>
+      typedToken
+        ? hints.filter((_, i) => {
+            const c = candidates[i]?.data
+            return c?.kind === 'router' && !!c.token && isAddressEqual(c.token, typedToken.token)
+          })
+        : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typedToken?.token, hints.length])
+    [typedToken?.token, hints, ...candidates.map((q) => q.data)],
+  )
+  // The reason the first candidate was turned down, for the one line that says so.
+  const refusedReason = (() => {
+    const c = candidates.find((q) => q.data !== undefined)?.data
+    if (!c) return undefined
+    if (c.kind === 'unknown') return d.hyperlaneReject[c.reason]
+    if (c.kind === 'router') return d.hyperlane.hintHoldsOther
+    return d.hyperlaneReject.not_a_router
+  })()
+  useEffect(() => {
+    if (typedToken && passing.length === 1 && !pickedRouter) setPickedRouter(passing[0]!.router)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typedToken?.token, passing.length])
   const picked = useWarpRoute(srcKey, pickedRouter, stored.customRpc)
   const pickedData = picked.data
   // A candidate the registry named must hold exactly the pasted token, or it is not offered.
@@ -495,15 +518,7 @@ export function HyperlaneApp({
   ) : planData && !isPreview ? (
     <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.decimals ?? dec, { maxFraction: 6 }), symbol: planData.dst.symbol ?? sym })}</span>
   ) : undefined
-  const analysing = typed.isFetching || picked.isFetching || analysis.isFetching
-  const nativeHints = useMemo(() => nativeWarpRouteHints(srcKey), [srcKey])
-  const applyAddress = (a: string) => {
-    setInput(a)
-    setInputError('')
-    setAnalysisInput(null)
-    setPickedRouter(null)
-    setTarget(a)
-  }
+  const analysing = typed.isFetching || picked.isFetching || analysis.isFetching || candidates.some((q) => q.isFetching)
 
   const dstDef = delivery.data?.dstChain ? byKey(delivery.data.dstChain) : dstChain ? byKey(dstChain) : undefined
   const left = sent ? (
@@ -579,20 +594,26 @@ export function HyperlaneApp({
           ) : null}
         </div>
         {typedData?.kind === 'unknown' ? <Alert kind="error">{d.hyperlaneReject[typedData.reason]}</Alert> : null}
-        {pickedData?.kind === 'unknown' ? <Alert kind="error">{d.hyperlaneReject[pickedData.reason]}</Alert> : null}
+        {/* A pasted ERC-20: the registry's candidates are probed, and what is said is about them —
+            never about the token itself, which is a perfectly good ERC-20. */}
         {typedToken && hints.length === 0 ? <Alert kind="info">{fmt(d.hyperlane.hintNone, { chain: src.name })}</Alert> : null}
-        {typedToken && hints.length === 1 && router ? (
+        {typedToken && hints.length > 0 && !candidatesSettled ? (
+          <p className="px-1 text-xs text-muted">{fmt(d.hyperlane.hintChecking, { n: hints.length })}</p>
+        ) : null}
+        {typedToken && candidatesSettled && hints.length > 0 && passing.length === 0 ? (
+          <Alert kind="warn">{fmt(d.hyperlane.hintNoneUsable, { n: hints.length, chain: src.name, reason: refusedReason ?? '' })}</Alert>
+        ) : null}
+        {typedToken && passing.length === 1 && router ? (
           <p className="px-1 text-xs text-muted">
             {d.hyperlane.hintOne} <AddressView value={router.router} href={src.explorerAddrUrl + router.router} short />{' '}
-            <span className="opacity-70">({fmt(d.hyperlane.hintRoute, { route: hints[0]!.route })})</span>
+            <span className="opacity-70">({fmt(d.hyperlane.hintRoute, { route: passing[0]!.route })})</span>
           </p>
         ) : null}
-        {typedToken && hintMismatch && pickedRouter ? <Alert kind="warn">{fmt(d.hyperlane.hintMismatch, { router: pickedRouter })}</Alert> : null}
-        {typedToken && hints.length > 1 ? (
+        {typedToken && passing.length > 1 ? (
           <div className="space-y-1 px-1 text-xs text-muted">
-            <p>{fmt(d.hyperlane.hintSeveral, { chain: src.name })}</p>
+            <p>{fmt(d.hyperlane.hintSeveral, { n: passing.length, chain: src.name })}</p>
             <ul className="space-y-1">
-              {hints.map((h) => (
+              {passing.map((h) => (
                 <li key={h.router}>
                   <button
                     type="button"
@@ -612,20 +633,6 @@ export function HyperlaneApp({
           </p>
         ) : null}
         {router && crossChecked === false ? <p className="px-1 text-xs text-warn">⚠ {d.card.flag_not_cross_checked}</p> : null}
-        {!target && !analysisInput && nativeHints.length > 0 ? (
-          <div className="space-y-1 px-1 text-xs text-muted">
-            <p>{fmt(d.hyperlane.nativeHints, { symbol: src.nativeSymbol, chain: src.name })}</p>
-            <ul className="flex flex-wrap gap-1">
-              {nativeHints.map((h) => (
-                <li key={h.router}>
-                  <button type="button" onClick={() => applyAddress(h.router)} className="mono rounded-full bg-surface-2 px-3 py-1 text-xs text-ink transition hover:scale-105" title={h.route}>
-                    {h.router.slice(0, 8)}…{h.router.slice(-6)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
 
         <FromToRow
           from={src}

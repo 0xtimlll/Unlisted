@@ -6,6 +6,8 @@
  * names the router the discovery verified against the registry Mailbox, and it is for the CHARGE —
  * the amount plus the route's own fee — because that is what the router pulls.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { encodeFunctionData, getAddress, keccak256, pad, toFunctionSelector, type Abi, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
@@ -29,7 +31,7 @@ import { hyperlaneApprovePlan, runHyperlaneGuards } from '@/protocols/hyperlane/
 import { assembleTransferRemoteArgs, buildHyperlanePlan, HyperlanePlanError, routeFeeBps, scaleIn, scaleOut } from '@/protocols/hyperlane/plan'
 import { encodeTransferRemote, hyperlaneSelfCheck, TRANSFER_REMOTE_SELECTOR } from '@/protocols/hyperlane/preview'
 import { hyperlaneMessageUrl, hyperlaneTxUrl } from '@/protocols/hyperlane/track'
-import { nativeWarpRouteHints, warpRouteHints } from '@/protocols/hyperlane/warpRoutes'
+import { warpRouteHints } from '@/protocols/hyperlane/warpRoutes'
 import { HL, hyperlaneInput, hyperlaneMessageBytes, hyperlanePlan, remoteWarp, warpRouter } from './hyperlaneFixtures'
 
 // ------------------------------------------------------------------ config ----
@@ -554,10 +556,12 @@ describe('the registry hint table', () => {
     expect(warpRouteHints('solana', HL.OTHER)).toEqual([])
   })
 
-  it('lists native routes per chain', () => {
-    expect(nativeWarpRouteHints('ethereum').length).toBeGreaterThan(0)
-    for (const h of nativeWarpRouteHints('ethereum')) expect(h.standard).toBe('EvmHypNative')
-    expect(nativeWarpRouteHints('solana')).toEqual([])
+  it('carries collateral lookups only: a native or synthetic route is pasted by its own address', () => {
+    const raw = JSON.parse(readFileSync(join(process.cwd(), 'src/protocols/hyperlane/warpRoutes.json'), 'utf8')) as { chains: Record<string, { tokens: Record<string, { standard: string }[]>; native?: unknown }> }
+    for (const [chain, entry] of Object.entries(raw.chains)) {
+      expect(entry.native, chain).toBeUndefined()
+      for (const list of Object.values(entry.tokens)) for (const h of list) expect(h.standard, chain).not.toMatch(/^EvmHyp(Native|Synthetic)/)
+    }
   })
 })
 

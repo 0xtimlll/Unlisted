@@ -7,6 +7,9 @@
  * scratch (discover.ts): it must name the registry Mailbox, hold exactly this token, and answer
  * for itself. A token missing here is not refused; paste its router. Nothing here colours the
  * indicator (CLAUDE.md rule 1: a list narrows the search and never raises trust).
+ *
+ * Nothing from this table is ever shown unasked: it is consulted only after a pasted address turns
+ * out to be a plain ERC-20, and a native route (HypNative) is pasted by its own address.
  */
 import { getAddress, type Address } from 'viem'
 import type { ChainKey } from '../../core/chains'
@@ -14,14 +17,14 @@ import raw from './warpRoutes.json'
 
 export type WarpRouteHint = {
   router: Address
-  /** The registry's standard name: EvmHypCollateral, EvmHypXERC20, EvmHypNative, … */
+  /** The registry's standard name: EvmHypCollateral, EvmHypXERC20, … */
   standard: string
   symbol: string
   /** The registry's route id, e.g. "PAXG/arbitrum-ethereum". */
   route: string
 }
 
-type ChainHints = { tokens: Record<string, WarpRouteHint[]>; native: WarpRouteHint[] }
+type ChainHints = { tokens: Record<string, WarpRouteHint[]> }
 const BY_CHAIN = raw.chains as Record<string, ChainHints>
 
 export const WARP_ROUTES_SOURCE: string = raw.source
@@ -33,9 +36,4 @@ export function warpRouteHints(chain: ChainKey, token: string): WarpRouteHint[] 
   const entry = BY_CHAIN[chain]
   if (!entry) return []
   return (entry.tokens[token.toLowerCase()] ?? []).map(checksum)
-}
-
-/** Routers the registry lists as moving this chain's native coin. */
-export function nativeWarpRouteHints(chain: ChainKey): WarpRouteHint[] {
-  return (BY_CHAIN[chain]?.native ?? []).map(checksum)
 }

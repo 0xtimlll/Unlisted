@@ -363,45 +363,7 @@
             "route": "oUSDT/staging"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0x6B8D1F18819DACA1fB966CF8Cff12feb4c00EB88",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
-        },
-        {
-          "router": "0x19dcF74D21d85Cf82d1a047ef80C64954E4aa009",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
-        },
-        {
-          "router": "0x14CFC15Da10d5cfC6A494E183c795067573C7F51",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-bsc-kalychain-polygon"
-        },
-        {
-          "router": "0x2011d8fDd34F07a292C7aB6b1f4e4046a98842a6",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/coti-ethereum"
-        },
-        {
-          "router": "0xbcDAA686CD93188527A6020ba3D75f926f9e3c92",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/viction"
-        },
-        {
-          "router": "0x5b4172Eed2886bC3623a9ed9CCC98DBE2832B7d2",
-          "standard": "EvmHypNative",
-          "symbol": "ETHSTAGE",
-          "route": "ETHSTAGE/stage"
-        }
-      ]
+      }
     },
     "avalanche": {
       "tokens": {
@@ -489,8 +451,7 @@
             "route": "QUILL/eni"
           }
         ]
-      },
-      "native": []
+      }
     },
     "base": {
       "tokens": {
@@ -916,45 +877,7 @@
             "route": "USDT/moonpay-staging"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0x885598858b68562FE5001F8eE022522313257C7a",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
-        },
-        {
-          "router": "0xE4A9622Bf50025fE99A576D484AEf16280A5304f",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
-        },
-        {
-          "router": "0x7c15d85933aEE2e721220F2bfd6afCEAfd357BEB",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/coti-ethereum"
-        },
-        {
-          "router": "0x1634D476C1215C88B9746b6F4D4d8334540f5905",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/krown"
-        },
-        {
-          "router": "0xD3b9dDaC349E808B07845e01bae3Bf3464FB45b3",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/viction"
-        },
-        {
-          "router": "0x94620098a0AF6fBEb3eDd2BC6F52D1aa228e9077",
-          "standard": "EvmHypNative",
-          "symbol": "ETHSTAGE",
-          "route": "ETHSTAGE/stage"
-        }
-      ]
+      }
     },
     "bsc": {
       "tokens": {
@@ -1268,39 +1191,7 @@
             "route": "stBTC/bsc-hyperevm"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0x8d0e034611B691683377d2fC9958122a30F7DAab",
-          "standard": "EvmHypNative",
-          "symbol": "BNB",
-          "route": "BNB/bsc-kalychain"
-        },
-        {
-          "router": "0xb11d99AD37872068B14b5b9eeb3CE1A4E2244744",
-          "standard": "EvmHypNative",
-          "symbol": "BNB",
-          "route": "BNB/bsc-zeronetwork"
-        },
-        {
-          "router": "0xBAACA4e74fCAa430E903ecEe46665e4E60EA2D38",
-          "standard": "EvmHypNative",
-          "symbol": "BNB",
-          "route": "BNB/eni"
-        },
-        {
-          "router": "0x8E64a314034a3089fA8E8cF87Fbda9a2E10B7AAc",
-          "standard": "EvmHypNative",
-          "symbol": "BNB",
-          "route": "BNB/krown"
-        },
-        {
-          "router": "0xdd615fCfed0E2BE65041053DA12C3C95C6A16957",
-          "standard": "EvmHypNative",
-          "symbol": "BNB",
-          "route": "BNB/radix"
-        }
-      ]
+      }
     },
     "ethereum": {
       "tokens": {
@@ -2252,87 +2143,7 @@
             "route": "PROM/bsc-ethereum-polygon"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0x38D447694f5c1f773ae3132cf93bF30B7Ec1Fa5A",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/aleo"
-        },
-        {
-          "router": "0x85E9ae52B10f35e3D15264F1E906895B1D7Da1a0",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
-        },
-        {
-          "router": "0xE0A5921Bcc37eb2FeCc452AE574b86bD4c332196",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
-        },
-        {
-          "router": "0x07C747b0D99aBE8132f771cf6D2365D19ED1FfbA",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/coti-ethereum"
-        },
-        {
-          "router": "0xCF8EeA870e3124FF4fF2323B181Ca93Eb89Ddc40",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/eni"
-        },
-        {
-          "router": "0x9a3BeED38441e8fF8E033043a88B49E035F5a2da",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/ethereum-hyperevm"
-        },
-        {
-          "router": "0x20d0159C2369d115a7e430516E635267c08ACE19",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/ethereum-radix"
-        },
-        {
-          "router": "0x3e6Dba802d62aba2361Dd632fbC9f547AA6789aE",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/ethereum-vana"
-        },
-        {
-          "router": "0x95Abf44e0B9166348A9ed8797a7f20CC32Fd9C26",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/krown"
-        },
-        {
-          "router": "0xa901E6974C8F0fCc2f44451B0e788CD6957E02E2",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/mantra"
-        },
-        {
-          "router": "0x2bBdc933196334C6CD3F16F131B62f7c567BB27D",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/paradex"
-        },
-        {
-          "router": "0x7DCA030594C6695fc24b874917d0beAA38715639",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/viction"
-        },
-        {
-          "router": "0xd17c7E32a2D3BB76234925bee159aC18a43E8322",
-          "standard": "EvmHypNative",
-          "symbol": "ETHSTAGE",
-          "route": "ETHSTAGE/stage"
-        }
-      ]
+      }
     },
     "hyperevm": {
       "tokens": {
@@ -2412,15 +2223,7 @@
             "route": "ETH/aleo"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0xA10bCe7B3F13f8846611bdac36EF5972069ce7d8",
-          "standard": "EvmHypNative",
-          "symbol": "HYPE",
-          "route": "HYPE/mantra"
-        }
-      ]
+      }
     },
     "ink": {
       "tokens": {
@@ -2516,8 +2319,7 @@
             "route": "USDCSTAGE/arbitrum-base-ethereum-ink-optimism-solanamainnet-superseed"
           }
         ]
-      },
-      "native": []
+      }
     },
     "linea": {
       "tokens": {
@@ -2575,8 +2377,7 @@
             "route": "EZETHSTAGE/renzo-stage"
           }
         ]
-      },
-      "native": []
+      }
     },
     "optimism": {
       "tokens": {
@@ -2754,33 +2555,7 @@
             "route": "USDT/eni"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0x14A77BdAb46bBEb7DAfc3E4cB4732A51241Ef539",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
-        },
-        {
-          "router": "0x4e550422D67f208eE25A730D11dCe9201cF3Aa3a",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
-        },
-        {
-          "router": "0xEF096995d7C4FE68abF9C96042521A61bEdd596D",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/viction"
-        },
-        {
-          "router": "0x7B3877CD74c7b7f1fc5ACE40Ad5C5aE1ebC87AA1",
-          "standard": "EvmHypNative",
-          "symbol": "ETHSTAGE",
-          "route": "ETHSTAGE/stage"
-        }
-      ]
+      }
     },
     "plasma": {
       "tokens": {
@@ -2814,8 +2589,7 @@
             "route": "USDTSTAGE/mode"
           }
         ]
-      },
-      "native": []
+      }
     },
     "polygon": {
       "tokens": {
@@ -3053,38 +2827,10 @@
             "route": "USDT/oft"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0x0a6364152EA7a487C697a36Eb2522f48bC62fB4c",
-          "standard": "EvmHypNative",
-          "symbol": "POL",
-          "route": "POL/kalychain-polygon"
-        },
-        {
-          "router": "0x76Af114f7Ebe96C02a3e4AB10f1511a7A66057A1",
-          "standard": "EvmHypNative",
-          "symbol": "POL",
-          "route": "POL/polygon-zeronetwork"
-        }
-      ]
+      }
     },
     "robinhood": {
-      "tokens": {},
-      "native": [
-        {
-          "router": "0x2bef59e84615371304bd731601f6344F5F304504",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/coti-ethereum"
-        },
-        {
-          "router": "0x4000b76E3d95947DdA57C20B42bD20b70deCD522",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/viction"
-        }
-      ]
+      "tokens": {}
     },
     "scroll": {
       "tokens": {
@@ -3104,15 +2850,7 @@
             "route": "USDT/arbitrum-ethereum-mantle-mode-polygon-scroll-zeronetwork"
           }
         ]
-      },
-      "native": [
-        {
-          "router": "0xF85379CF296f84871dee84826153d6F5ccA9de3B",
-          "standard": "EvmHypNative",
-          "symbol": "ETH",
-          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
-        }
-      ]
+      }
     }
   }
 }

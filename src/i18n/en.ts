@@ -584,12 +584,14 @@ export const en = {
       'Fresh route: it holds little of the token, or few dispatches are on record — a real route that is new, or not the real one. Start with a small amount.',
     flag_route_standing_unknown: 'The route’s standing (locked share, dispatch history) could not be read',
     hintOne: 'This address is the token, not the route. The Hyperlane registry lists this collateral route for it, and the route was then checked like any pasted contract:',
-    hintSeveral: 'This address is the token, not the route. The Hyperlane registry lists several routes for it on {chain} — pick one; each is checked on chain:',
+    hintSeveral: 'This address is the token, not the route. {n} routes the Hyperlane registry lists for it on {chain} passed the on-chain check — pick the one you mean:',
+    hintChecking: 'This address is the token, not the route. Checking the {n} route(s) the Hyperlane registry lists for it…',
     hintNone:
       'This address is an ERC-20, not a warp route, and the Hyperlane registry lists no route holding it on {chain}. Paste the route’s address (HypERC20Collateral) directly — it is checked the same way.',
-    hintMismatch: 'The registry named {router} for this token, but on chain that route holds a different token, so it was not offered.',
+    hintNoneUsable:
+      'This address is an ERC-20, not a warp route. The Hyperlane registry lists {n} route(s) for it on {chain}, but none of them is a warp route this app can use ({reason}) If you know the route’s own address, paste it — it is checked the same way.',
+    hintHoldsOther: 'on chain it holds a different token.',
     hintRoute: 'registry route {route}',
-    nativeHints: 'Native {symbol} routes the registry lists on {chain}:',
     noDestinations: 'This route names no destination we serve.',
     cta_find: 'Find the warp route',
     sentHint: 'Sent. Hyperlane’s relayer delivers it once the validators have signed; delivery is read from the destination Mailbox below.',
