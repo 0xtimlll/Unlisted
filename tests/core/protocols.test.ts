@@ -51,7 +51,13 @@ describe('protocols', () => {
   })
 
   it('paths are the slugs the export writes', () => {
-    expect(TAB_SLUGS.map(tabPath)).toEqual(['/bridge', '/ntt', '/ccip', '/rescue'])
+    expect(TAB_SLUGS.map(tabPath)).toEqual(['/bridge', '/ntt', '/ccip', '/hyperlane', '/rescue'])
+  })
+
+  it('Status / Rescue stays the last tab; a protocol tab is never after it', () => {
+    expect(TAB_SLUGS[TAB_SLUGS.length - 1]).toBe('rescue')
+    expect(TAB_SLUGS.indexOf('hyperlane')).toBe(TAB_SLUGS.length - 2)
+    expect(tabOfPath('/hyperlane')).toBe('hyperlane')
   })
 
   it('every protocol with a tab now has a bridge behind it', () => {

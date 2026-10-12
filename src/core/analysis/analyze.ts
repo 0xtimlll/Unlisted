@@ -174,6 +174,24 @@ function fromFinding(f: Finding, tx: TxLike, opts: AnalyzeOptions): AnalysisResu
         ...(switchAction ? { action: switchAction } : token ? { action: { kind: 'use_address' as const, chain, address: token } } : {}),
       })
     }
+    case 'hyperlane_sent': {
+      details.fields = {
+        messageId: f.messageId,
+        router: f.router,
+        destinationDomain: String(f.destination),
+        ...(f.recipient ? { recipient: f.recipient } : {}),
+        ...(f.amount !== undefined ? { amount: f.amount.toString() } : {}),
+      }
+      // The Hyperlane form starts from the ROUTER (the message's sender), which it then probes
+      // against the registry Mailbox like any pasted address.
+      return result('can_bridge', 'hyperlane_send', {
+        protocol: 'hyperlane',
+        vars: { address: f.router, chain: chainName, destination: f.destChain ? byKey(f.destChain).name : String(f.destination) },
+        details,
+        target: { chain, address: f.router, kind: 'hyperlane-router', ...(f.destChain ? { dstChain: f.destChain } : {}) },
+        action: switchAction ?? { kind: 'use_address', chain, address: f.router },
+      })
+    }
     case 'foreign': {
       const url = FOREIGN_LINK[f.protocol]
       details.fields = { emitter: f.emitter, ...f.vars }

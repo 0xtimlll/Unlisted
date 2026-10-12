@@ -4,6 +4,7 @@
  *   /bridge?from=ethereum&token=0x…&to=bsc      LayerZero OFT (V2 and v1)
  *   /ntt?from=ethereum&token=0x…&to=bsc         Wormhole NTT
  *   /ccip?from=base&token=0x…&to=ethereum       Chainlink CCIP
+ *   /hyperlane?from=ethereum&token=0x…&to=base  Hyperlane (the token, or the warp route itself)
  *   /bridge?from=solana&token=<OFT Store, base58>&to=ethereum
  *
  * The bridge is the path, as it already was. The link is written as the form is filled in and
@@ -44,7 +45,7 @@ function tokenFor(chain: ChainKey, raw: string | null): string | undefined {
 
 /**
  * Reads a link. Only `from` + `token` make a link; `to` is kept when it is a different, known
- * chain. The NTT and CCIP tabs are EVM-only, so a Solana side is not a link there.
+ * chain. The NTT, CCIP and Hyperlane tabs are EVM-only, so a Solana side is not a link there.
  */
 export function parseLink(search: string, tab: TabSlug): LinkState | undefined {
   if (tab === 'rescue') return undefined
@@ -71,7 +72,8 @@ export function buildLink(state: LinkState | undefined): string {
 
 /** A link, as the tab that opens it already knows how to take a target from another tab. */
 export function linkTarget(state: LinkState, tab: TabSlug): AnalysisTarget | undefined {
-  const kind = tab === 'oft' ? (byKey(state.from).vm === 'svm' ? 'oft-store' : 'oft') : tab === 'ntt' ? 'ntt-manager' : tab === 'ccip' ? 'ccip-token' : undefined
+  const kind =
+    tab === 'oft' ? (byKey(state.from).vm === 'svm' ? 'oft-store' : 'oft') : tab === 'ntt' ? 'ntt-manager' : tab === 'ccip' ? 'ccip-token' : tab === 'hyperlane' ? 'hyperlane-router' : undefined
   if (!kind) return undefined
   return {
     chain: state.from,

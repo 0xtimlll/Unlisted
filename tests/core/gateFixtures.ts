@@ -21,7 +21,10 @@ import { receivedAmount, trimPlan } from '@/protocols/wormhole-ntt/amounts'
 import { runNttGuards, type NttGuardInput } from '@/protocols/wormhole-ntt/guards'
 import { NO_TRANSCEIVER_INSTRUCTIONS, type NttPlan } from '@/protocols/wormhole-ntt/plan'
 import type { NttVerification } from '@/protocols/wormhole-ntt/verify'
+import { evmAddressToBytes32 } from '@/protocols/hyperlane/abi'
+import { runHyperlaneGuards, type HyperlaneGuardInput } from '@/protocols/hyperlane/guards'
 import { goodInput as oftGoodInput, treadOftInfo, treadPlan, ENDPOINT_HYPER, TREAD_ADAPTER, TREAD_OFT, WALLET as OFT_WALLET } from './fixtures'
+import { HL, hyperlaneInput, hyperlanePlan, remoteWarp } from './hyperlaneFixtures'
 
 /** What every guard set's report has in common. */
 export type AnyReport = {
@@ -446,8 +449,59 @@ const ccipHarness = (): Harness => ({
   },
 })
 
+// ------------------------------------------------------------- Hyperlane ----
+
+const hlTo = (recipient: Address) => hyperlanePlan({ recipient, recipientBytes32: evmAddressToBytes32(recipient) })
+
+const hyperlaneHarness = (): Harness => ({
+  name: 'Hyperlane',
+  run: (over) => runHyperlaneGuards(hyperlaneInput(over as Partial<HyperlaneGuardInput>)),
+  wallet: HL.WALLET,
+  contractsInPlay: [
+    { label: 'router', address: HL.ROUTER },
+    { label: 'token', address: HL.TOKEN },
+    { label: 'mailbox', address: HL.MAILBOX_ETH },
+    { label: 'the far router', address: HL.DST_ROUTER },
+  ],
+  recipientOverride: (address) => ({ plan: hlTo(address), recipientIsCustom: true, customRecipientConfirmed: true }),
+  noters: {
+    recipient_zero: () => ({ plan: hlTo(ZERO_ADDRESS), recipientIsCustom: true, customRecipientConfirmed: true }),
+    recipient_lookalike: () => ({ recipientLookalike: true }),
+    peer_back_mismatch: () => ({ remote: remoteWarp({ pointsBack: false }) }),
+    peer_foreign_mailbox: () => ({ remote: remoteWarp({ mailboxOk: false }) }),
+    peer_back_unavailable: () => ({ remote: remoteWarp({ readable: false, mailboxOk: undefined, pointsBack: undefined }) }),
+    route_fee_high: () => ({ plan: hyperlanePlan({ routeFee: 5n * 10n ** 16n, charge: 10n ** 18n + 5n * 10n ** 16n }), tokenBalance: 10n ** 19n, allowance: 10n ** 19n }),
+    simulation_failed: () => ({ simulation: { ok: false, reason: 'Error("no")' } }),
+    simulation_unavailable: () => ({ simulation: { ok: false, reason: 'fetch failed', unavailable: true } }),
+    fee_above_ceiling: () => ({ plan: hyperlanePlan({ fee: 5n * 10n ** 17n, value: 5n * 10n ** 17n }), nativeBalance: 10n ** 19n }),
+  },
+  blockers: {
+    wallet_not_connected: () => ({ walletAddress: undefined }),
+    chain_mismatch: () => ({ walletChainId: 8453 }),
+    route_unsupported: () => ({ plan: hyperlanePlan({ mailbox: getAddress('0x3333333333333333333333333333333333333333') }) }),
+    route_missing: () => ({ plan: hyperlanePlan({ dst: { chain: 'base', domain: 8453, router: ZERO_ADDRESS } }) }),
+    recipient_unconfirmed: () => ({ plan: hlTo(getAddress('0x9999999999999999999999999999999999999999')) }),
+    amount_rounds_to_zero: () => ({ plan: hyperlanePlan({ received: 0n }) }),
+    insufficient_balance: () => ({ tokenBalance: 0n }),
+    insufficient_native: () => ({ nativeBalance: 0n }),
+    fee_mismatch: () => ({ plan: hyperlanePlan({ value: 1n }) }),
+    selfcheck_failed: () => ({ selfCheck: { ok: false, mismatches: ['recipient'] } }),
+    needs_approve: () => ({ allowance: 0n }),
+    approve_forbidden: () => ({
+      plan: hyperlanePlan({ warpKind: 'synthetic', token: HL.ROUTER }),
+      allowance: undefined,
+      approveIntent: { token: HL.ROUTER, spender: HL.ROUTER, amount: 10n ** 18n },
+    }),
+    approve_wrong_spender: () => ({
+      allowance: 0n,
+      approveIntent: { token: HL.TOKEN, spender: getAddress('0x3333333333333333333333333333333333333333'), amount: hyperlanePlan().charge },
+    }),
+    approve_amount_mismatch: () => ({ allowance: 0n, approveIntent: { token: HL.TOKEN, spender: HL.ROUTER, amount: 1n } }),
+  },
+})
+
 // ------------------------------------------------------------------ all ----
 
 export async function harnesses(): Promise<Harness[]> {
-  return [oftHarness(), await v1Harness(), nttHarness(), ccipHarness()]
+  return [oftHarness(), await v1Harness(), nttHarness(), ccipHarness(), hyperlaneHarness()]
 }

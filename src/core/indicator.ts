@@ -69,6 +69,11 @@ const RED_NOTES: ReadonlySet<string> = new Set([
   // The contract keeps more than 3% of the amount (core/oftFee.ts): said aloud, decided by the person.
   'oft_fee_high',
   'oft_fee_extreme',
+  // Hyperlane: the far router names a mailbox other than the registry's, so the real one cannot
+  // deliver to it; and the route's own fee above the same thresholds.
+  'peer_foreign_mailbox',
+  'route_fee_high',
+  'route_fee_extreme',
 ])
 
 /** Which colour a guard note gives the indicator. */
@@ -84,6 +89,9 @@ export function noteLevel(code: string): ReasonLevel {
 const YELLOW_FLAGS: ReadonlySet<string> = new Set([
   'not_cross_checked',
   'adapter_empty',
+  // Hyperlane: a collateral or native route below the locked-share / dispatch floors (discover.ts).
+  'route_fresh',
+  'route_standing_unknown',
   'svm_paused',
   'svm_source_paused',
   'svm_store_unrecognised',

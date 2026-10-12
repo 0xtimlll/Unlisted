@@ -12,6 +12,7 @@ import { AddressBookProvider } from './addressBookContext'
 import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
 import { CcipApp } from './CcipApp'
+import { HyperlaneApp } from './HyperlaneApp'
 import { NttApp } from './NttApp'
 import { RescueApp } from './RescueApp'
 import { entryProtocol, load, save, type HistoryEntry, type SetStored, type Stored, type Theme } from './storage'
@@ -175,6 +176,8 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                 <NttApp stored={stored} setStored={setStored} srcKey={evmSrcKey} setSrcKey={setSrcKey} trackRequest={trackRequest} onTrackConsumed={() => setTrackRequest(null)} {...handoffProps} />
               ) : tab === 'ccip' ? (
                 <CcipApp stored={stored} setStored={setStored} srcKey={evmSrcKey} setSrcKey={setSrcKey} trackRequest={trackRequest} onTrackConsumed={() => setTrackRequest(null)} {...handoffProps} />
+              ) : tab === 'hyperlane' ? (
+                <HyperlaneApp stored={stored} setStored={setStored} srcKey={evmSrcKey} setSrcKey={setSrcKey} trackRequest={trackRequest} onTrackConsumed={() => setTrackRequest(null)} {...handoffProps} />
               ) : (
                 // §5 The rescue tab takes no handoff: it is not a form for a protocol, it is a
                 // transaction hash and whatever the two chains say about it.

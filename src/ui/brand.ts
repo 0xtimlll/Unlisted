@@ -28,5 +28,8 @@ export const BRAND: Record<ChainKey, Brand> = {
   robinhood: { bg: '#000000' },
   // The purple inkonchain.com itself is set in (its most-used accent).
   ink: { bg: '#7538F5' },
+  // Black is the brand: plasma.to's theme-color and primary button are #000000, and web3icons'
+  // branded mark is the same shape filled black.
+  plasma: { bg: '#000000' },
   solana: { bg: 'linear-gradient(0deg, #1A1622, #121212)' },
 }

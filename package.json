@@ -15,6 +15,8 @@
     "check:lz-v1": "node scripts/gen-lz-v1.mjs --check",
     "gen:lz-dvns": "node scripts/gen-lz-dvns.mjs",
     "check:lz-dvns": "node scripts/gen-lz-dvns.mjs --check",
+    "gen:hyperlane-warp": "node scripts/gen-hyperlane-warp.mjs",
+    "check:hyperlane-warp": "node scripts/gen-hyperlane-warp.mjs --check",
     "start": "node scripts/serve.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -65,6 +67,7 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "15.5.27",
+    "js-yaml": "4.3.2",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.11"

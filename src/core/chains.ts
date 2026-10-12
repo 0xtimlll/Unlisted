@@ -16,6 +16,7 @@ export type ChainKey =
   | 'scroll'
   | 'robinhood'
   | 'ink'
+  | 'plasma'
   | 'solana'
 
 /**
@@ -340,6 +341,37 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     srcConfirmationsHint: 20,
     blockTimeSec: 1,
     feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
+  },
+  {
+    vm: 'evm',
+    key: 'plasma',
+    name: 'Plasma',
+    chainId: 9745,
+    // From LayerZero's metadata (chainKey "plasma"), read back on chain: eid() on this address
+    // answers 30383 on every RPC below. The same address LayerZero uses on Robinhood Chain.
+    endpointV2: '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B',
+    eid: 30383,
+    nativeSymbol: 'XPL',
+    // The operator publishes one RPC (rpc.plasma.to, named in the Hyperlane registry's chain
+    // metadata and on chainlist); the other two are public endpoints of unrelated operators that
+    // answer eth_call, eth_getLogs and eth_simulateV1 for chain 9745 and allow browser origins —
+    // each rate-limits its keyless tier, so a deployment can put its own node in front with
+    // NEXT_PUBLIC_RPC_PLASMA, exactly as for Robinhood Chain.
+    rpcs: [
+      ...envRpc(process.env['NEXT_PUBLIC_RPC_PLASMA']),
+      { url: 'https://rpc.plasma.to', provider: 'plasma.to' },
+      { url: 'https://rpc.swiftnodes.io/rpc/plasma', provider: 'swiftnodes.io' },
+      { url: 'https://9745.rpc.thirdweb.com', provider: 'thirdweb.com' },
+    ],
+    // Routescan (EIP-3091 paths), the explorer the Hyperlane registry and chainlist both name.
+    explorerTxUrl: 'https://plasmascan.to/tx/',
+    explorerAddrUrl: 'https://plasmascan.to/address/',
+    feeStepWei: 10n ** 16n, // 0.01 XPL
+    // Read from the chain: the default ULN send config for Plasma → Ethereum / Arbitrum / Base asks
+    // for 5 confirmations, and a block is produced every second (measured over 50 blocks).
+    srcConfirmationsHint: 5,
+    blockTimeSec: 1,
+    feeCeiling: 100n * 10n ** 18n, // 100 XPL
   },
   {
     vm: 'svm',

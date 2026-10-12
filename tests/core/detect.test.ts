@@ -10,9 +10,12 @@ import { foreignEventsAbi } from '@/core/analysis/foreign'
 import { lzEventsAbi, LZ_TOPICS } from '@/core/lz/events'
 import { decodePacket, encodePacket, PacketError, type LzPacket } from '@/core/lz/packet'
 import { ccipEventsAbi, ccipRamp2EventsAbi, CCIP_TOPICS } from '@/protocols/ccip/abi'
+import { mailboxEventsAbi } from '@/protocols/hyperlane/abi'
+import { HYPERLANE_CHAINS } from '@/protocols/hyperlane/chains'
 import { nttTransferSentDigestAbi, nttTransferSentV1Abi, nttTransferSentV2Abi, NTT_TOPICS } from '@/protocols/wormhole-ntt/abi'
 import { WORMHOLE_CHAINS } from '@/protocols/wormhole-ntt/chains'
 import { makeLog } from './logs'
+import { hyperlaneMessageBytes } from './hyperlaneFixtures'
 
 // Checksummed by viem, never by hand: a wrong checksum is rejected when a log is encoded.
 const OFT: Address = getAddress('0xfa44c2634ff17cbe26dc3007d36bd61c79068c14')
@@ -188,7 +191,7 @@ describe('other protocols', () => {
     expect(CCIP_TOPICS.CCIPMessageSentRamp2).toBe('0x371bc2ff0a006f4ef863b1d27a065d4e9f938b6d883eb154572b4aea593b32cc')
   })
 
-  it('Axelar, CCTP and Hyperlane are each named', () => {
+  it('Axelar and CCTP are each named', () => {
     const axelar = ev(ROUTER, foreignEventsAbi as Abi, 'ContractCallWithToken', {
       sender: WALLET, destinationChain: 'base', destinationContractAddress: '0x', payloadHash: GUID, payload: '0x', symbol: 'USDC', amount: 1n,
     })
@@ -196,11 +199,22 @@ describe('other protocols', () => {
       nonce: 1n, burnToken: OFT, amount: 1n, depositor: WALLET, mintRecipient: pad(WALLET, { size: 32 }),
       destinationDomain: 6, destinationTokenMessenger: pad(ROUTER, { size: 32 }), destinationCaller: pad('0x0000000000000000000000000000000000000000', { size: 32 }),
     })
-    const hyperlane = ev(ROUTER, foreignEventsAbi as Abi, 'Dispatch', { sender: WALLET, destination: 8453, recipient: pad(WALLET, { size: 32 }), message: '0x' })
 
     expect(detectFindings(tx([axelar]), 'ethereum')[0]).toMatchObject({ protocol: 'axelar' })
     expect(detectFindings(tx([cctp]), 'ethereum')[0]).toMatchObject({ protocol: 'cctp' })
-    expect(detectFindings(tx([hyperlane]), 'ethereum')[0]).toMatchObject({ protocol: 'hyperlane' })
+  })
+
+  it('a Hyperlane Dispatch is a bridge we build — but only from the registry Mailbox', () => {
+    const mailbox = getAddress(HYPERLANE_CHAINS.ethereum!.mailbox)
+    const message = hyperlaneMessageBytes({ origin: 1, sender: ROUTER, destination: 8453, recipient: OFT, body: { recipient: WALLET, amount: 5n } })
+    const fromMailbox = ev(mailbox, mailboxEventsAbi as Abi, 'Dispatch', { sender: ROUTER, destination: 8453, recipient: pad(OFT, { size: 32 }), message })
+    const found = detectFindings(tx([fromMailbox]), 'ethereum')
+    expect(found[0]).toMatchObject({ kind: 'hyperlane_sent', emitter: mailbox, router: ROUTER, destination: 8453, destChain: 'base', recipient: WALLET, amount: 5n })
+    // The same topic from a stranger's contract is nobody's message.
+    const elsewhere = ev(ROUTER, mailboxEventsAbi as Abi, 'Dispatch', { sender: WALLET, destination: 8453, recipient: pad(WALLET, { size: 32 }), message })
+    expect(detectFindings(tx([elsewhere]), 'ethereum')).toEqual([])
+    // And the Ethereum mailbox's address means nothing on Base.
+    expect(detectFindings(tx([fromMailbox]), 'base')).toEqual([])
   })
 
   it("the network's own bridge is recognised by its documented address", () => {

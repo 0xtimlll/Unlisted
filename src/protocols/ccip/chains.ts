@@ -142,6 +142,17 @@ export const CCIP_CHAINS: Partial<Record<ChainKey, CcipChainConfig>> = {
     tokenAdminRegistry: '0xEb062d21c713A3d940BB0FaECFdC387d6Ea23697',
     tokenAdminRegistryVersion: '1.5.0',
   },
+  plasma: {
+    selector: 9335212494177455608n,
+    registryName: 'plasma-mainnet',
+    directoryKey: 'plasma-mainnet',
+    // Both answer typeAndVersion() with these versions on chain; the router reports Ethereum and
+    // Arbitrum as supported and Ethereum's router reports Plasma back.
+    router: '0xcDca5D374e46A6DDDab50bD2D9acB8c796eC35C3',
+    routerVersion: '1.2.0',
+    tokenAdminRegistry: '0xc23071a8AE83671f37bdA1DaDBC745a9780f632A',
+    tokenAdminRegistryVersion: '1.5.0',
+  },
   // solana: CCIP serves Solana, but this app only bridges EVM to EVM over CCIP.
 }
 

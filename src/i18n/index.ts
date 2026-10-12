@@ -18,10 +18,28 @@ export function fmt(template: string, vars: Record<string, string | number>): st
 
 /** Short badge for a protocol ("OFT"). Explicit branches so the dictionary stays type-checked. */
 export function protocolBadge(d: Dict, id: ProtocolId): string {
-  return id === 'lz-oft' ? d.protocols.badge_lz_oft : id === 'wormhole-ntt' ? d.protocols.badge_wormhole_ntt : d.protocols.badge_ccip
+  switch (id) {
+    case 'lz-oft':
+      return d.protocols.badge_lz_oft
+    case 'wormhole-ntt':
+      return d.protocols.badge_wormhole_ntt
+    case 'ccip':
+      return d.protocols.badge_ccip
+    case 'hyperlane':
+      return d.protocols.badge_hyperlane
+  }
 }
 
 /** Full name of a protocol ("LayerZero OFT"). */
 export function protocolName(d: Dict, id: ProtocolId): string {
-  return id === 'lz-oft' ? d.protocols.name_lz_oft : id === 'wormhole-ntt' ? d.protocols.name_wormhole_ntt : d.protocols.name_ccip
+  switch (id) {
+    case 'lz-oft':
+      return d.protocols.name_lz_oft
+    case 'wormhole-ntt':
+      return d.protocols.name_wormhole_ntt
+    case 'ccip':
+      return d.protocols.name_ccip
+    case 'hyperlane':
+      return d.protocols.name_hyperlane
+  }
 }

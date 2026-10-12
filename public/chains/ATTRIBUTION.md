@@ -22,4 +22,5 @@ is applied by the tile around them (`src/ui/brand.ts`); the "branded" variants a
 | scroll.svg | networks/mono/scroll.svg | mono, #101010 |
 | robinhood.svg | networks/branded/robinhood.svg | branded |
 | ink.svg | networks/mono/ink.svg | mono, white |
+| plasma.svg | networks/mono/plasma.svg | mono, white (as published) |
 | solana.svg | networks/branded/solana.svg | branded |

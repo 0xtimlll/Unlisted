@@ -4,6 +4,7 @@ import { byEid, byKey } from '@/core/chains'
 import { PROTOCOL_IDS, type ProtocolId } from '@/core/protocols'
 import { scanMessageUrl } from '@/core/track'
 import { ccipTxUrl } from '@/protocols/ccip/track'
+import { hyperlaneTxUrl } from '@/protocols/hyperlane/track'
 import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { protocolBadge, useDict } from '@/i18n'
 import { entryProtocol, filterHistory, type HistoryEntry, type HistoryFilter } from '../storage'
@@ -90,6 +91,10 @@ function HistoryRow({ entry: e, onTrack }: { entry: HistoryEntry; onTrack: (e: H
       ) : protocol === 'ccip' && /^0x[0-9a-fA-F]{64}$/.test(e.txHash) ? (
         <a href={ccipTxUrl(e.txHash)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs text-accent-ink hover:underline">
           ccip explorer ↗
+        </a>
+      ) : protocol === 'hyperlane' && /^0x[0-9a-fA-F]{64}$/.test(e.txHash) ? (
+        <a href={hyperlaneTxUrl(e.txHash)} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs text-accent-ink hover:underline">
+          hyperlane explorer ↗
         </a>
       ) : null}
     </li>

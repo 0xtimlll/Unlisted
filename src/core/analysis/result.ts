@@ -17,7 +17,6 @@ export const FOREIGN_PROTOCOL_IDS = [
   'axelar',
   'axelar-its',
   'cctp',
-  'hyperlane',
   'native-bridge',
 ] as const
 export type ForeignProtocolId = (typeof FOREIGN_PROTOCOL_IDS)[number]
@@ -35,9 +34,10 @@ export type AnalysisCode =
   | 'lz_oft_receive' // the receiving side of a transfer: the OFT on THIS chain
   | 'lz_packet_no_oft' // a LayerZero packet whose OApp still has to be probed
   | 'lz_oapp_not_oft' // a LayerZero app, but not an OFT — bridge on the project's own site
-  // --- Wormhole NTT / Chainlink CCIP, read in their own tab -------------------
+  // --- Wormhole NTT / Chainlink CCIP / Hyperlane, read in their own tab ------
   | 'ntt_transfer'
   | 'ccip_send'
+  | 'hyperlane_send'
   // --- another protocol we support -------------------------------------------
   | 'switch_protocol' // recognised and implemented, but pasted into the wrong tab: open that one
   | 'protocol_not_implemented' // recognised, its bridge is not built yet
@@ -75,7 +75,7 @@ export type AnalysisTarget = {
   chain: ChainKey
   /** EVM address (EIP-55) or a Solana base58 key. */
   address: string
-  kind: 'oft' | 'oft-store' | 'lz-oapp' | 'ntt-manager' | 'ccip-token'
+  kind: 'oft' | 'oft-store' | 'lz-oapp' | 'ntt-manager' | 'ccip-token' | 'hyperlane-router'
   /** The ERC-20 / mint being moved, when it differs from `address`. */
   token?: string
   /** Destination the sample used, as that protocol numbers its chains. */

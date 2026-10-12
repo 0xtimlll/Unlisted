@@ -1,8 +1,8 @@
 # Unlisted — контекст для новой сессии
 
 Приватный некастодиальный мост. Next.js static export на Cloudflare Pages, только desktop.
-Вкладки: OFT (LayerZero), NTT (Wormhole), CCIP (Chainlink), Rescue. Мост определяется из адреса
-токена, а не выбирается пользователем.
+Вкладки: OFT (LayerZero), NTT (Wormhole), CCIP (Chainlink), Hyperlane, Status / Rescue — в этом
+порядке, Status всегда последняя. Мост определяется из адреса токена, а не выбирается пользователем.
 
 ## Четыре правила, которые старше любой задачи
 
@@ -109,10 +109,38 @@
 | `lz-rescue/` | Вкладка Rescue: четыре действия из белого списка, `keccak256(payload)` сверяется с on-chain хешем |
 | `wormhole-ntt/` | NTT |
 | `ccip/` | CCIP |
+| `hyperlane/` | Hyperlane warp routes (2026-10-12): `chains.ts` (Mailbox + domain на каждую сеть, проверены on-chain), `discover.ts` (роутер → тип/токен/маршруты, кворум, дальняя сторона, standing), `plan.ts`, `guards.ts` (14 guard'ов), `preview.ts` (self-check + симуляция, при нехватке allowance — батч approve+transferRemote через `eth_simulateV1`), `status.ts`, `track.ts`, `warpRoutes.json` (подсказка token → router из реестра Hyperlane) |
 | `src/core/svm/` | Solana (на `@layerzerolabs/oft-v2-solana-sdk`) |
 
 Таблицы, а не хардкод: `lz-v1/chains.json` (v1 chainId, endpoint, ULN, `v1Active` + причина),
-`lz-risk/dvns.json` (614 DVN, 94 deprecated). Обе генерируются — см. ниже.
+`lz-risk/dvns.json` (614 DVN, 94 deprecated), `hyperlane/warpRoutes.json` (warp-маршруты реестра
+Hyperlane на наших сетях — только подсказка для поиска, цвет от неё не зависит). Все генерируются —
+см. ниже.
+
+**Hyperlane — как устроено доверие (2026-10-12).** Якорь — **Mailbox из `hyperlane/chains.ts`**
+(адреса из `hyperlane-xyz/hyperlane-registry`, каждый прочитан on-chain: `localDomain()` = domain из
+таблицы, `VERSION()` = 3). Warp route — контракт пользователя: `mailbox()`, `wrappedToken()`,
+`routers(domain)` — его собственные заявки. Роутер, который называет не реестровый Mailbox или не тот
+domain, отвергается на стадии probe (`foreign_mailbox` / `wrong_domain`, как `foreign_endpoint` у
+OFT). Три формы маршрута: **collateral** (держит ERC-20; approve идёт роутеру — на **charge** =
+amount + комиссия маршрута, потому что столько `_calculateFeesAndCharge` и списывает), **synthetic**
+(роутер и есть токен; `transferRemote` сжигает у отправителя — approve запрещён, `approve_forbidden`),
+**native** (монета сети уходит в `msg.value` вместе с комиссией). Три поколения контрактов: 5.x
+(`quoteGasPayment`, без scale), 7.x (`scale()`), 10+ (`quoteTransferRemote` с тремя квотами и
+`feeRecipient()`); fee в токене (`feeToken() != 0`, 12+) — план не строится (`fee_token_unsupported`).
+`msg.value` — ровно квота, без буфера. Зелёный даёт только то, что деплоер роутера не пишет сам:
+для collateral/native — доля supply, залоченная в роутере, и число `Dispatch` реестрового Mailbox от
+этого роутера в окне (те же пороги, что у OFT-адаптера: ≥ 0.1% и ≥ 20) — иначе жёлтый флаг
+`route_fresh`; synthetic — как plain OFT. Дальняя сторона читается через `routers(dst)` самого
+роутера (заявка), поэтому доверие не повышает, но понижает: `mailbox()` там ≠ реестровый Mailbox
+назначения — красная `peer_foreign_mailbox`, `routers(src)` не указывает назад — красная
+`peer_back_mismatch`. Ни одна из них кнопку не держит (правило 2); блок — только отсутствие маршрута
+(`route_missing`), нехватка charge/газа и инварианты сборки. Подсказка token → router: Hyperlane не
+имеет on-chain индекса, реестр лежит в git; `warpRoutes.json` отвечает «кого проверять», а решает
+probe (кандидат обязан держать ровно вставленный токен, иначе не предлагается). Статус: `Dispatch`
+только с реестрового Mailbox, id считается как `keccak256(message)` и сверяется с `DispatchId`;
+`delivered(id)` спрашивается у реестрового Mailbox назначения; дальний роутер — `mailbox()` и
+`routers(origin)`.
 
 ## Правила безопасности
 
@@ -128,7 +156,7 @@ Solana-стека, `public/theme.js` проверяется на отсутст�
 на фикстурах (`tests/core/checkWhitelist.test.ts`, через `CHECK_WHITELIST_ROOT`).
 
 **Scoped-категории**: write-примитив разрешён только в своём модуле — `transfer` в `wormhole-ntt/`,
-`ccipSend` в `ccip/`, `sendFrom` в `lz-v1/`, а `retryPayload` / `retryMessage` / `commitVerification` /
+`ccipSend` в `ccip/`, `transferRemote` в `hyperlane/`, `sendFrom` в `lz-v1/`, а `retryPayload` / `retryMessage` / `commitVerification` /
 `lzReceive` — каждый только в `lz-rescue/`. Отдельно `SIMULATED_ONLY` (`nonblockingLzReceive`,
 `lzReceive`): эти имена разрешены как `functionName` внутри `lz-risk/` ради `eth_call`, и сам модуль
 отдельно проверяется на отсутствие любого write-примитива.
@@ -270,9 +298,9 @@ DVN сравниваются **по id оператора, а не по адре
 `RelayerParams` — только с ULN из `lz-v1/chains.json` (когда он известен), пары RelayerParams→Packet
 собираются по порядку логов, а endpoint назначения для `commitVerification` / `lzReceive` — из реестра.
 
-**Status / Rescue читает три протокола (2026-10-09).** Один хеш, один receipt, три читателя рядом:
-`lz-rescue/` (как раньше, с четырьмя действиями), `wormhole-ntt/status.ts` и `ccip/status.ts` —
-только статус, без единого write. Индексеры не спрашиваются; каждая карточка лишь ссылается на свой
+**Status / Rescue читает четыре протокола (2026-10-09, Hyperlane — 2026-10-12).** Один хеш, один
+receipt, четыре читателя рядом: `lz-rescue/` (как раньше, с четырьмя действиями),
+`wormhole-ntt/status.ts`, `ccip/status.ts` и `hyperlane/status.ts` — только статус, без единого write. Индексеры не спрашиваются; каждая карточка лишь ссылается на свой
 explorer. NTT: сообщение берётся из `LogMessagePublished` **реестрового** core bridge (payload —
 transceiver message с префиксом `0x9945ff10`), digest считается сами как
 `keccak256(abi.encodePacked(uint16 srcWormholeChainId, nttManagerPayload))` из байтов лога и chain id
@@ -311,6 +339,7 @@ npm run audit
 ```
 npm run gen:lz-v1    / npm run check:lz-v1     # lz-v1/chains.json из metadata LayerZero + RPC
 npm run gen:lz-dvns  / npm run check:lz-dvns   # lz-risk/dvns.json
+npm run gen:hyperlane-warp / npm run check:hyperlane-warp  # hyperlane/warpRoutes.json из реестра Hyperlane
 npm run headers                                 # заголовки для Cloudflare
 ```
 

@@ -1,0 +1,3118 @@
+{
+  "source": "https://raw.githubusercontent.com/hyperlane-xyz/hyperlane-registry/main/deployments/warp_routes/warpRouteConfigs.yaml",
+  "chains": {
+    "arbitrum": {
+      "tokens": {
+        "0x000000000026839b3f4181f2cf69336af6153b99": [
+          {
+            "router": "0x0bb999f106C1246810686891f97Bbc22C53E4850",
+            "standard": "EvmHypCollateral",
+            "symbol": "GG",
+            "route": "GG/apechain-arbitrum"
+          }
+        ],
+        "0x077574441c4f8763a37a2cfee2ecb444aa60a15e": [
+          {
+            "router": "0x6720350f7e3323418c05645cD5d6bb055f4A7427",
+            "standard": "EvmHypCollateral",
+            "symbol": "RCADE",
+            "route": "RCADE/arbitrum-bsc"
+          }
+        ],
+        "0x13a7dedb7169a17be92b0e3c7c2315b46f4772b3": [
+          {
+            "router": "0x1BBBd56299717A9eAf90393157137Ca4A308d965",
+            "standard": "EvmHypCollateral",
+            "symbol": "Boop",
+            "route": "Boop/apechain-arbitrum"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0xB26bBfC6d1F469C821Ea25099017862e7368F4E8",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x25d887ce7a35172c62febfd67a1856f20faebb00": [
+          {
+            "router": "0x46C41c67471bF859A4453512a7dc1B2431b45993",
+            "standard": "EvmHypCollateral",
+            "symbol": "PEPE",
+            "route": "PEPE/apechain-arbitrum"
+          }
+        ],
+        "0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f": [
+          {
+            "router": "0x3CDbaBE5Bf4E6cfE10A2A326E0ad31b2d16398D4",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/arbitrum-bsc-kalychain-polygon"
+          }
+        ],
+        "0x539bde0d7dbd336b79148aa742883198bbf60342": [
+          {
+            "router": "0x37687d638EA2D25Df5350D37d5BccBF7Fff1F2B3",
+            "standard": "EvmHypCollateral",
+            "symbol": "MAGIC",
+            "route": "MAGIC/abstract"
+          }
+        ],
+        "0x585afea249031ea4168a379f664e91dfc5f77e7d": [
+          {
+            "router": "0xB0F59a43FD64ba50772ba53A694Cf712d39e5449",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x59062301fb510f4ea2417b67404cb16d31e604ba": [
+          {
+            "router": "0x79EdA6DAfB2B9531930CbD9240A73B5eF0e8c9E2",
+            "standard": "EvmHypCollateral",
+            "symbol": "LOGX",
+            "route": "LOGX/arbitrum-solanamainnet"
+          }
+        ],
+        "0x9e64d3b9e8ec387a9a58ced80b71ed815f8d82b5": [
+          {
+            "router": "0x32AD8eEb9831afe4B8f19FCF7B318c6526B8B781",
+            "standard": "EvmHypCollateral",
+            "symbol": "SMOL",
+            "route": "SMOL/arbitrum-abstract-ethereum-solanamainnet-base"
+          }
+        ],
+        "0xa8e5800aef846a38a5814a28bcb851ed626a0053": [
+          {
+            "router": "0xC9e048011E4A47584CE5b91AbD8695338A640648",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-cheesechain"
+          }
+        ],
+        "0xaf88d065e77c8cc2239327c5edb3a432268e5831": [
+          {
+            "router": "0xa7f5cc2CD457D2CC236Dc10460F14767fd135518",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "CROSS/ctusd-usdc-ironbridge"
+          },
+          {
+            "router": "0xeBC079D41C41a0ef7e54aa7Af867df9a621C9bE0",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0x9fb176528AdF0Bb7524CE752B2345C80eD24243F",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x1FdA66FA15A261F01F1E09228D41bD0A806d7529",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0xa66a9C0112a428d407388Db87659E9C66F3eF29c",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-endurance"
+          },
+          {
+            "router": "0x14adE09354a20ed23E690afc803E64E60a84e7D3",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-ethereum-lisk-optimism-polygon-zeronetwork"
+          },
+          {
+            "router": "0xD0a1d1b8E10625eE7Ed4Be4Aa7afA7f169411FBd",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0x736f1150203E88E6aBA183f216A4a51b6ca12156",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0xAd4350Ee0f9f5b85BaB115425426086Ae8384ebb",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0xc2600eB2d0a3e20521eaB9F9B6B5e0433d2a19f9",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eni"
+          },
+          {
+            "router": "0xee9CB26259E98A8F24fc8D265AEfa09B4f3AcAb7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/igra"
+          },
+          {
+            "router": "0x67E26775847da2c066415d7F46fbEEc5C70F6a89",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/incentiv"
+          },
+          {
+            "router": "0xd57c6B54f198bf039C93a821C6c0151C9Ea546ac",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/lumia"
+          },
+          {
+            "router": "0x8a82186EA618b91D13A2041fb7aC31Bf01C02aD2",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp"
+          },
+          {
+            "router": "0xE086378F7f0afd5C3ff95E10B5e7806a0901b33f",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x33caA577bcC00D43b2cf2EBedF438E258d1785C1",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x4c19c653a8419A475d9B6735511cB81C15b8d9b2",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0x29116fD7a30401f30E6f6856DC4FdfBAebbBc01e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x82B0d43eFE1aa9877b8C35319006Af2916203e52",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mantra"
+          },
+          {
+            "router": "0xeBC079D41C41a0ef7e54aa7Af867df9a621C9bE0",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay"
+          },
+          {
+            "router": "0x9fb176528AdF0Bb7524CE752B2345C80eD24243F",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay-staging"
+          },
+          {
+            "router": "0xF5f93d26229482adCA3e42F84D08d549cF131658",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/paradex"
+          },
+          {
+            "router": "0xf73436AB044AAA679fb619D0DEe4a1dAfE84ac1a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/pulsechain"
+          },
+          {
+            "router": "0x867a19a5b257bcb99E1840dE2ef852268Efd5E46",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/radix"
+          },
+          {
+            "router": "0x4337e529a4f6429668746db798416961c48F07BE",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/subtensor"
+          },
+          {
+            "router": "0x2cB0E5AbE11346679749063d3FBfC1f390e6e70A",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/superseed"
+          },
+          {
+            "router": "0xD74706A5Be0cb87357EF80b4fAEa709287D4f640",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/arbitrum-base-ethereum-ink-optimism-solanamainnet-superseed"
+          },
+          {
+            "router": "0x604610E6B3310852f1599a6eDbEbd6b6b2B766DC",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0xc7603786470f04d33e35f9e9b56bd0ca8803fb95": [
+          {
+            "router": "0xc656E77E18d378DeED5051b26f750b325D6253C2",
+            "standard": "EvmHypCollateral",
+            "symbol": "LITKEY",
+            "route": "LITKEY/litchain"
+          }
+        ],
+        "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1": [
+          {
+            "router": "0x1e59F72de6c00c456f7F42708FE8b6b0782E84C6",
+            "standard": "EvmHypCollateral",
+            "symbol": "DAI",
+            "route": "DAI/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0xEb881635A2Dd87d2b7C0F7B206810fa2A1956552",
+            "standard": "EvmHypCollateral",
+            "symbol": "DAI",
+            "route": "DAI/arbitrum-bsc-linea-polygon"
+          }
+        ],
+        "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9": [
+          {
+            "router": "0x75a9297db5F0349fd1d6f4030953Fe17175e06d4",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USD₮0",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0xACe9bF07AaCfE54a14129561d09394850F3A5dDb",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USD₮0",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0xFDb3307a16442ed5A7C040AE1600a3B3D3C8e7D9",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0x83AF845F002c2dA8748eaB8203D2704BdAE6fB8e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-mantle-mode-polygon-scroll-zeronetwork"
+          },
+          {
+            "router": "0xB9D49E18c69628C6D6B12Ab06F1918C4c4fe9546",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0x42B794FbF2Ae97d7E9001e21D36B0A5595B51B11",
+            "standard": "EvmHypCollateral",
+            "symbol": "USD₮0",
+            "route": "USDT/eclipsemainnet"
+          },
+          {
+            "router": "0x92637DCE7F34b9e9b5741B9203F33EED7f71E5a4",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eni"
+          },
+          {
+            "router": "0x75a9297db5F0349fd1d6f4030953Fe17175e06d4",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USD₮0",
+            "route": "USDT/moonpay"
+          },
+          {
+            "router": "0xACe9bF07AaCfE54a14129561d09394850F3A5dDb",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USD₮0",
+            "route": "USDT/moonpay-staging"
+          },
+          {
+            "router": "0xE4c1A1E54C232454311cF68610c3885FdD991c0E",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/oft"
+          },
+          {
+            "router": "0x22eF52C822329E96C3bE0bBB165805603777296C",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDTSTAGE",
+            "route": "USDTSTAGE/mode"
+          },
+          {
+            "router": "0x98d4DD4220Aa0Fe9251ccF7978c9B355D1be276a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "oUSDT/production"
+          },
+          {
+            "router": "0xf0f6e34FE0EF3EFF572A5D2f3a14d9e5f5cF34E8",
+            "standard": "EvmHypCollateral",
+            "symbol": "USD₮0STAGE",
+            "route": "oUSDT/staging"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0x6B8D1F18819DACA1fB966CF8Cff12feb4c00EB88",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+        },
+        {
+          "router": "0x19dcF74D21d85Cf82d1a047ef80C64954E4aa009",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
+        },
+        {
+          "router": "0x14CFC15Da10d5cfC6A494E183c795067573C7F51",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-bsc-kalychain-polygon"
+        },
+        {
+          "router": "0x2011d8fDd34F07a292C7aB6b1f4e4046a98842a6",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/coti-ethereum"
+        },
+        {
+          "router": "0xbcDAA686CD93188527A6020ba3D75f926f9e3c92",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/viction"
+        },
+        {
+          "router": "0x5b4172Eed2886bC3623a9ed9CCC98DBE2832B7d2",
+          "standard": "EvmHypNative",
+          "symbol": "ETHSTAGE",
+          "route": "ETHSTAGE/stage"
+        }
+      ]
+    },
+    "avalanche": {
+      "tokens": {
+        "0x30974f73a4ac9e606ed80da928e454977ac486d2": [
+          {
+            "router": "0x118b30d28e5dB274f2376910038F66b1C33bD00a",
+            "standard": "EvmHypXERC20",
+            "symbol": "oXAUT",
+            "route": "oXAUT/production"
+          }
+        ],
+        "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e": [
+          {
+            "router": "0x1FdA66FA15A261F01F1E09228D41bD0A806d7529",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0x252833ad2daa5BCb7C251Aa8E12ce97D6Bd4765E",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x3187deAd7A2Bd6770F5Fe81495D1B715926AAe6e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/electroneum"
+          },
+          {
+            "router": "0x9f8F71F139C354B7b17E4D8DCb29ddd2A377733D",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/igra"
+          },
+          {
+            "router": "0x0E8Bc62865F539889fe7d8537F2ed6db5aa0F677",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp"
+          },
+          {
+            "router": "0xCB35d7730843F770625bE36A0E4228c17fDcBC09",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x2382899f9CaD4344cc2b9DD054A2A07FeeE4B8D0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x33e94B6D2ae697c16a750dB7c3d9443622C4405a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0x6c07f25B23B5cab557E7df13f25D634F1491f146",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x2A872Ae01375A5ca7e044cb0e75cb97621Ca954A",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/pulsechain"
+          },
+          {
+            "router": "0x43295D726C09a1578960549f2513E186C3B62e57",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0xf3e5914ca1f678e0a3a38031b5514682e3450919": [
+          {
+            "router": "0x754587e5704B5aCecEA6d5d60fDE65BAAe97b8d6",
+            "standard": "EvmHypCollateral",
+            "symbol": "QUILL",
+            "route": "QUILL/eni"
+          }
+        ]
+      },
+      "native": []
+    },
+    "base": {
+      "tokens": {
+        "0x0290b74980c051eb46b84b1236645444e77da0e9": [
+          {
+            "router": "0xA46248347da3dE91def696689E7997997dA35864",
+            "standard": "EvmHypVSXERC20",
+            "symbol": "oUSDTSTAGE",
+            "route": "oUSDT/staging"
+          }
+        ],
+        "0x0c1dc73159e30c4b06170f2593d3118968a0dca5": [
+          {
+            "router": "0x01efc19badCAC4EDaE0d75c5F344AcD0F7311722",
+            "standard": "EvmHypCollateral",
+            "symbol": "GPS",
+            "route": "GPS/base-bsc"
+          }
+        ],
+        "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189": [
+          {
+            "router": "0x4F0654395d621De4d1101c0F98C1Dba73ca0a61f",
+            "standard": "EvmHypVSXERC20",
+            "symbol": "oUSDT",
+            "route": "oUSDT/production"
+          }
+        ],
+        "0x17906b1cd88aa8efaefc5e82891b52a22219bd45": [
+          {
+            "router": "0x458BDDd0793fe4f70912535f172466a5473f2e77",
+            "standard": "EvmHypXERC20",
+            "symbol": "SUPR",
+            "route": "SUPR/base-ethereum-ink-optimism-superseed"
+          }
+        ],
+        "0x19c5c2316171a2cff8773435a9a5f3f0e3eab14b": [
+          {
+            "router": "0xD23f3de954eeF59752DF0ca614403B1377F9302A",
+            "standard": "EvmHypXERC20",
+            "symbol": "REZ",
+            "route": "REZSTAGING/base-ethereum-unichain"
+          }
+        ],
+        "0x1c4cca7c5db003824208adda61bd749e55f463a3": [
+          {
+            "router": "0x6a5579ABECE07b73d4d92a8bBFF51aF827bB21f1",
+            "standard": "EvmHypCollateral",
+            "symbol": "GAME",
+            "route": "GAME/base-form"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0x2552516453368e42705D791F674b312b8b87CD9e",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x30974f73a4ac9e606ed80da928e454977ac486d2": [
+          {
+            "router": "0x0fcf8DAE34efB101e7dF535550370da4e53Ab960",
+            "standard": "EvmHypXERC20",
+            "symbol": "oXAUT",
+            "route": "oXAUT/production"
+          }
+        ],
+        "0x4200000000000000000000000000000000000006": [
+          {
+            "router": "0x5B4d7FD7E6Cb11170137df1A0dB24645533EC0b5",
+            "standard": "EvmHypCollateral",
+            "symbol": "WETH",
+            "route": "WETH/artela-base"
+          }
+        ],
+        "0x4f9fd6be4a90f2620860d680c0d4d5fb53d1a825": [
+          {
+            "router": "0xa6536c88A7f86d2b189c58A5a19BF5F03241d6A0",
+            "standard": "EvmHypCollateral",
+            "symbol": "AIXBT",
+            "route": "AIXBT/base-form"
+          }
+        ],
+        "0x532f27101965dd16442e59d40670faf5ebb142e4": [
+          {
+            "router": "0x9Fe693789E93319cc0F8A00FB4597Ea4fD4b08cA",
+            "standard": "EvmHypCollateral",
+            "symbol": "BRETT",
+            "route": "BRETT/base-zeronetwork"
+          }
+        ],
+        "0x585afea249031ea4168a379f664e91dfc5f77e7d": [
+          {
+            "router": "0xb803A9A89e559B2aE167925459bB6b64E06B156F",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": [
+          {
+            "router": "0x4adAf07A84B32F86288e05c4f4A09D830fcf8B71",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "CROSS/ctusd-usdc-ironbridge"
+          },
+          {
+            "router": "0x253821543C24623ecD3ceBCEd704359AF16CF38f",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0x146Fb3Fcc2C9F547Ee4f85A5b0497274cBD380D0",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0xB46930ca998587A95D9Ee000FA73A071ADD56B64",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0xF6B933267d0aC9e08c4904FB39fa047eD7b6a814",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/appchain-base"
+          },
+          {
+            "router": "0xa66a9C0112a428d407388Db87659E9C66F3eF29c",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-endurance"
+          },
+          {
+            "router": "0x103C9CF52bBF6A6815a6c7e07C5Fb376De016C7D",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-ethereum-lisk-optimism-polygon-zeronetwork"
+          },
+          {
+            "router": "0x01348F639D6e418A5a9673c08c0dDf6ecCB80F37",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/artela-base"
+          },
+          {
+            "router": "0x524410b1e64f689eeBa15E7E511110438811B3dC",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/base-optimism"
+          },
+          {
+            "router": "0x37e637891A558B5b621723cbf8Fc771525f280C1",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0xaaDF9558Cf103d394B22b18Ffbaa0D1c0778Ccfa",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/electroneum"
+          },
+          {
+            "router": "0x2D88dbbAB372EAc7F78c3566B0742864dEAf984D",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eni"
+          },
+          {
+            "router": "0x84e1dF3553B16452AeD7060A4266E4E434f418cC",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/igra"
+          },
+          {
+            "router": "0xBBDE7EFB7a1AB3ED9122a14b33dC5C07D982367E",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/incentiv"
+          },
+          {
+            "router": "0x89D67954096609060BE278Ec04141de8bDfeB61f",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/krown"
+          },
+          {
+            "router": "0x1547B13bD71126D92e93092cAD07807eEDb6Fc26",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/lumia"
+          },
+          {
+            "router": "0x5C4aFb7e23B1Dc1B409dc1702f89C64527b25975",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp"
+          },
+          {
+            "router": "0x31169ee5A8C0D680de74461d7B5394fFc7C3576B",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x86EE36D7545B8CAEba6d058b95C0b07eE4D62E79",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x33e94B6D2ae697c16a750dB7c3d9443622C4405a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0xFfC7591EE8638B7C08a9D289bBd33cA1a6d94509",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0xC898fb26Eb0Bb3144964e15F544F3C68495b00d6",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mantra"
+          },
+          {
+            "router": "0xCC5053691ed540C031A725eb03C25C57f5Be7117",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/matchain"
+          },
+          {
+            "router": "0x253821543C24623ecD3ceBCEd704359AF16CF38f",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay"
+          },
+          {
+            "router": "0x146Fb3Fcc2C9F547Ee4f85A5b0497274cBD380D0",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay-staging"
+          },
+          {
+            "router": "0x0BA30bdd7D3C510De16c47385102c0B7068f4f33",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/paradex"
+          },
+          {
+            "router": "0x32aB2fcCA30864027056a41B329e0195f2f7E250",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/pulsechain"
+          },
+          {
+            "router": "0x151B328Ca752C67C9a4C6E0CA329bE0c00B12A24",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/radix"
+          },
+          {
+            "router": "0x26af973A5b256F9B9bc0B1A3c566de1566568a87",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/subtensor"
+          },
+          {
+            "router": "0x955132016f9B6376B1392aA7BFF50538d21Ababc",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/superseed"
+          },
+          {
+            "router": "0x23eE98fD566eBae12296d1B111064921143AD6a7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/arbitrum-base-ethereum-ink-optimism-solanamainnet-superseed"
+          },
+          {
+            "router": "0x5A0E13290ec57F5e9031D01D03C6A40029Cc24ea",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0x93ac8f81e799c3b76112a649715dd86cea655bdf": [
+          {
+            "router": "0xa7ec41980E9871e1FCA7131D05427b15A8c95E9F",
+            "standard": "EvmHypCollateral",
+            "symbol": "JC",
+            "route": "JC/base-zeronetwork"
+          }
+        ],
+        "0xa4a2e2ca3fbfe21aed83471d28b6f65a233c6e00": [
+          {
+            "router": "0x3131f6B80C26936aB03F7d9D29Eb4Ddf36AC3FB5",
+            "standard": "EvmHypCollateral",
+            "symbol": "TIBBIR",
+            "route": "TIBBIR/igra"
+          }
+        ],
+        "0xac1bd2486aaf3b5c0fc3fd868558b082a531b2b4": [
+          {
+            "router": "0x0fEA4BE161fDA8FBF24bbCd66a77f53E29F784A3",
+            "standard": "EvmHypCollateral",
+            "symbol": "TOSHI",
+            "route": "TOSHI/toshi"
+          }
+        ],
+        "0xafb89a09d82fbde58f18ac6437b3fc81724e4df6": [
+          {
+            "router": "0x91f016B43A73DFF60f5D910c530338f69Fa3FD0b",
+            "standard": "EvmHypCollateral",
+            "symbol": "DOG",
+            "route": "DOG/base-optimism"
+          }
+        ],
+        "0xb1a03eda10342529bbf8eb700a06c60441fef25d": [
+          {
+            "router": "0x9C417D68dE6Acb6a9b0fBeD56767F1f3548A48a1",
+            "standard": "EvmHypCollateral",
+            "symbol": "MIGGLES",
+            "route": "MIGGLES/base-zeronetwork"
+          }
+        ],
+        "0xb22a793a81ff5b6ad37f40d5fe1e0ac4184d52f3": [
+          {
+            "router": "0xcc9EcE816641c8350Db06af375811107B1Aa0b9d",
+            "standard": "EvmHypCollateral",
+            "symbol": "TONY",
+            "route": "TONY/base-solanamainnet"
+          }
+        ],
+        "0xb8d98a102b0079b69ffbc760c8d857a31653e56e": [
+          {
+            "router": "0xf2aCC7a8Cd1fAA7a178B1569e11505372ea7943B",
+            "standard": "EvmHypCollateral",
+            "symbol": "TOBY",
+            "route": "TOBY/base-optimism"
+          }
+        ],
+        "0xc0d3700000c0e32716863323bfd936b54a1633d1": [
+          {
+            "router": "0x22Fd11F93F0303346c9b9070cc67C4Bc7aB2dABB",
+            "standard": "EvmHypCollateral",
+            "symbol": "CDX",
+            "route": "CDX/base-solanamainnet-sophon"
+          }
+        ],
+        "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf": [
+          {
+            "router": "0x66477F84bd21697c7781fc3992b3163463e3B224",
+            "standard": "EvmHypCollateral",
+            "symbol": "cbBTC",
+            "route": "CBBTC/base-ethereum-superseed"
+          },
+          {
+            "router": "0x2A872Ae01375A5ca7e044cb0e75cb97621Ca954A",
+            "standard": "EvmHypCollateral",
+            "symbol": "cbBTC",
+            "route": "CBBTC/base-zeronetwork"
+          },
+          {
+            "router": "0x8DE75A8a9Ee436390429eefD343926b28768EAb7",
+            "standard": "EvmHypCollateral",
+            "symbol": "cbBTC",
+            "route": "CBBTC/igra"
+          }
+        ],
+        "0xf732a566121fa6362e9e0fbdd6d66e5c8c925e49": [
+          {
+            "router": "0x9D132d5678253FD88f7DB51Ac2AC13FC40a63547",
+            "standard": "EvmHypCollateral",
+            "symbol": "LITKEY",
+            "route": "LITKEY/litchain"
+          }
+        ],
+        "0xf757c9804cf2ee8d8ed64e0a8936293fe43a7252": [
+          {
+            "router": "0xF4eae2f139D8032b8410Fef46f6873cD71A0FD76",
+            "standard": "EvmHypXERC20",
+            "symbol": "REZ",
+            "route": "REZ/base-ethereum-unichain"
+          }
+        ],
+        "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2": [
+          {
+            "router": "0x7abBb4ea8a5895127500CF0C15830C9Eb9f61F96",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0xF147AAE190F01aaB67152D97Ad3b157c3957BD77",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x3a669c00F7A041330646AC8AE89d74e104bd1363",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eni"
+          },
+          {
+            "router": "0x7abBb4ea8a5895127500CF0C15830C9Eb9f61F96",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "USDT/moonpay"
+          },
+          {
+            "router": "0xF147AAE190F01aaB67152D97Ad3b157c3957BD77",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "USDT/moonpay-staging"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0x885598858b68562FE5001F8eE022522313257C7a",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+        },
+        {
+          "router": "0xE4A9622Bf50025fE99A576D484AEf16280A5304f",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
+        },
+        {
+          "router": "0x7c15d85933aEE2e721220F2bfd6afCEAfd357BEB",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/coti-ethereum"
+        },
+        {
+          "router": "0x1634D476C1215C88B9746b6F4D4d8334540f5905",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/krown"
+        },
+        {
+          "router": "0xD3b9dDaC349E808B07845e01bae3Bf3464FB45b3",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/viction"
+        },
+        {
+          "router": "0x94620098a0AF6fBEb3eDd2BC6F52D1aa228e9077",
+          "standard": "EvmHypNative",
+          "symbol": "ETHSTAGE",
+          "route": "ETHSTAGE/stage"
+        }
+      ]
+    },
+    "bsc": {
+      "tokens": {
+        "0x1a5d7e4c3a7f940b240b7357a4bfed30d17f9497": [
+          {
+            "router": "0x1c0f11eEcdB19dF8EE2405E4EbCb90683686BCcD",
+            "standard": "EvmHypCollateral",
+            "symbol": "HOLO",
+            "route": "HOLO/bsc-solanamainnet"
+          }
+        ],
+        "0x1af3f329e8be154074d8769d1ffa4ee058b1dbc3": [
+          {
+            "router": "0x7379A18963039eA1284050b585f422e8156c9eC0",
+            "standard": "EvmHypCollateral",
+            "symbol": "DAI",
+            "route": "DAI/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0xEb881635A2Dd87d2b7C0F7B206810fa2A1956552",
+            "standard": "EvmHypCollateral",
+            "symbol": "DAI",
+            "route": "DAI/arbitrum-bsc-linea-polygon"
+          }
+        ],
+        "0x1d58e204ca59328007469a614522903d69dc0a4c": [
+          {
+            "router": "0xde1bb600f24e9c6E49d51765fB836b070762e45D",
+            "standard": "EvmHypCollateral",
+            "symbol": "VRA",
+            "route": "VRA/bsc-ethereum"
+          }
+        ],
+        "0x2170ed0880ac9a755fd29b2688956bd959f933f8": [
+          {
+            "router": "0xFc9F3387eb4385785420f661CE7A9E486f404b8F",
+            "standard": "EvmHypCollateral",
+            "symbol": "ETH",
+            "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+          },
+          {
+            "router": "0xF29AD0640731c50d0c7C999D1f8d5Ffb9E2A3da3",
+            "standard": "EvmHypCollateral",
+            "symbol": "ETH",
+            "route": "ETH/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0xd5985Ba1C2873e5F5b83F49D7EBE2cB50F1c25fA",
+            "standard": "EvmHypCollateral",
+            "symbol": "ETH",
+            "route": "WETH/carrchain"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0xE00C6185a5c19219F1FFeD213b4406a254968c26",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x2a48a41301e6635df9e65b80063ff84677142619": [
+          {
+            "router": "0xcf73D7119cD121F02a3Dd2cbf8A609279830EB69",
+            "standard": "EvmHypCollateral",
+            "symbol": "CARR",
+            "route": "CARR/carrchain"
+          }
+        ],
+        "0x54b56889aae88d88d4a5e8c5cf4e1bc706a5127a": [
+          {
+            "router": "0xA5bD573fC00A2683F108b8F04220ca530321436c",
+            "standard": "EvmHypCollateral",
+            "symbol": "PB",
+            "route": "PB/eni"
+          }
+        ],
+        "0x55d398326f99059ff775485246999027b3197955": [
+          {
+            "router": "0x050dcc964BCA53eF1A98A2347995cabC73cE25b9",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0xaC9e83a1bDbC86a26aDf331785d3CaCF18963a6C",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x1FdA66FA15A261F01F1E09228D41bD0A806d7529",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/aleo"
+          },
+          {
+            "router": "0xf4f62eC5C9d4e5464A9D1Dd738e3f50b1d652101",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0x74e19D0c1828be422dDCd367a6ADa8CA7003d1a9",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/bsc-polygon-prom"
+          },
+          {
+            "router": "0xCf2D543345728da295CC5d3A3d54B117979643f8",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/bsc-prom"
+          },
+          {
+            "router": "0x8B4995442691d2e0A680a7835d86512025de0756",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/carrchain"
+          },
+          {
+            "router": "0xc13d466B9E196AfdE472856923E857cc298EDf1b",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eclipsemainnet"
+          },
+          {
+            "router": "0xC05617bc2490CB57a8db163b5551bb7E532695e3",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eni"
+          },
+          {
+            "router": "0xa0e73E30945B80010503E68e53AbFd0B6B6a6ed9",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/matchain"
+          },
+          {
+            "router": "0x050dcc964BCA53eF1A98A2347995cabC73cE25b9",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "USDT/moonpay"
+          },
+          {
+            "router": "0xaC9e83a1bDbC86a26aDf331785d3CaCF18963a6C",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "USDT/moonpay-staging"
+          },
+          {
+            "router": "0xc283600F0A84162C0a062f7273ABB1F8F111b40C",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "oUSDT/production"
+          },
+          {
+            "router": "0x54599E9872AfC75C6bF70825B636F021641fa3a3",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDTSTAGE",
+            "route": "oUSDT/staging"
+          }
+        ],
+        "0x5651fa7a726b9ec0cad00ee140179912b6e73599": [
+          {
+            "router": "0x15366f1a7c71baa6fd1c8FAB56b30faf98d56a3B",
+            "standard": "EvmHypCollateral",
+            "symbol": "OORT",
+            "route": "OORT/bsc-ethereum-oortmainnet"
+          }
+        ],
+        "0x585afea249031ea4168a379f664e91dfc5f77e7d": [
+          {
+            "router": "0xd6608f15b714C5A110C42b4666665BC77FA52599",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x6a9a65b84843f5fd4ac9a0471c4fc11afffbce4a": [
+          {
+            "router": "0xba06D7f285C6B0d5EacC50ceA931163B23Ab889c",
+            "standard": "EvmHypCollateral",
+            "symbol": "enzoBTC",
+            "route": "enzoBTC/bsc-hyperevm"
+          }
+        ],
+        "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c": [
+          {
+            "router": "0xD42Af909d323D88e0E933B6c50D3e91c279004ca",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0xbfD6E8c1AFaE4c70AC10f7DD1d52515Dd77D1B4D",
+            "standard": "EvmHypCollateral",
+            "symbol": "BTCB",
+            "route": "WBTC/carrchain"
+          }
+        ],
+        "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d": [
+          {
+            "router": "0x6E66a10Ce72fBdFA45Ab7de3693321246E254123",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0x3382D9253eE54d49A90cBA41Cfc7b2704e713cEf",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x5284D803a4563DC5eE83feA80c688b096d70eb75",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0x3d7d707Df6390adB61e0Ec3eA91A8FC20E519dd0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0x647eeD57dFDd335f9B6f2a9DbDFe09f166b1AdaC",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/bsc-polygon-prom"
+          },
+          {
+            "router": "0xb4aF6757691573f0acAbA35A724a8E0EE049aB5a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/bsc-prom"
+          },
+          {
+            "router": "0x46d73d6E252aE09EFAD26e87353302c06184FA82",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/carrchain"
+          },
+          {
+            "router": "0x1eebF9d94a5E707E30f18b9aB3295D963C111fb7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x38847CDB99f374DbD5E053CC5306Dbca4f5DccbB",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eni"
+          },
+          {
+            "router": "0x1Bf82F7C3238d37d31bAc741DE95bbbf47E42001",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/matchain"
+          },
+          {
+            "router": "0x6E66a10Ce72fBdFA45Ab7de3693321246E254123",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay"
+          },
+          {
+            "router": "0x3382D9253eE54d49A90cBA41Cfc7b2704e713cEf",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay-staging"
+          }
+        ],
+        "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d": [
+          {
+            "router": "0x29AC114182580D660bA97b1fABF9a94f5C30a6B3",
+            "standard": "EvmHypCollateral",
+            "symbol": "USD1",
+            "route": "USD1/eni"
+          }
+        ],
+        "0xaf53d56ff99f1322515e54fdde93ff8b3b7dafd5": [
+          {
+            "router": "0xA83e1e21e82038e425e7a47aD7c2e059D7F1cae6",
+            "standard": "EvmHypCollateral",
+            "symbol": "PROM",
+            "route": "PROM/bsc-ethereum-polygon"
+          },
+          {
+            "router": "0x700b9322F6Cce0c8EFF4754bE9AcE88Ce6582821",
+            "standard": "EvmHypCollateral",
+            "symbol": "PROM",
+            "route": "PROM/bsc-polygon-prom"
+          }
+        ],
+        "0xf263cc32caed261a819713f3dcc494a96c3e5111": [
+          {
+            "router": "0xb7d28Dc6C6EbA10AB67255841FA521F83f35C6b2",
+            "standard": "EvmHypCollateral",
+            "symbol": "1Piece",
+            "route": "1Piece/eni"
+          }
+        ],
+        "0xf6718b2701d4a6498ef77d7c152b2137ab28b8a3": [
+          {
+            "router": "0xA0B3b527A15218f980Ceb33df049Dd58D3Da8223",
+            "standard": "EvmHypCollateral",
+            "symbol": "stBTC",
+            "route": "stBTC/bsc-hyperevm"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0x8d0e034611B691683377d2fC9958122a30F7DAab",
+          "standard": "EvmHypNative",
+          "symbol": "BNB",
+          "route": "BNB/bsc-kalychain"
+        },
+        {
+          "router": "0xb11d99AD37872068B14b5b9eeb3CE1A4E2244744",
+          "standard": "EvmHypNative",
+          "symbol": "BNB",
+          "route": "BNB/bsc-zeronetwork"
+        },
+        {
+          "router": "0xBAACA4e74fCAa430E903ecEe46665e4E60EA2D38",
+          "standard": "EvmHypNative",
+          "symbol": "BNB",
+          "route": "BNB/eni"
+        },
+        {
+          "router": "0x8E64a314034a3089fA8E8cF87Fbda9a2E10B7AAc",
+          "standard": "EvmHypNative",
+          "symbol": "BNB",
+          "route": "BNB/krown"
+        },
+        {
+          "router": "0xdd615fCfed0E2BE65041053DA12C3C95C6A16957",
+          "standard": "EvmHypNative",
+          "symbol": "BNB",
+          "route": "BNB/radix"
+        }
+      ]
+    },
+    "ethereum": {
+      "tokens": {
+        "0x04da4b99ffc82f0e44ded14c3539a6fdad08e2fe": [
+          {
+            "router": "0x7a1E026306164e22e0746D0097B92AFcfcc45BA6",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "USDT",
+            "route": "USDT/incentiv"
+          }
+        ],
+        "0x0797c6f55f5c9005996a55959a341018cf69a963": [
+          {
+            "router": "0x9A9C33115455a929D3d821CEE4A01e38241bF375",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "XAUt",
+            "route": "oXAUT/production"
+          }
+        ],
+        "0x0972b3403ff4006cabc049f4fa048ae1584c337a": [
+          {
+            "router": "0x260F395C37A85e557f8E95bcc881f22d047bfb4f",
+            "standard": "EvmHypCollateral",
+            "symbol": "RISE",
+            "route": "RISE/bsc-ethereum"
+          }
+        ],
+        "0x0d8775f648430679a709e98d2b0cb6250d2887ef": [
+          {
+            "router": "0x516e156e987175d74614cc2bC960f148A610f0b3",
+            "standard": "EvmHypCollateral",
+            "symbol": "BAT",
+            "route": "BAT/aleo"
+          }
+        ],
+        "0x10dea67478c5f8c5e2d90e5e9b26dbe60c54d800": [
+          {
+            "router": "0xb20524C700879620D921c5eb4435517A0549aD75",
+            "standard": "EvmHypCollateral",
+            "symbol": "TAIKO",
+            "route": "TAIKO/taiko"
+          }
+        ],
+        "0x14862c03a0caccc1ab328b062e64e31b2a1afcd7": [
+          {
+            "router": "0x8E1C6992621f1f647C79A297035B5484B9fb6864",
+            "standard": "EvmHypCollateral",
+            "symbol": "SEDA",
+            "route": "SEDA/base-ethereum"
+          }
+        ],
+        "0x15700b564ca08d9439c58ca5053166e8317aa138": [
+          {
+            "router": "0x9AD81058c6C3Bf552C9014CB30E824717A0ee21b",
+            "standard": "EvmHypCollateral",
+            "symbol": "fastUSD",
+            "route": "FASTUSD/ethereum-sei"
+          }
+        ],
+        "0x17906b1cd88aa8efaefc5e82891b52a22219bd45": [
+          {
+            "router": "0xbc808c98beA0a097346273A9Fd7a5B231fc2d889",
+            "standard": "EvmHypXERC20",
+            "symbol": "SUPR",
+            "route": "SUPR/base-ethereum-ink-optimism-superseed"
+          }
+        ],
+        "0x19e099b7aed41fa52718d780dda74678113c0b32": [
+          {
+            "router": "0xc2495f3183F043627CAECD56dAaa726e3B2D9c09",
+            "standard": "EvmHypCollateral",
+            "symbol": "tETH",
+            "route": "tETH/eclipsemainnet-ethereum"
+          }
+        ],
+        "0x1abaea1f7c830bd89acc67ec4af516284b1bc33c": [
+          {
+            "router": "0x236f7CCE81558b36cE0D866017ECF006be7d5c30",
+            "standard": "EvmHypCollateral",
+            "symbol": "EURC",
+            "route": "EURC/matchain"
+          }
+        ],
+        "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599": [
+          {
+            "router": "0x20CDC85778b732073F7EecEF3DF25c0d310f8772",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/aleo"
+          },
+          {
+            "router": "0x7f3Ab91a586C34b7E0a7C0fDd2241C5F29d89a6e",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/carrchain"
+          },
+          {
+            "router": "0x5c43f06EF93bb0a2cd3C0f7b832AbA1F4d6575Ea",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/coti-ethereum"
+          },
+          {
+            "router": "0x5B4e223DE74ef8c3218e66EEcC541003CAB3121A",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/eclipsemainnet-ethereum"
+          },
+          {
+            "router": "0x52FcCFD806f11c0eB61912A24Ca09547626739e7",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/eni"
+          },
+          {
+            "router": "0xd0d5271926f352c0161b0365a4156E2Bc0f99FAD",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/ethereum-form"
+          },
+          {
+            "router": "0x55A66567dFEc91e7Af39e0feb06009F35E8D68a9",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/ethereum-hyperevm"
+          },
+          {
+            "router": "0x745C75868237F3635c486fe166639Cc4706512A9",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/ethereum-mode-scroll-zeronetwork"
+          },
+          {
+            "router": "0x0E993E49df1b7412DED493EAAf806730b74378b9",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/ethereum-radix"
+          },
+          {
+            "router": "0x6cFC3e0579F3706E6f2E4BC039e8372b868F3CA5",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/incentiv"
+          },
+          {
+            "router": "0x0BE0C2BD4747BaB57cf3fb9c335474DFD988B399",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/krown"
+          },
+          {
+            "router": "0xABb5E5b46112Ca652481d1117459dc289a1Ee282",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/mantra"
+          }
+        ],
+        "0x236501327e701692a281934230af0b6be8df3353": [
+          {
+            "router": "0x6f78E99143094EeE6893840f5e577B9E6b92B368",
+            "standard": "EvmHypCollateral",
+            "symbol": "FLT",
+            "route": "FLT/fluence"
+          }
+        ],
+        "0x2371e134e3455e0593363cbf89d3b6cf53740618": [
+          {
+            "router": "0x4eB3afF1A39a6477CA84b01B8e26B0f7aEEAE9D2",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "WETH",
+            "route": "WETH/ethereum-igra"
+          }
+        ],
+        "0x2be3be1d8a556954320c2252df4f891f64699d50": [
+          {
+            "router": "0x15dE2C58FCF168bf9bB8860ab6EA10e1670C5D4c",
+            "standard": "EvmHypCollateral",
+            "symbol": "TURTLE",
+            "route": "TURTLE/ethereum-linea"
+          }
+        ],
+        "0x2cd2644edab51cb2122f37e03e5f997661d49cfe": [
+          {
+            "router": "0x791a257977a147B501dA11013C826063FF2d881e",
+            "standard": "EvmHypCollateral",
+            "symbol": "pumpBTC.uni",
+            "route": "pumpBTCuni/ethereum-unichain"
+          }
+        ],
+        "0x399cc65703e01c7fdefdf27093f84e7eb4b3f8b6": [
+          {
+            "router": "0x129b6d0b13e04a3de4c3e133ca926c174fdcec7d",
+            "standard": "EvmHypCollateral",
+            "symbol": "eUSD",
+            "route": "eUSD/celestia"
+          }
+        ],
+        "0x45804880de22913dafe09f4980848ece6ecbaf78": [
+          {
+            "router": "0x68A593C7F42e0f6616F9356dCb1CFd130e4e7694",
+            "standard": "EvmHypCollateral",
+            "symbol": "PAXG",
+            "route": "PAXG/arbitrum-ethereum"
+          }
+        ],
+        "0x46e5d6a33c8bd8ed38f3c95991c78c9b2ff3bc99": [
+          {
+            "router": "0x54B904c3Cb5C6Aa19a5292aCC72eCE1c285e7EAb",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "USDe",
+            "route": "USDe/igra"
+          }
+        ],
+        "0x4d4eb0e8b160f6ebf63cc6d36060ffec09301b42": [
+          {
+            "router": "0x733BC1F0D76AB8f0AB7C1c8044ECc4720Cd402AD",
+            "standard": "EvmHypCollateral",
+            "symbol": "LITKEY",
+            "route": "LITKEY/litchain"
+          }
+        ],
+        "0x5651fa7a726b9ec0cad00ee140179912b6e73599": [
+          {
+            "router": "0x70f34d5cC2527Cd81de9F6e7C9208f26f7252697",
+            "standard": "EvmHypCollateral",
+            "symbol": "OORT",
+            "route": "OORT/bsc-ethereum-oortmainnet"
+          }
+        ],
+        "0x57240c3e140f98abe315ca8e0213c7a77f34a334": [
+          {
+            "router": "0xd86E6ef14b96D942eF0AbF0720C549197EA8c528",
+            "standard": "EvmHypCollateral",
+            "symbol": "RDO",
+            "route": "RDO/bsc-ethereum"
+          }
+        ],
+        "0x5fd13359ba15a84b76f7f87568309040176167cd": [
+          {
+            "router": "0xdc89990a6fdC1C922b841f1d977835628A24Ed57",
+            "standard": "EvmHypCollateral",
+            "symbol": "amphrETH",
+            "route": "AMPHRETH/arbitrum-ethereum-zircuit"
+          }
+        ],
+        "0x6055dc6ff1077eebe5e6d2ba1a1f53d7ef8430de": [
+          {
+            "router": "0x3eE1BEA3A10f7508b76219f109eBe19419b3dd85",
+            "standard": "EvmHypCollateral",
+            "symbol": "ES",
+            "route": "ES/eclipse"
+          }
+        ],
+        "0x6468e79a80c0eab0f9a2b574c8d5bc374af59414": [
+          {
+            "router": "0x94a766ebdfbBFF21428b6C504Be7405e74c02774",
+            "standard": "EvmHypCollateralFiat",
+            "symbol": "eXRD",
+            "route": "XRD/radix"
+          }
+        ],
+        "0x675b68aa4d9c2d3bb3f0397048e62e6b7192079c": [
+          {
+            "router": "0x3cF30C1D8DECBF45CD36C9492F6395D47357b91C",
+            "standard": "EvmHypCollateral",
+            "symbol": "FUEL",
+            "route": "FUEL/base-bsc-ethereum"
+          }
+        ],
+        "0x6d265c7dd8d76f25155f1a7687c693fdc1220d12": [
+          {
+            "router": "0x88AC0fC430130983c0DDEB4C22574056D8340Ca8",
+            "standard": "EvmHypVSXERC20Lockbox",
+            "symbol": "USDT",
+            "route": "oUSDT/production"
+          }
+        ],
+        "0x722a851b6798d65b80526562fc3a36e19b1f883b": [
+          {
+            "router": "0x69B1A59e98D94E1B9647C08Cb295Fc52597D20f0",
+            "standard": "EvmHypCollateral",
+            "symbol": "tUSD",
+            "route": "tUSD/eclipsemainnet-ethereum"
+          }
+        ],
+        "0x73624d2def952c77a1f3b5ad995eef53e49639ec": [
+          {
+            "router": "0xC868Ea07031eE67dCE475D535F1AA0e5571Ba92a",
+            "standard": "EvmHypCollateral",
+            "symbol": "PNDR",
+            "route": "PNDR/bsc-ethereum-lumiaprism"
+          }
+        ],
+        "0x74c8290836612e6251e49e8f3198fdd80c4dbeb8": [
+          {
+            "router": "0xD090a082A0F6859AcBaEC1C6E7bB0B4D5a2DEC23",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "EZETH-STAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x7a4effd87c2f3c55ca251080b1343b605f327e3a": [
+          {
+            "router": "0x18E5D2ae4fb6F5Cf4e6C5D493C4d0F027FAe5054",
+            "standard": "EvmHypCollateral",
+            "symbol": "rstETH",
+            "route": "rstETH/ethereum-zircuit"
+          }
+        ],
+        "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0": [
+          {
+            "router": "0x9c7e8dc6b35E66873dA683aF2dE1BaB4cabc98B5",
+            "standard": "EvmHypCollateral",
+            "symbol": "wstETH",
+            "route": "WSTETH/ethereum-form"
+          },
+          {
+            "router": "0x0E47F12002CbDC72E3d1080d10f44A5A94279A29",
+            "standard": "EvmHypCollateral",
+            "symbol": "wstETH",
+            "route": "WSTETH/igra"
+          }
+        ],
+        "0x84631c0d0081fde56deb72f6de77abbbf6a9f93a": [
+          {
+            "router": "0x7D77702f1c7A1662923FD654f904127988Caa3fD",
+            "standard": "EvmHypCollateral",
+            "symbol": "Re7LRT",
+            "route": "Re7LRT/ethereum-zircuit"
+          }
+        ],
+        "0x8f08b70456eb22f6109f57b8fafe862ed28e6040": [
+          {
+            "router": "0x592cd754B947396255E50Cac10c519c7ee313919",
+            "standard": "EvmHypCollateral",
+            "symbol": "KING",
+            "route": "KING/coti-ethereum"
+          }
+        ],
+        "0x917cee801a67f933f2e6b33fc0cd1ed2d5909d88": [
+          {
+            "router": "0xef899e92DA472E014bE795Ecce948308958E25A2",
+            "standard": "EvmHypCollateral",
+            "symbol": "weETHs",
+            "route": "weETHs/eclipsemainnet-ethereum"
+          }
+        ],
+        "0x935eaaab78b491cd9281f438e413767893913983": [
+          {
+            "router": "0x8a60E4aC11C2Fac40Dc936E048e05145547A4356",
+            "standard": "EvmHypVSXERC20Lockbox",
+            "symbol": "USDTSTAGE",
+            "route": "oUSDT/staging"
+          }
+        ],
+        "0x9ba021b0a9b958b5e75ce9f6dff97c7ee52cb3e6": [
+          {
+            "router": "0xd34FE1685c28A68Bb4B8fAaadCb2769962AE737c",
+            "standard": "EvmHypCollateral",
+            "symbol": "apxETH",
+            "route": "APXETH/eclipsemainnet-ethereum"
+          }
+        ],
+        "0x9e1a2b6de93164b77fc5ca11e647eecb38bb463d": [
+          {
+            "router": "0xFF5C5b61AE627D6659a70aD72A76f1bE7343fEEC",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "PZETHSTAGE",
+            "route": "PZETHSTAGE/berachain-ethereum-swell-unichain-zircuit"
+          }
+        ],
+        "0x9fb258cbd8415c4fda62092003fcb54f60af670b": [
+          {
+            "router": "0x0C919509663cb273E156B706f065b9F7e6331891",
+            "standard": "EvmHypRebaseCollateral",
+            "symbol": "stHYPERSTAGE",
+            "route": "stHYPERSTAGE/bsc-ethereum"
+          }
+        ],
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": [
+          {
+            "router": "0x01874aF1507FA27129716c3bD82C28F7531cdcdF",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "CROSS/ctusd-usdc-ironbridge"
+          },
+          {
+            "router": "0xA9C9a8FB36Ce3e5ffBAC3757dA7141262723541F",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0xB58C85C143f2032A77e2C2B08603453ebA6C12aF",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x78Ac7FECD1857f5BEEe98AB39096c9781F976D97",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0x8b4192B9Ad1fCa440A5808641261e5289e6de95D",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/ancient8-ethereum"
+          },
+          {
+            "router": "0xa6826c7Dd74c4e1B400AEF4a362692f99872F5F5",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-ethereum-lisk-optimism-polygon-zeronetwork"
+          },
+          {
+            "router": "0x424712Bec7c94a0F804c50F77B641A24F33A138e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0x4c8adAde648D26d2c3245b2067ab08c5A3f9e998",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/carrchain"
+          },
+          {
+            "router": "0x6CF5640464BE070157D3173C69ca8F294c7595dF",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/celestia-eden-ethereum"
+          },
+          {
+            "router": "0x6de5FaBC6B4663BD6BdBc064Bbb183E61aF1daDE",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/coti-ethereum"
+          },
+          {
+            "router": "0xe1De9910fe71cC216490AC7FCF019e13a34481D7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0xFC2944e9F1d57Ce82aeD05922887DD660404e50B",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/electroneum"
+          },
+          {
+            "router": "0x76E88eEE5Ba22498c18356fa63F52DBe5aBEdE6d",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eni"
+          },
+          {
+            "router": "0x3551011EA5F210981E9C2a8659444011370f41e2",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/ethereum-form"
+          },
+          {
+            "router": "0xED56728fb977b0bBdacf65bCdD5e17Bb7e84504f",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/ethereum-inevm"
+          },
+          {
+            "router": "0xAf4f3329D271655a4287882310dE25Fb77Dc0a14",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/ethereum-ink"
+          },
+          {
+            "router": "0x1fbcc5A3EE1EfC5e920FFF999AE97a0C2DF4A583",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/ethereum-swell"
+          },
+          {
+            "router": "0x31Dca7762930f56D81292f85E65c9D67575804fE",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/ethereum-viction"
+          },
+          {
+            "router": "0xC3f8B34587EB403FC30a161d6A35cB724A3b273E",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/igra"
+          },
+          {
+            "router": "0x8918b0186136130FE8e02bfB221f23cbBbCDDE07",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/incentiv"
+          },
+          {
+            "router": "0xbdE0801a78f9c4BC360C34aaf98043EA0cdF4fB0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/krown"
+          },
+          {
+            "router": "0xE0C2e4F894D4Cd33626e33b24582559F3156E1Ab",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/lukso"
+          },
+          {
+            "router": "0x066abc14c59cF7681b4b66844500733D2258032A",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/lumia"
+          },
+          {
+            "router": "0xedCBAa585FD0F80f20073F9958246476466205b8",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp"
+          },
+          {
+            "router": "0x7A576Bb5291567cfDbB4585B1911CF7C9891ea07",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x8686906D413cde85B0cfFA29CF8b68d19dF8F0e1",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x8c8D831E1e879604b4B304a2c951B8AEe3aB3a23",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0xEc90cCc3cDB71fa9D930F2fa9300E81e88fa5cBC",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x11A483d69Cc67140fb98a0082837aeC11246A0ba",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mantra"
+          },
+          {
+            "router": "0x679e13780c20Bf7A7cC158a76BFd1aff9Ba7d09d",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/matchain"
+          },
+          {
+            "router": "0xA9C9a8FB36Ce3e5ffBAC3757dA7141262723541F",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay"
+          },
+          {
+            "router": "0xB58C85C143f2032A77e2C2B08603453ebA6C12aF",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay-staging"
+          },
+          {
+            "router": "0x6912088890254E69970baEdB03284fB3D8fBCDA0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/paradex"
+          },
+          {
+            "router": "0x7E5db36f762A3eae5d6ef18f16dEe9DF619bb539",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/pulsechain"
+          },
+          {
+            "router": "0x67899664446CCfAdf75e0D3F5668be262aCd1069",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/radix"
+          },
+          {
+            "router": "0x3C43C421f08e2a48889eA3F75a747b7a7a366A0b",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/subtensor"
+          },
+          {
+            "router": "0xc927767CF7bddc5e8b996A0f957e5F22250A2F67",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/superseed"
+          },
+          {
+            "router": "0x1d82BC329E5E6CA5CBc41571435824dda7895e92",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/arbitrum-base-ethereum-ink-optimism-solanamainnet-superseed"
+          },
+          {
+            "router": "0x04C26A1Efb87D5Ac9ee6179754B4CDDC61fC11d5",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          },
+          {
+            "router": "0x6372e1C8a08940C7e95AF2891B9201aC48De6519",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "ctUSD/citrea"
+          }
+        ],
+        "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd": [
+          {
+            "router": "0xd5d8aEdf73f0e453C551b8CFd722c78F05FC4279",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "USDS",
+            "route": "USDS/ethereum-igra"
+          }
+        ],
+        "0xa860e01cc4a889bb2917ec97104510a2e1ae0e53": [
+          {
+            "router": "0x9F6E6d150977dabc82d5D4EaaBDB1F1Ab0D25F92",
+            "standard": "EvmHypRebaseCollateral",
+            "symbol": "stHYPER",
+            "route": "stHYPER/bsc-ethereum"
+          }
+        ],
+        "0xaa9806c938836627ed1a41ae871c7e1889ae02ca": [
+          {
+            "router": "0xB8bB85FD0836691a64aFc23199566F898a1d6f4a",
+            "standard": "EvmHypCollateral",
+            "symbol": "EDGEN",
+            "route": "EDGEN/bsc-edgenchain-ethereum"
+          }
+        ],
+        "0xb1ea329f0b79d0b213957569594ca2a9de637215": [
+          {
+            "router": "0xAcCd04AC22BDdC7E262D507d6f2ffca540DADd42",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "WETH",
+            "route": "WETH/incentiv"
+          }
+        ],
+        "0xb32e10022ffbedfe10bc818a1c7e67d9d87e0fa7": [
+          {
+            "router": "0x7396b724a43C1d654a89B44996DA84d1E1a9B568",
+            "standard": "EvmHypCollateral",
+            "symbol": "DIME",
+            "route": "DIME/paradex"
+          }
+        ],
+        "0xba83b5ed3f12bfa44f066f03ee0433419b74f469": [
+          {
+            "router": "0x8934bEDC734481071Ba486E6e5E7DDa21Fc4EB35",
+            "standard": "EvmHypCollateral",
+            "symbol": "BEST",
+            "route": "BEST/ethereum"
+          }
+        ],
+        "0xbc5511354c4a9a50de928f56db01dd327c4e56d5": [
+          {
+            "router": "0x0220b1EA1b56ECE8e2b62c8965659f0A621e9ebd",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "pzETH",
+            "route": "PZETH/berachain-ethereum-swell-unichain-zircuit"
+          }
+        ],
+        "0xbeef047a543e45807105e51a8bbefcc5950fcfba": [
+          {
+            "router": "0xe15F7d93F761C35b5d692224418099409C749011",
+            "standard": "EvmHypOwnerCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-igra"
+          }
+        ],
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": [
+          {
+            "router": "0x25b0F02B26cB369Fefa6EFc3F8e8eDB5371C55BC",
+            "standard": "EvmHypCollateral",
+            "symbol": "WETH",
+            "route": "WETH/carrchain"
+          }
+        ],
+        "0xc60a7e21a6753ed4305c93034607009faec2a5f3": [
+          {
+            "router": "0x52E96C79DC3a1813577DBfB411B92E8C96Cb3d91",
+            "standard": "EvmHypCollateral",
+            "symbol": "USAD",
+            "route": "USAD/aleo"
+          }
+        ],
+        "0xc693943eacc1cb74b748cf1b953946970b239279": [
+          {
+            "router": "0x9c48903a8b95d7a208dC45a1905da271108dD56a",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "REZ",
+            "route": "REZSTAGING/base-ethereum-unichain"
+          }
+        ],
+        "0xc8140da31e6bca19b287cc35531c2212763c2059": [
+          {
+            "router": "0xC59336D8edDa9722B4f1Ec104007191Ec16f7087",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf": [
+          {
+            "router": "0x7710d2FC9A2E0452b28a2cBf550429b579347199",
+            "standard": "EvmHypCollateral",
+            "symbol": "cbBTC",
+            "route": "CBBTC/base-ethereum-superseed"
+          },
+          {
+            "router": "0xfF5C22ea202258143557f6cc3bDe174dde6E8fE1",
+            "standard": "EvmHypCollateral",
+            "symbol": "cbBTC",
+            "route": "CBBTC/ethereum-flowmainnet"
+          }
+        ],
+        "0xd8b543feac4eecef5a46a926e10d6f4a72de6fe0": [
+          {
+            "router": "0xc32848c38Dd5A5098Cd53d33e425c1013a4E06A8",
+            "standard": "EvmHypXERC20Lockbox",
+            "symbol": "REZ",
+            "route": "REZ/base-ethereum-unichain"
+          }
+        ],
+        "0xd9343a049d5dbd89cd19dc6bca8c48fb3a0a42a7": [
+          {
+            "router": "0xdD313D475f8A9d81CBE2eA953a357f52e10BA357",
+            "standard": "EvmHypCollateral",
+            "symbol": "LUMIA",
+            "route": "LUMIA/arbitrum-avalanche-base-bsc-ethereum-lumiaprism-optimism-polygon"
+          }
+        ],
+        "0xdac17f958d2ee523a2206206994597c13d831ec7": [
+          {
+            "router": "0xeB1b48b238E15A62e1858a601B6BfFdf41163AE3",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0x4628D301C4A1A32B4C7E753621b0787C32ee7475",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x3C2064D78e4578E8F936E3db42aEF044E33FBF31",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/aleo"
+          },
+          {
+            "router": "0x95fBD1037a307A49587174E06a6600fD05c5f58e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-mantle-mode-polygon-scroll-zeronetwork"
+          },
+          {
+            "router": "0xBA18df45758a09647F1902a06807844EA5DD47b4",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0xC4aE629ABe0ce3de55B7DB8F6BeBf97d52AfE9f7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/carrchain"
+          },
+          {
+            "router": "0x647C621CEb36853Ef6A907E397Adf18568E70543",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eclipsemainnet"
+          },
+          {
+            "router": "0x97B80b1d89d10E5d2c9396B0ea0BA2dAf917Dc96",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/electroneum"
+          },
+          {
+            "router": "0x291A485Fd288786728Ba34052b95DDb60278AB49",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eni"
+          },
+          {
+            "router": "0x6435821A260B6A8EcB4ab723B84e1Bc3BC8b5304",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-form"
+          },
+          {
+            "router": "0xf6ff77f2dCAD6dbab2142404F7b64C5517587e29",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-hyperevm"
+          },
+          {
+            "router": "0xab852e67bf03E74C89aF67C4BA97dd1088D3dA19",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-inevm"
+          },
+          {
+            "router": "0x32fF31FfeB04070e9E34C345965C1bB9B5C1F787",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-lumiaprism"
+          },
+          {
+            "router": "0x2Dc9A39d934f52E0f28E52E8d32Ce810FC685247",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-radix"
+          },
+          {
+            "router": "0xA7Db85E2925e3fec7C33A20d87CC895C948e62b3",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-superseed"
+          },
+          {
+            "router": "0x72529594955CeFfc0ac4ECF23C45B9069A24Df14",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-swell"
+          },
+          {
+            "router": "0x4221a16A01F61c2b38A03C52d828a7041f6AAA49",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/ethereum-viction"
+          },
+          {
+            "router": "0xE78fA49bE021e533cd8f6E10931b796D89cd80DD",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/krown"
+          },
+          {
+            "router": "0xA95d1a59cF9Be8A53fECeA7CbB5BD6E6B1bC1060",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/mantra"
+          },
+          {
+            "router": "0xeB1b48b238E15A62e1858a601B6BfFdf41163AE3",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "USDT/moonpay"
+          },
+          {
+            "router": "0x4628D301C4A1A32B4C7E753621b0787C32ee7475",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT",
+            "route": "USDT/moonpay-staging"
+          },
+          {
+            "router": "0x7Bb4fe8f406fB7B22487Fa2e3BCbCb6A38cF29E6",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/oft"
+          },
+          {
+            "router": "0x4f7635A2F9795c10DF260C2fc0A23e0F60B4829C",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDTSTAGE",
+            "route": "USDTSTAGE/mode"
+          }
+        ],
+        "0xe0b7ad7f8f26e2b00c8b47b5df370f15f90fcf48": [
+          {
+            "router": "0x261a172eB72D8D32837D123E8AcC4d2e44117195",
+            "standard": "EvmHypCollateral",
+            "symbol": "SOLX",
+            "route": "SOLX/nitro"
+          }
+        ],
+        "0xe343167631d89b6ffc58b88d6b7fb0228795491d": [
+          {
+            "router": "0xe5A2cCf532919f93855F324c1F8a7996065f53Da",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDG",
+            "route": "USDG/aleo"
+          }
+        ],
+        "0xe7dee4823ee18f1347f1cf7997f70b94efde2e1f": [
+          {
+            "router": "0xEa35E107fB64Ff8C3c8c37DB2d23A7179f31D8EC",
+            "standard": "EvmHypCollateral",
+            "symbol": "FORM",
+            "route": "FORM/ethereum-form"
+          }
+        ],
+        "0xe9ebd666954b7f0b5b044704c86b126651f6235d": [
+          {
+            "router": "0x179149B7E74910d2A58b2a737e1a8B6F44388882",
+            "standard": "EvmHypCollateral",
+            "symbol": "pumpBTC.sei",
+            "route": "pumpBTCsei/ethereum-sei"
+          }
+        ],
+        "0xf411903cbc70a74d22900a5de66a2dda66507255": [
+          {
+            "router": "0xde1bb600f24e9c6E49d51765fB836b070762e45D",
+            "standard": "EvmHypCollateral",
+            "symbol": "VRA",
+            "route": "VRA/bsc-ethereum"
+          }
+        ],
+        "0xf57d49646621f563b0b905afc8336923ac569ec5": [
+          {
+            "router": "0xb71183f48F7f7789D40551149bE28a51f9A97F9A",
+            "standard": "EvmHypCollateral",
+            "symbol": "NEX",
+            "route": "NEX/bsc"
+          }
+        ],
+        "0xfa78ea5d8c39e0a8852abaaf88ae4d32349b7d02": [
+          {
+            "router": "0x4564da2DD9BaDE637c85a1B5BFC14eF5099096BC",
+            "standard": "EvmHypCollateral",
+            "symbol": "pumpBTC.stk",
+            "route": "pumpBTCstk/starknet"
+          }
+        ],
+        "0xfc82bb4ba86045af6f327323a46e80412b91b27d": [
+          {
+            "router": "0x25C147Bd61bdaB6ce5A1Ae4939d2765092e0e2F8",
+            "standard": "EvmHypCollateral",
+            "symbol": "PROM",
+            "route": "PROM/bsc-ethereum-polygon"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0x38D447694f5c1f773ae3132cf93bF30B7Ec1Fa5A",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/aleo"
+        },
+        {
+          "router": "0x85E9ae52B10f35e3D15264F1E906895B1D7Da1a0",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+        },
+        {
+          "router": "0xE0A5921Bcc37eb2FeCc452AE574b86bD4c332196",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
+        },
+        {
+          "router": "0x07C747b0D99aBE8132f771cf6D2365D19ED1FfbA",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/coti-ethereum"
+        },
+        {
+          "router": "0xCF8EeA870e3124FF4fF2323B181Ca93Eb89Ddc40",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/eni"
+        },
+        {
+          "router": "0x9a3BeED38441e8fF8E033043a88B49E035F5a2da",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/ethereum-hyperevm"
+        },
+        {
+          "router": "0x20d0159C2369d115a7e430516E635267c08ACE19",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/ethereum-radix"
+        },
+        {
+          "router": "0x3e6Dba802d62aba2361Dd632fbC9f547AA6789aE",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/ethereum-vana"
+        },
+        {
+          "router": "0x95Abf44e0B9166348A9ed8797a7f20CC32Fd9C26",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/krown"
+        },
+        {
+          "router": "0xa901E6974C8F0fCc2f44451B0e788CD6957E02E2",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/mantra"
+        },
+        {
+          "router": "0x2bBdc933196334C6CD3F16F131B62f7c567BB27D",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/paradex"
+        },
+        {
+          "router": "0x7DCA030594C6695fc24b874917d0beAA38715639",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/viction"
+        },
+        {
+          "router": "0xd17c7E32a2D3BB76234925bee159aC18a43E8322",
+          "standard": "EvmHypNative",
+          "symbol": "ETHSTAGE",
+          "route": "ETHSTAGE/stage"
+        }
+      ]
+    },
+    "hyperevm": {
+      "tokens": {
+        "0x068f321fa8fb9f0d135f290ef6a3e2813e1c8a29": [
+          {
+            "router": "0xEe3147deeDFC0c6DDD7c65D4e9ff9a48632BE645",
+            "standard": "EvmHypCollateral",
+            "symbol": "USOL",
+            "route": "SOL/aleo"
+          }
+        ],
+        "0x9fdbda0a5e284c32744d2f17ee5c74b284993463": [
+          {
+            "router": "0xefafEE2F52c083c5aaB09c4AF65Adc966bbf1479",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/aleo"
+          }
+        ],
+        "0xb88339cb7199b77e23db6e890353e22632ba630f": [
+          {
+            "router": "0xA1B10De5b3A131B02bcE94864943426d901d98B5",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0xe10b7b030C75C80359841CB0ec892E233F03f145",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x5A8237b0cf741b4b62fe40ee2711bF158E25750c",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0xDdf252a063f8c5C399B9ccDBbaDBA55225F53Da1",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0xc08246A28e85c08836ee89E6db1D7EE0673BFA7c",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x1079056da3EC7D55521F27e1E094015C0d39Cc65",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/paradex"
+          },
+          {
+            "router": "0xfF806E766f9dD784b370c5A2a4BaaF21Ea62D877",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb": [
+          {
+            "router": "0x36E437699E3658396Bf6229ddDaE54884cf28779",
+            "standard": "EvmHypCollateral",
+            "symbol": "USD₮0",
+            "route": "USDT/aleo"
+          }
+        ],
+        "0xbe6727b535545c67d5caa73dea54865b92cf7907": [
+          {
+            "router": "0x2a848D76f075033D4D69b9c18ef2C44753a38DBC",
+            "standard": "EvmHypCollateral",
+            "symbol": "UETH",
+            "route": "ETH/aleo"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0xA10bCe7B3F13f8846611bdac36EF5972069ce7d8",
+          "standard": "EvmHypNative",
+          "symbol": "HYPE",
+          "route": "HYPE/mantra"
+        }
+      ]
+    },
+    "ink": {
+      "tokens": {
+        "0x0290b74980c051eb46b84b1236645444e77da0e9": [
+          {
+            "router": "0xBb2eBD68b2FEEe450dce91509897F9AE02211421",
+            "standard": "EvmHypVSXERC20",
+            "symbol": "oUSDTSTAGE",
+            "route": "oUSDT/staging"
+          }
+        ],
+        "0x06232bc2a4388695a2c5a6c8e1f67743b9e6cc51": [
+          {
+            "router": "0x836088259A6c273F6dB7BB2C3ba74Ad046CC1ea9",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189": [
+          {
+            "router": "0x69158d1A7325Ca547aF66C3bA599F8111f7AB519",
+            "standard": "EvmHypVSXERC20",
+            "symbol": "oUSDT",
+            "route": "oUSDT/production"
+          }
+        ],
+        "0x17906b1cd88aa8efaefc5e82891b52a22219bd45": [
+          {
+            "router": "0x6cfDDfa3e0867A873675B80FDEBeB94e9262b5F0",
+            "standard": "EvmHypXERC20",
+            "symbol": "SUPR",
+            "route": "SUPR/base-ethereum-ink-optimism-superseed"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0x698f0Acd19F4795B6C187d5187E1d0b62f6e257b",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x2d270e6886d130d724215a266106e6832161eaed": [
+          {
+            "router": "0x0DE665377A5B0D390469d0ea0FCae55e0c14f4c4",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x70CF23d09784fCA62be304c928BCA9F1801B1F21",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x2382899f9CaD4344cc2b9DD054A2A07FeeE4B8D0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x92dFEB6f7Daa532de0F3c75c2091e1607c6593b7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0x6c07f25B23B5cab557E7df13f25D634F1491f146",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x2EA98401A0Af88cb44B9666b4C970B7a4f3217B2",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/superseed"
+          },
+          {
+            "router": "0x416714e092F2b6e3296039ca2adF7eb6e06806F7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0xf1815bd50389c46847f0bda824ec8da914045d14": [
+          {
+            "router": "0x5D71b91B92AAE933cbf85065F49bC14f16c55c55",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/arbitrum-base-ethereum-ink-optimism-solanamainnet-superseed"
+          }
+        ]
+      },
+      "native": []
+    },
+    "linea": {
+      "tokens": {
+        "0x176211869ca2b568f2a7d4ee941e073a821ee1ff": [
+          {
+            "router": "0x34eaC2132BB041B3F789cC7B5665dAbdF6ac3f12",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x89aAa89D36F995b41d929f2D29b8Ee7C9c8e54cA",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x642753223b8270E088A0939034f02b8B2d2b2489",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x33e94B6D2ae697c16a750dB7c3d9443622C4405a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0xF50286Fc7487c8945fFc257ca0fb0d299978fFfC",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0xaA3C7A670f0AFd18c2eC8B998aA56Bb371E0df5D",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0xC59336D8edDa9722B4f1Ec104007191Ec16f7087",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x5ea461e19ba6c002b7024e4a2e9cefe79a47d3bb": [
+          {
+            "router": "0xc6375bEb48252791Ae59841ac87F4923a6f6bbB1",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ]
+      },
+      "native": []
+    },
+    "optimism": {
+      "tokens": {
+        "0x0290b74980c051eb46b84b1236645444e77da0e9": [
+          {
+            "router": "0x1D833D392379929f15d03d212DbF8c17001c27e3",
+            "standard": "EvmHypVSXERC20",
+            "symbol": "oUSDTSTAGE",
+            "route": "oUSDT/staging"
+          }
+        ],
+        "0x0633e91f64c22d4fea53dbe6e77b7ba4093177b8": [
+          {
+            "router": "0x56aE521E18a7de66b2e3AcE3A0b71e716a61D34d",
+            "standard": "EvmHypCollateral",
+            "symbol": "LITKEY",
+            "route": "LITKEY/litchain"
+          }
+        ],
+        "0x0b2c639c533813f4aa9d7837caf62653d097ff85": [
+          {
+            "router": "0x1FdA66FA15A261F01F1E09228D41bD0A806d7529",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0xcA11d580faaE3E6993aA230f437079ac21f3078a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-ethereum-lisk-optimism-polygon-zeronetwork"
+          },
+          {
+            "router": "0xEa1A15ed2710f860a38091877c6A84b18206b501",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0x02bFd67829317D666dc7dFA030F18eaCC12c2cfb",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x6d7Dfef82F2733D2d44DC7b4507a1D0d4D96E267",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eni"
+          },
+          {
+            "router": "0xee9CB26259E98A8F24fc8D265AEfa09B4f3AcAb7",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/igra"
+          },
+          {
+            "router": "0xBb099fc67423e5173286cC5144e85A6aaa7737bF",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/incentiv"
+          },
+          {
+            "router": "0xD6880E571A11FBd14Fa63a9e18A8152cAB3Bb720",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/lumia"
+          },
+          {
+            "router": "0xfB7681ECB05F85c383A5ce4439C7dF5ED12c77DE",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp"
+          },
+          {
+            "router": "0x4eFaacbf0D3d57b401Cb6B559e84b344448b0C30",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0x2382899f9CaD4344cc2b9DD054A2A07FeeE4B8D0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x33e94B6D2ae697c16a750dB7c3d9443622C4405a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0x6c07f25B23B5cab557E7df13f25D634F1491f146",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x0bBeA6812fb3fcBcA126eDb558e551B3f1702026",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/pulsechain"
+          },
+          {
+            "router": "0x741B077c69FA219CEdb11364706a3880A792423e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/superseed"
+          },
+          {
+            "router": "0x2171e985D95eB12451B723b19458A7f1AdEbc086",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/arbitrum-base-ethereum-ink-optimism-solanamainnet-superseed"
+          },
+          {
+            "router": "0x36D930c7782BafE74Ff52CAb54648a1b2ecC48bE",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0x1217bfe6c773eec6cc4a38b5dc45b92292b6e189": [
+          {
+            "router": "0x7bD2676c85cca9Fa2203ebA324fb8792fbd520b8",
+            "standard": "EvmHypVSXERC20",
+            "symbol": "oUSDT",
+            "route": "oUSDT/production"
+          }
+        ],
+        "0x17906b1cd88aa8efaefc5e82891b52a22219bd45": [
+          {
+            "router": "0xae1E04F18D1323d8EaC7Ba5b2c683c95DC3baC97",
+            "standard": "EvmHypXERC20",
+            "symbol": "SUPR",
+            "route": "SUPR/base-ethereum-ink-optimism-superseed"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0xacEB607CdF59EB8022Cc0699eEF3eCF246d149e2",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x4200000000000000000000000000000000000042": [
+          {
+            "router": "0x0Ea3C23A4dC198c289D5443ac302335aBc86E6b1",
+            "standard": "EvmHypCollateral",
+            "symbol": "OP",
+            "route": "OP/optimism-superseed"
+          }
+        ],
+        "0x585afea249031ea4168a379f664e91dfc5f77e7d": [
+          {
+            "router": "0xc6375bEb48252791Ae59841ac87F4923a6f6bbB1",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58": [
+          {
+            "router": "0xE9ef49e77c9f4751fBb0176836da70D062bBae02",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0x2EbFeC15f3Ff64E52af17c1c9a4aE9B7f6574298",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eni"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0x14A77BdAb46bBEb7DAfc3E4cB4732A51241Ef539",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+        },
+        {
+          "router": "0x4e550422D67f208eE25A730D11dCe9201cF3Aa3a",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
+        },
+        {
+          "router": "0xEF096995d7C4FE68abF9C96042521A61bEdd596D",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/viction"
+        },
+        {
+          "router": "0x7B3877CD74c7b7f1fc5ACE40Ad5C5aE1ebC87AA1",
+          "standard": "EvmHypNative",
+          "symbol": "ETHSTAGE",
+          "route": "ETHSTAGE/stage"
+        }
+      ]
+    },
+    "plasma": {
+      "tokens": {
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0xcD78A32Da8cfe9452cD2F50F547c11B979Afcf1b",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x49e91677063e71fe521044535ef58a3b546a23cf": [
+          {
+            "router": "0x3CBCa631A797fd4c6332Cd4435C92065AFb57ef8",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0xb8ce59fc3717ada4c02eadf9682a9e934f625ebb": [
+          {
+            "router": "0x93bfFA2231fbA5029997603fb68D9aC08024Baa2",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/oft"
+          },
+          {
+            "router": "0xa7E4dC4078bAc6e97Eec52a4F7642fF51cbb17C1",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDTSTAGE",
+            "route": "USDTSTAGE/mode"
+          }
+        ]
+      },
+      "native": []
+    },
+    "polygon": {
+      "tokens": {
+        "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6": [
+          {
+            "router": "0xfF00e814A0dCB9a614585c212C78Fdc596d02e47",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/arbitrum-bsc-kalychain-polygon"
+          }
+        ],
+        "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359": [
+          {
+            "router": "0x9E70c8eF4B62fba0da0Fb9430e82b7ca96a262E2",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "CROSS/ctusd-usdc-ironbridge"
+          },
+          {
+            "router": "0x28a96f9928dB06317356caACd5641C4Fde4424C7",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0xa539EF6eF471c2D00d258540AB0bc38eD0B1F2ab",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x1FdA66FA15A261F01F1E09228D41bD0A806d7529",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/aleo"
+          },
+          {
+            "router": "0xb805ee88eE76EcE03ba503A2634344804a0Ea59A",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-base-ethereum-lisk-optimism-polygon-zeronetwork"
+          },
+          {
+            "router": "0xB3dF48224FA257D55e01342592f9A24cefc2628e",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0x93b637AEA6a0dF51E8E24E49C62da34f616491c5",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0xCb9F833f4d6D9Bb9767CDb25c487DA54D67731D6",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x4cD30d29E54dbf1DF231ed563C2B180ABfE1eaD3",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eni"
+          },
+          {
+            "router": "0x9f8F71F139C354B7b17E4D8DCb29ddd2A377733D",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/igra"
+          },
+          {
+            "router": "0x7022CffD405960c1B98fEB84DD03c29Cc1053f61",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/incentiv"
+          },
+          {
+            "router": "0xa62F45662809f5F6535b58bae9A572a2EC4A1f84",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp"
+          },
+          {
+            "router": "0x07d89DE0F7E18c9bcAAE81F44aee9CA02EBeE872",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast"
+          },
+          {
+            "router": "0xF99369b485A545E0c0073C828853E4feDB1F8f83",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-fast-staging"
+          },
+          {
+            "router": "0x33e94B6D2ae697c16a750dB7c3d9443622C4405a",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard"
+          },
+          {
+            "router": "0xeafb93d921e4557bECdA567927f36ad28854Aae1",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/mainnet-cctp-v2-standard-staging"
+          },
+          {
+            "router": "0x28a96f9928dB06317356caACd5641C4Fde4424C7",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay"
+          },
+          {
+            "router": "0xa539EF6eF471c2D00d258540AB0bc38eD0B1F2ab",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDC",
+            "route": "USDC/moonpay-staging"
+          },
+          {
+            "router": "0x21AA4e2107618Ffc21Fa3cec2BdfdF22469A2e8A",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/pulsechain"
+          },
+          {
+            "router": "0x52fCcE3778D4Ea883a1F9F697D3710e470D32505",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/subtensor"
+          },
+          {
+            "router": "0xfc78F4Dace2Ee0057281D0267DB3491181510593",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ],
+        "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619": [
+          {
+            "router": "0xda8b55BB3Dc6B74042033f9493A5Bffa3d8EA779",
+            "standard": "EvmHypCollateral",
+            "symbol": "ETH",
+            "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+          },
+          {
+            "router": "0x56c3AAd2d754b2177dBDa02A4dCb0571486460a9",
+            "standard": "EvmHypCollateral",
+            "symbol": "ETH",
+            "route": "ETH/arbitrum-base-ethereum-lumiaprism-optimism-polygon"
+          },
+          {
+            "router": "0xb974461a9ef2Ff3F408798f551929647ceaB13b4",
+            "standard": "EvmHypCollateral",
+            "symbol": "ETH",
+            "route": "ETH/arbitrum-bsc-kalychain-polygon"
+          }
+        ],
+        "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063": [
+          {
+            "router": "0x1E71a8d870F0C491d4fCC965A59493b8B7564949",
+            "standard": "EvmHypCollateral",
+            "symbol": "DAI",
+            "route": "DAI/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0xEb881635A2Dd87d2b7C0F7B206810fa2A1956552",
+            "standard": "EvmHypCollateral",
+            "symbol": "DAI",
+            "route": "DAI/arbitrum-bsc-linea-polygon"
+          }
+        ],
+        "0x9b765735c82bb00085e9dbf194f20e3fa754258e": [
+          {
+            "router": "0x810db1ea27946aCDdc40ca98B6A6380Af6c7b89A",
+            "standard": "EvmHypCollateral",
+            "symbol": "CARR",
+            "route": "CARR/carrchain"
+          }
+        ],
+        "0xc2132d05d31c914a87c6611c10748aeb04b58e8f": [
+          {
+            "router": "0x766A80a7a6BBA555731DC1726DB5BFa030631270",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT0",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0x3382D9253eE54d49A90cBA41Cfc7b2704e713cEf",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT0",
+            "route": "CROSS/moonpay-staging"
+          },
+          {
+            "router": "0x2f7c83FC82A0e39A997c262e5BAB13176C275104",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-bsc-kalychain-polygon"
+          },
+          {
+            "router": "0x6701d503369cf6aA9e5EdFfEBFA40A2ffdf3dB21",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-mantle-mode-polygon-scroll-zeronetwork"
+          },
+          {
+            "router": "0x009eA8aBe4CE04fFA4A2b2Ec62cBAC859fc48B19",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-optimism-polygon-prom"
+          },
+          {
+            "router": "0x98e9738DF4A304A97124D3A360A70DeC6efc4f99",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/eni"
+          },
+          {
+            "router": "0x766A80a7a6BBA555731DC1726DB5BFa030631270",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT0",
+            "route": "USDT/moonpay"
+          },
+          {
+            "router": "0x3382D9253eE54d49A90cBA41Cfc7b2704e713cEf",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDT0",
+            "route": "USDT/moonpay-staging"
+          },
+          {
+            "router": "0x361A7DA84A1f4A0c565772C45Ed838C6a0fAea94",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/oft"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0x0a6364152EA7a487C697a36Eb2522f48bC62fB4c",
+          "standard": "EvmHypNative",
+          "symbol": "POL",
+          "route": "POL/kalychain-polygon"
+        },
+        {
+          "router": "0x76Af114f7Ebe96C02a3e4AB10f1511a7A66057A1",
+          "standard": "EvmHypNative",
+          "symbol": "POL",
+          "route": "POL/polygon-zeronetwork"
+        }
+      ]
+    },
+    "robinhood": {
+      "tokens": {},
+      "native": [
+        {
+          "router": "0x2bef59e84615371304bd731601f6344F5F304504",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/coti-ethereum"
+        },
+        {
+          "router": "0x4000b76E3d95947DdA57C20B42bD20b70deCD522",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/viction"
+        }
+      ]
+    },
+    "scroll": {
+      "tokens": {
+        "0x3c1bca5a656e69edcd0d4e36bebb3fcdaca60cf1": [
+          {
+            "router": "0x10a5263ACED246fCD0977f1a3C6A238a14183096",
+            "standard": "EvmHypCollateral",
+            "symbol": "WBTC",
+            "route": "WBTC/ethereum-mode-scroll-zeronetwork"
+          }
+        ],
+        "0xf55bec9cafdbe8730f096aa55dad6d22d44099df": [
+          {
+            "router": "0x0FC41a92F526A8CD22060A4052e156502D6B9db0",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDT",
+            "route": "USDT/arbitrum-ethereum-mantle-mode-polygon-scroll-zeronetwork"
+          }
+        ]
+      },
+      "native": [
+        {
+          "router": "0xF85379CF296f84871dee84826153d6F5ccA9de3B",
+          "standard": "EvmHypNative",
+          "symbol": "ETH",
+          "route": "ETH/arbitrum-base-blast-bsc-ethereum-gnosis-lisk-mantle-mode-optimism-polygon-scroll-zeronetwork-zoramainnet"
+        }
+      ]
+    }
+  }
+}

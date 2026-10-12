@@ -3,15 +3,16 @@
  * §5: Status / Rescue.
  *
  * Paste the hash of a transaction that sent a cross-chain message and this says what became of it.
- * Three protocols are read — LayerZero (v1 and V2), Wormhole NTT and Chainlink CCIP — each from the
- * source transaction's own logs and the destination's own state, never from an indexer. For the four
- * LayerZero states that have one, it also offers the single call that would finish the message.
+ * Four protocols are read — LayerZero (v1 and V2), Wormhole NTT, Chainlink CCIP and Hyperlane — each
+ * from the source transaction's own logs and the destination's own state, never from an indexer. For
+ * the four LayerZero states that have one, it also offers the single call that would finish the message.
  *
  * What this screen does NOT do is as much the point as what it does. It does not build a transfer, it
  * does not approve anything, and it never offers a button for a call it has not just executed against
  * the chain. The four actions it can submit are the four §5 names, each confined to
- * `src/protocols/lz-rescue/` by the build's own check, and each submitted with no value. NTT and CCIP
- * are status only: their redeem paths belong to their own contracts and tools, which each card names.
+ * `src/protocols/lz-rescue/` by the build's own check, and each submitted with no value. NTT, CCIP and
+ * Hyperlane are status only: their redeem paths belong to their own contracts and tools, which each
+ * card names.
  */
 import { useCallback, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
@@ -34,6 +35,8 @@ import { lookupNttStatus, type NttDiagnosis } from '@/protocols/wormhole-ntt/sta
 import { wormholescanTxUrl } from '@/protocols/wormhole-ntt/track'
 import { lookupCcipStatus, type CcipDiagnosis } from '@/protocols/ccip/status'
 import { ccipMessageUrl } from '@/protocols/ccip/track'
+import { lookupHyperlaneStatus, type HyperlaneDiagnosis } from '@/protocols/hyperlane/status'
+import { hyperlaneMessageUrl } from '@/protocols/hyperlane/track'
 import { fmt, useDict, type Dict } from '@/i18n'
 import { Address as AddressView } from './components/Address'
 import { Panel, TwoColumn } from './components/Layout'
@@ -42,7 +45,7 @@ import { ChainRow } from './components/FromTo'
 import { isUserRejection, shortError } from './hooks'
 import type { Stored } from './storage'
 
-type Lookup = { reports: RescueReport[]; ntt: NttDiagnosis[]; ccip: CcipDiagnosis[]; unserved: number; searched: ChainKey; hash: string }
+type Lookup = { reports: RescueReport[]; ntt: NttDiagnosis[]; ccip: CcipDiagnosis[]; hyperlane: HyperlaneDiagnosis[]; unserved: number; searched: ChainKey; hash: string }
 
 /** The state names, as sentences rather than identifiers. */
 function stateLabel(d: Dict, kind: string): string {
@@ -93,17 +96,19 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
       const client = makeReadClient(srcDef, stored.customRpc[srcKey])
       const receipt = await client.getTransactionReceipt({ hash: h as `0x${string}` })
       const clientFor = (c: ChainKey) => rescueClientFor(c, stored.customRpc)
-      // One receipt, three readers: a transaction can carry any of them, and the tab is not told which.
-      const [lz, ntt, ccip] = await Promise.all([
+      // One receipt, four readers: a transaction can carry any of them, and the tab is not told which.
+      const [lz, ntt, ccip, hyperlane] = await Promise.all([
         lookupRescue(receipt.logs, srcKey, clientFor),
         lookupNttStatus(receipt.logs, srcKey, clientFor),
         lookupCcipStatus(receipt.logs, srcKey, client, clientFor),
+        lookupHyperlaneStatus(receipt.logs, srcKey, clientFor),
       ])
       setLookup({
         reports: lz.reports,
         ntt: ntt.reports,
         ccip: ccip.reports,
-        unserved: lz.unservedDestinations.length + ntt.unserved.length + ccip.unserved.length,
+        hyperlane: hyperlane.reports,
+        unserved: lz.unservedDestinations.length + ntt.unserved.length + ccip.unserved.length + hyperlane.unserved.length,
         searched: srcKey,
         hash: h,
       })
@@ -196,7 +201,7 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
     </div>
   )
 
-  const nothingFound = lookup !== null && lookup.reports.length === 0 && lookup.ntt.length === 0 && lookup.ccip.length === 0
+  const nothingFound = lookup !== null && lookup.reports.length === 0 && lookup.ntt.length === 0 && lookup.ccip.length === 0 && lookup.hyperlane.length === 0
 
   const right = (
     <Panel title={d.rescue.found}>
@@ -403,6 +408,64 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
                 <p className="text-xs text-faint">{d.rescue.readFromChainCcip}</p>
                 <a href={ccipMessageUrl(m.messageId)} target="_blank" rel="noopener noreferrer" className="block text-xs text-accent-ink underline">
                   {d.rescue.onCcipExplorer}
+                </a>
+              </div>
+            )
+          })}
+
+          {lookup.hyperlane.map((r, i) => {
+            const m = r.dispatch
+            const src = byKey(m.srcChain)
+            const dst = m.dstChain ? byKey(m.dstChain) : undefined
+            const s = r.state
+            const tone = s.kind === 'delivered' ? 'text-ok' : s.kind === 'unknown' ? 'text-muted' : 'text-warn'
+            return (
+              <div key={`hl-${i}`} className="space-y-2 rounded-card bg-surface-2 p-4">
+                <div className="text-xs font-semibold text-ink">
+                  {d.rescue.hyperlane} · {src.name} → {dst?.name ?? d.rescue.unknownChain}
+                </div>
+                <Row label={d.rescue.state}>
+                  <span className={tone}>{(d.rescue.hyperlaneStates as Record<string, string>)[s.kind] ?? s.kind}</span>
+                </Row>
+                {s.kind === 'unknown' ? <p className="text-xs text-muted">{s.reason}</p> : null}
+                {s.kind === 'in_flight' ? <Alert kind="info">{d.rescue.hyperlaneUndelivered}</Alert> : null}
+                {s.kind === 'delivered' && s.processedAtBlock !== undefined ? (
+                  <Row label={d.rescue.processedAt} mono>
+                    {s.processedAtBlock.toString()}
+                  </Row>
+                ) : null}
+                {r.farRouter?.mailboxOk === false ? <Alert kind="error">{d.rescue.hyperlaneFarMailbox}</Alert> : null}
+                {r.farRouter?.pointsBack === false ? <Alert kind="error">{d.rescue.hyperlanePeerMismatch}</Alert> : null}
+                {m.idConfirmed === false ? <Alert kind="warn">{d.rescue.hyperlaneIdUnconfirmed}</Alert> : null}
+                <Row label={d.rescue.srcRouter} mono>
+                  <AddressView value={m.sender} href={src.explorerAddrUrl + m.sender} short />
+                </Row>
+                <Row label={d.rescue.dstRouter} mono>
+                  {m.recipientRouter ? <AddressView value={m.recipientRouter} href={dst ? dst.explorerAddrUrl + m.recipientRouter : undefined} short /> : <span className="break-all">{m.message.recipient}</span>}
+                </Row>
+                {m.transfer ? (
+                  <Row label={d.rescue.hyperlaneAmount} mono>
+                    {m.transfer.amount.toString()}
+                    {m.transfer.recipient ? (
+                      <>
+                        {' → '}
+                        <AddressView value={m.transfer.recipient} href={dst ? dst.explorerAddrUrl + m.transfer.recipient : undefined} short />
+                      </>
+                    ) : null}
+                  </Row>
+                ) : null}
+                <Row label={d.rescue.messageId} mono>
+                  <span className="break-all">{m.messageId}</span>
+                </Row>
+                <Row label={d.rescue.hyperlaneNonce} mono>
+                  {m.message.nonce}
+                </Row>
+                <p className="text-xs text-faint">
+                  {d.rescue.readFromChainHyperlane}
+                  {m.idConfirmed ? ` ${d.rescue.hyperlaneIdConfirmed}` : ''}
+                </p>
+                <a href={hyperlaneMessageUrl(m.messageId)} target="_blank" rel="noopener noreferrer" className="block text-xs text-accent-ink underline">
+                  {d.rescue.onHyperlaneExplorer}
                 </a>
               </div>
             )

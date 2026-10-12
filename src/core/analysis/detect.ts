@@ -14,6 +14,8 @@ import { CCIP_TOPICS, ccipEventsAbi, ccipRamp2EventsAbi } from '../../protocols/
 import { chainOfCcipSelector } from '../../protocols/ccip/chains'
 import { NTT_TOPIC_COUNT, NTT_TOPICS, nttTransferSentV1Abi, nttTransferSentV2Abi } from '../../protocols/wormhole-ntt/abi'
 import { chainOfWormholeId, isCoreBridge, isTokenBridge } from '../../protocols/wormhole-ntt/chains'
+import { bytes32ToEvmAddress, HYPERLANE_TOPICS, mailboxEventsAbi, parseHyperlaneMessage, parseTokenMessage } from '../../protocols/hyperlane/abi'
+import { chainOfHyperlaneDomain, isHyperlaneMailbox } from '../../protocols/hyperlane/chains'
 import { FOREIGN_TOPICS, foreignEventsAbi, nativeBridgeAt } from './foreign'
 import type { ForeignProtocolId } from './result'
 
@@ -59,6 +61,12 @@ export type Finding =
       destChain?: ChainKey
       transfers: { address: string; amount: bigint; is: 'token' | 'pool' }[]
     }
+  /**
+   * A `Dispatch` from the registry Mailbox (src/protocols/hyperlane/chains.ts) — any other
+   * emitter of that topic is somebody's event, not a Hyperlane message. `router` is the message's
+   * sender: for a warp transfer, the route's TokenRouter, which is what the Hyperlane tab takes.
+   */
+  | { kind: 'hyperlane_sent'; emitter: Address; router: Address; messageId: Hex; destination: number; destChain?: ChainKey; recipient?: Address; amount?: bigint }
   | { kind: 'foreign'; protocol: ForeignProtocolId; emitter: Address; label?: string; vars: Record<string, string> }
   | { kind: 'erc20'; what: 'approve' | 'transfer'; emitter: Address }
 
@@ -213,6 +221,31 @@ export function detectFindings(tx: TxLike, chain: ChainKey): Finding[] {
       }
     }
 
+    // ---- Hyperlane ----------------------------------------------------------
+    if (t0 === HYPERLANE_TOPICS.Dispatch.toLowerCase()) {
+      // Only the registry Mailbox's Dispatch is a message; the same topic elsewhere is nothing.
+      if (!isHyperlaneMailbox(chain, emitter)) continue
+      const d = tryDecode(() => decodeEventLog({ abi: mailboxEventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: 'Dispatch' }))
+      const message = d && tryDecode(() => parseHyperlaneMessage(d.args.message))
+      if (d && message) {
+        const destChain = chainOfHyperlaneDomain(message.destination)
+        const body = parseTokenMessage(message.body)
+        const recipient = body ? bytes32ToEvmAddress(body.recipient) : undefined
+        out.push({
+          kind: 'hyperlane_sent',
+          emitter,
+          router: addr(d.args.sender),
+          messageId: message.id,
+          destination: message.destination,
+          ...(destChain ? { destChain } : {}),
+          ...(recipient ? { recipient } : {}),
+          ...(body ? { amount: body.amount } : {}),
+        })
+      }
+      continue
+    }
+    if (t0 === HYPERLANE_TOPICS.DispatchId.toLowerCase() && isHyperlaneMailbox(chain, emitter)) continue
+
     // ---- Protocols we do not bridge -----------------------------------------
     if (t0 === FOREIGN_TOPICS.LogMessagePublished.toLowerCase()) {
       const d = tryDecode(() => decodeEventLog({ abi: foreignEventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: 'LogMessagePublished' }))
@@ -239,11 +272,6 @@ export function detectFindings(tx: TxLike, chain: ChainKey): Finding[] {
     if (t0 === FOREIGN_TOPICS.DepositForBurn.toLowerCase()) {
       const d = tryDecode(() => decodeEventLog({ abi: foreignEventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: 'DepositForBurn' }))
       out.push({ kind: 'foreign', protocol: 'cctp', emitter, vars: { domain: String(d?.args.destinationDomain ?? '') } })
-      continue
-    }
-    if (t0 === FOREIGN_TOPICS.Dispatch.toLowerCase()) {
-      const d = tryDecode(() => decodeEventLog({ abi: foreignEventsAbi, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]], eventName: 'Dispatch' }))
-      out.push({ kind: 'foreign', protocol: 'hyperlane', emitter, vars: { destination: String(d?.args.destination ?? '') } })
       continue
     }
 

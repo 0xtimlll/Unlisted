@@ -33,8 +33,6 @@ export function anyProtocolName(d: Dict, id: AnyProtocolId, vars: Record<string,
       return d.analysis.name_axelar_its
     case 'cctp':
       return d.analysis.name_cctp
-    case 'hyperlane':
-      return d.analysis.name_hyperlane
     case 'native-bridge':
       return fmt(d.analysis.name_native_bridge, { bridge: vars['bridge'] ?? '' })
   }

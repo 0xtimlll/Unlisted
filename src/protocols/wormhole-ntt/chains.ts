@@ -97,6 +97,13 @@ export const WORMHOLE_CHAINS: Partial<Record<ChainKey, WormholeChainConfig>> = {
     coreBridge: '0xCa1D5a146B03f6303baF59e5AD5615ae0b9d146D',
     tokenBridge: '0x3Ff72741fd67D6AD0668d93B41a09248F4700560',
   },
+  plasma: {
+    // Listed as [58, "Plasma"] in chains.ts; the only core bridge published for it sits in the
+    // TESTNET table (core.ts), so no mainnet address is claimed and NTT is unavailable here —
+    // the same situation as HyperEVM. Only the numbering is recorded.
+    wormholeChainId: 58,
+    coreBridge: '',
+  },
   // scroll: Wormhole does not list a chain id for Scroll.
 }
 
@@ -146,5 +153,8 @@ export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
   robinhood: 'robinhood',
   // The key Wormholescan's NTT token list uses for Ink (it lists USDC.s, ezETH and others there).
   ink: 'ink',
+  // CoinGecko's platform id, as the Hyperlane registry names it (gasCurrencyCoinGeckoId: plasma).
+  // A wrong key can only fail to find a token, never match the wrong one.
+  plasma: 'plasma',
   solana: 'solana',
 }

@@ -45,7 +45,7 @@ Unlisted is the missing form. It is a static page: no backend, no database, no c
 | Base | 30184 | | Linea | 30183 |
 | BNB Chain | 30102 | | Scroll | 30214 |
 | Solana | 30168 | | Robinhood Chain | 30416 |
-| Ink | 30339 | | | |
+| Ink | 30339 | | Plasma | 30383 |
 
 Any OFT (LayerZero V2) deployed on these chains works, in both directions between EVM and Solana:
 
@@ -105,7 +105,7 @@ Everything else v1 needs is read from the contracts too:
 
 The chain ids and endpoints come from LayerZero's own metadata through
 [`scripts/gen-lz-v1.mjs`](scripts/gen-lz-v1.mjs) into a committed JSON, never fetched at runtime.
-All twelve EVM networks have a v1 deployment, and each id is verified against
+All thirteen EVM networks have a v1 deployment, and each id is verified against
 `UltraLightNodeV2.localChainId` — the contract that actually stamps the source chain into every
 packet. The Endpoint's own `getChainId()` is *not* the authority: on the six first-wave chains it
 still returns the number it was deployed with before LayerZero renumbered mainnet (Ethereum answers
@@ -113,8 +113,8 @@ still returns the number it was deployed with before LayerZero renumbered mainne
 
 **A deployed endpoint is not a working network.** The generator also asks each endpoint for its
 `defaultSendLibrary` and `defaultReceiveLibraryAddress`; a chain where either is the zero address
-has nothing to route a message through, and is written as `v1Active: false` with the reason. Eleven of
-the twelve are active — Robinhood Chain has the endpoint deployed and answering `getChainId()` with
+has nothing to route a message through, and is written as `v1Active: false` with the reason. Twelve of
+the thirteen are active — Robinhood Chain has the endpoint deployed and answering `getChainId()` with
 416, and neither library set, so it is offered as neither a source nor a destination for v1. Its V2
 routes are unaffected. `npm run check:lz-v1` re-asks, so "LayerZero wired it up since" becomes a
 failing check rather than a silent gap.
@@ -144,9 +144,9 @@ small chip in the preview panel:
 | | what it means |
 |---|---|
 | **grey** | choose a destination / enter an amount, or the checks are still running |
-| **green — Route in order** | the peer points back, the simulation passed, and: a plain OFT; or an adapter locking ≥ 0.1% of the token's supply with ≥ 20 sends recorded by the endpoint; or an NTT manager the source token names as minter; or a CCIP pool from the TokenAdminRegistry |
-| **yellow — Some nuances** | a fresh adapter (little locked, little history), only one RPC operator answered, the simulation reverted or could not run, a weak DVN set, a fee above the chain's ceiling |
-| **red — High risk** | the recipient is the zero address, a route contract or a look-alike of a saved address; the far side does not point back; LayerZero has blocked the route (dead DVN); an NTT manager nothing on the source chain vouches for |
+| **green — Route in order** | the peer points back, the simulation passed, and: a plain OFT; or an adapter locking ≥ 0.1% of the token's supply with ≥ 20 sends recorded by the endpoint; or an NTT manager the source token names as minter; or a CCIP pool from the TokenAdminRegistry; or a Hyperlane synthetic route, or a collateral/native one clearing the same two floors against the registry Mailbox |
+| **yellow — Some nuances** | a fresh adapter or warp route (little locked, little history), only one RPC operator answered, the simulation reverted or could not run, a weak DVN set, a fee above the chain's ceiling |
+| **red — High risk** | the recipient is the zero address, a route contract or a look-alike of a saved address; the far side does not point back, or names a Mailbox that is not the registry's; LayerZero has blocked the route (dead DVN); an NTT manager nothing on the source chain vouches for; a route fee above 3% |
 
 Hover the chip for every reason; red also prints its first reason under the chip without a hover.
 The long form — the eight checks below, the guard list, the contract's flags (a proxy is a fact for
@@ -332,15 +332,51 @@ a transfer into a call on the other side.
 refunded. Both pool rate limits are read, the inbound one on the destination's own RPC, and the
 amount that arrives is computed from the destination token's decimals rather than assumed.
 
+## Hyperlane
+
+The **Hyperlane** tab bridges tokens between EVM chains over Hyperlane warp routes. One address
+decides what is trusted and it comes from configuration: the **Mailbox** of each chain, taken from
+[hyperlane-xyz/hyperlane-registry](https://github.com/hyperlane-xyz/hyperlane-registry) and read
+back on chain (`localDomain()` and `VERSION()`) before it was written down. The warp route itself
+is the pasted contract, and everything it says — which Mailbox it uses, which token it holds, which
+router sits on the far side — is its own claim. A route that names any other Mailbox, or another
+domain than the one the registry gives its chain, is refused before anything else is read.
+
+Three shapes of route, told apart by what the contract answers:
+
+- **collateral** (`HypERC20Collateral` and relatives) locks a real ERC-20 in the router. The router
+  is the approve spender, and the approve is for exactly the **charge** — the amount plus the
+  route's own fee, when it has one — because that is what the router pulls.
+- **synthetic** (`HypERC20`) is the token itself: `transferRemote` burns from your balance, so there
+  is no approve at all, and offering one is refused as a bug.
+- **native** (`HypNative`) moves the chain's own coin, which travels in `msg.value` with the fee.
+
+Three generations of the contract are live and quoted differently — `quoteGasPayment` on the older
+ones, `quoteTransferRemote` with its three quotes (dispatch fee, amount plus route fee, external
+fee) on core 10+ — and the app reads whichever the route answers. `msg.value` is **exactly** the
+quote, with no buffer. A route that charges its gas in the token rather than the native coin is not
+built; its allowance is not modelled here.
+
+A plain ERC-20 has nothing on chain that points at the collateral router holding it, because
+Hyperlane keeps its routes in git, not in a registry contract. So the committed table
+[`warpRoutes.json`](src/protocols/hyperlane/warpRoutes.json), generated from the registry, is the
+search hint for that case: it says which routers to probe, and each one is then checked like any
+pasted address. A `HypERC20` needs no hint — it is its own route. What makes a route green is what
+its deployer cannot write: for a collateral or native route, the share of the token's supply locked
+in it and the number of `Dispatch` events the registry Mailbox has recorded with it as the sender
+(the same two floors the OFT adapters use); below them the route is a yellow "fresh route". The far
+router is reached through this route's own `routers()` claim, so it can only lower the colour: one
+that names another Mailbox, or does not name this route back, is red.
+
 ### It also says when the answer is no
 
-If the transaction belongs to a bridge this app does not build — Wormhole NTT, Chainlink CCIP, Wormhole Portal, Axelar, Circle CCTP, Hyperlane, or a network's own bridge — it is named, and you are pointed at that project's own app instead of being told "not an OFT". A LayerZero application that is not an OFT is called out as exactly that. A transaction nobody's RPC could be reached for is reported as an RPC problem, never as a verdict.
+If the transaction belongs to a bridge this app does not build — Wormhole Portal, Axelar, Circle CCTP, or a network's own bridge — it is named, and you are pointed at that project's own app instead of being told "not an OFT". A transaction that belongs to one of the other tabs here (NTT, CCIP, Hyperlane) is named too, with a button that opens that tab with the contract carried over. A LayerZero application that is not an OFT is called out as exactly that. A transaction nobody's RPC could be reached for is reported as an RPC problem, never as a verdict.
 
 Every event signature, error signature, chain id and selector used for this comes from the protocol's own contracts; topic hashes are derived from those signatures by the library, never written down by hand ([`src/core/analysis/`](src/core/analysis/), [`src/core/lz/`](src/core/lz/), [`src/protocols/`](src/protocols/)).
 
 ## Security model
 
-**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign five things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the LayerZero v1 OFT's `sendFrom`, the NttManager `transfer`, the CCIP Router's `ccipSend`, the four rescue calls above, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code — including the raw-transaction family under every name (`sendTransaction*`, `writeContracts`, `eth_send*`, `wallet_sendCalls`, a raw `provider.request`), a `functionName` that is not a string literal inside the write call's own parentheses, and code hidden after a comment on the same line; the gate itself is unit-tested against fixtures. It confines the Solana SDK and the single submit call to one file, allows `transfer` and `ccipSend` only inside their own protocol modules and the one screen each that submits them, allows `sendFrom` only inside the v1 module (the screen hands it the wallet writer and never names the function), permits `lzReceive` and `nonblockingLzReceive` to be named only inside the risk module — which is separately asserted to contain no write primitive at all, because it simulates a destination credit and must never submit one — confines the four rescue calls to the rescue module and refuses any amount written into it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
+**It cannot take your funds.** The app is a static site that only ever asks your wallet to sign six things: an ERC-20 `approve` (for exactly the amount being bridged, never unlimited), the OFT `send`, the LayerZero v1 OFT's `sendFrom`, the NttManager `transfer`, the CCIP Router's `ccipSend`, the Hyperlane warp route's `transferRemote`, the four rescue calls above, and — from Solana — the OFT program's `send` instruction. No `eth_sign`, no typed-data, no permits, no message signing, no SPL approvals or transfers, no arbitrary calldata or hand-built instructions. A build-time check ([`scripts/check-whitelist.mjs`](scripts/check-whitelist.mjs)) fails the build if anything else appears in the code — including the raw-transaction family under every name (`sendTransaction*`, `writeContracts`, `eth_send*`, `wallet_sendCalls`, a raw `provider.request`), a `functionName` that is not a string literal inside the write call's own parentheses, and code hidden after a comment on the same line; the gate itself is unit-tested against fixtures. It confines the Solana SDK and the single submit call to one file, allows `transfer`, `ccipSend` and `transferRemote` only inside their own protocol modules and the one screen each that submits them, allows `sendFrom` only inside the v1 module (the screen hands it the wallet writer and never names the function), permits `lzReceive` and `nonblockingLzReceive` to be named only inside the risk module — which is separately asserted to contain no write primitive at all, because it simulates a destination credit and must never submit one — confines the four rescue calls to the rescue module and refuses any amount written into it, and refuses to let the shared ERC-20 ABI ever declare a `transfer` of its own — so no code path here can move tokens with a plain ERC-20 transfer.
 
 **What goes to the wallet is what you see.** Before signing, the calldata (EVM) or the whole transaction (Solana: one signer, compute budget, the nine fixed `send` accounts, the instruction data) is decoded back and compared field-by-field with the plan on screen. `msg.value` always equals the quoted LayerZero fee (plus a buffer the contract refunds; on Solana the program simply takes only the quoted fee). On Solana the program called is whatever owns the OFT Store — a fact read from the chain, not a list — so the store must name LayerZero's own endpoint program, and the dry run is asked not only whether it passes but **what it debits**: the post-run state of your token account and wallet is read back from the node, and a run that takes anything other than exactly the amount from the token account, or more SOL than the fee, the quoted LayerZero fee and a small rent allowance, holds the button.
 
@@ -384,6 +420,8 @@ npm run gen:lz-v1       # regenerate the committed LayerZero v1 chain table from
 npm run check:lz-v1     # fail if that committed table no longer matches the metadata or the chains
 npm run gen:lz-dvns     # regenerate the committed DVN table (names, ids, LayerZero's deprecated flag)
 npm run check:lz-dvns   # fail if that committed table no longer matches the metadata
+npm run gen:hyperlane-warp    # regenerate the committed Hyperlane warp-route hint table from the Hyperlane registry
+npm run check:hyperlane-warp  # fail if that committed table no longer matches the registry
 ```
 
 `npm run test:integration` runs read-only tests against public RPCs and, if [Foundry](https://getfoundry.sh) is installed, fork tests that execute real `approve`/`send` transactions on a local anvil fork.
@@ -400,16 +438,16 @@ Build-time configuration lives in [`.env.production`](.env.production) (all valu
 ### Layout
 
 ```
-src/app      / is the welcome screen; /bridge, /ntt, /ccip are the protocol tabs and /rescue is Status / Rescue (/oft still redirects to /bridge)
+src/app      / is the welcome screen; /bridge, /ntt, /ccip, /hyperlane are the protocol tabs and /rescue is Status / Rescue (/oft still redirects to /bridge)
 src/core     pure logic, no React: abi, chains, protocols, amounts, plan, guards, severity (what holds the button),
              indicator (the route colour), approveFlow (Approve → Send), probe, options, quorum, track
 src/core/svm Solana: base58, PDAs, account layouts, discovery, the send plan codec/self-check, the SDK boundary (send.ts)
-src/protocols  one module per bridge: lz-v1 (Endpoint V1 OFTs), wormhole-ntt, ccip
+src/protocols  one module per bridge: lz-v1 (Endpoint V1 OFTs), wormhole-ntt, ccip, hyperlane
                plus lz-risk: the eight route checks and the verdict they fold into (§4)
                plus lz-rescue: diagnosing a stuck message and the four calls that finish it (§5)
 src/ui       wagmi/RainbowKit providers, the shell (header/tabs/history), the Solana wallet slot, hooks, components, local storage
 shims        build-time stand-ins for LayerZero helper packages the Solana SDK declares but never uses
-scripts      build, security headers, write-whitelist check, the v1 chain-table and DVN-table generators, local server
+scripts      build, security headers, write-whitelist check, the v1 chain-table, DVN-table and Hyperlane warp-route-table generators, local server
 tests/core   unit tests · tests/integration  live-RPC and anvil fork tests
 ```
 

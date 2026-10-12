@@ -23,6 +23,9 @@ const WHITELIST = new Set(['approve', 'send'])
  *             AND src/core/abi.ts is checked below for never declaring a `transfer` of its own —
  *             together, no code path here can move tokens with a plain ERC-20 transfer.
  *   ccipSend  Router (contracts/src/v0.8/ccip/interfaces/IRouterClient.sol).
+ *   transferRemote
+ *             Hyperlane TokenRouter (hyperlane-monorepo, solidity/contracts/token/libs/TokenRouter.sol).
+ *             Confined to the Hyperlane module plus the one screen that submits it.
  *   retryPayload, retryMessage, commitVerification, lzReceive
  *             §5's rescue actions: Endpoint V1 (contracts/Endpoint.sol), NonblockingLzApp,
  *             ReceiveUln302 and EndpointV2 respectively. Confined to the rescue module alone, which
@@ -36,6 +39,7 @@ const WHITELIST = new Set(['approve', 'send'])
 const SCOPED_WRITES = {
   transfer: /^src\/(protocols\/wormhole-ntt\/|ui\/NttApp\.tsx$)/,
   ccipSend: /^src\/(protocols\/ccip\/|ui\/CcipApp\.tsx$)/,
+  transferRemote: /^src\/(protocols\/hyperlane\/|ui\/HyperlaneApp\.tsx$)/,
   sendFrom: /^src\/protocols\/lz-v1\//,
   retryPayload: /^src\/protocols\/lz-rescue\//,
   retryMessage: /^src\/protocols\/lz-rescue\//,
@@ -258,6 +262,12 @@ for (const file of walk(SRC)) {
       // execution state. All view — Router, ITypeAndVersion, EVM2EVMOffRamp / OffRamp 1.6 / OffRamp 2.0.
       'getOnRamp', 'getOffRamps', 'typeAndVersion', 'getExecutionState', 'getStaticConfig',
       'getSourceChainConfig',
+      // Hyperlane (src/protocols/hyperlane/abi.ts). All view — Mailbox (IMailbox.sol) and the
+      // warp route (TokenRouter / Router / MailboxClient / GasRouter / HypERC20Collateral).
+      'mailbox', 'localDomain', 'domains', 'routers', 'destinationGas', 'hook',
+      'interchainSecurityModule', 'quoteGasPayment', 'wrappedToken', 'scale', 'quoteTransferRemote',
+      'feeRecipient', 'PACKAGE_VERSION', 'scaleNumerator', 'scaleDenominator', 'feeToken',
+      'VERSION', 'nonce', 'delivered', 'processedAt',
     ])
     if (!writeAllowed(n, rel) && !KNOWN_READS.has(n) && !simulatedOnly(n, rel)) {
       errors.push(`${rel}:${lineNo}: unknown functionName "${n}" (not in ABI §3)`)
@@ -368,7 +378,7 @@ if (errors.length) {
 }
 console.log(
   'check-whitelist: ok (EVM: only approve/send may be written, plus NttManager.transfer, ' +
-    'Router.ccipSend and the LayerZero v1 OFT.sendFrom inside their own protocol modules; ' +
+    'Router.ccipSend, the Hyperlane TokenRouter.transferRemote and the LayerZero v1 OFT.sendFrom inside their own protocol modules; ' +
     'lzReceive/nonblockingLzReceive are simulated-only in the risk module, which cannot submit; ' +
     'the four rescue actions live only in the rescue module, which may never carry value; ' +
     `Solana: one oft.send + one submit in ${SVM_FILE})`,

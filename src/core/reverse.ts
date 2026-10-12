@@ -72,3 +72,10 @@ export function reverseCcip(src: ChainKey, dstChain: ChainKey | undefined, remot
   if (!remoteToken) return refuse('no_peer')
   return reversal(dstChain, remoteToken, src)
 }
+
+/** Hyperlane: the router on the destination, as this router's `routers(domain)` names it. */
+export function reverseHyperlane(src: ChainKey, dstChain: ChainKey | undefined, remoteRouter: string | undefined): Reversal | ReverseRefusal {
+  if (!dstChain) return refuse('no_destination')
+  if (!remoteRouter) return refuse('no_peer')
+  return reversal(dstChain, remoteRouter, src)
+}

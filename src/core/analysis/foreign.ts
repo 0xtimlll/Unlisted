@@ -13,13 +13,14 @@
  *   InterchainTransfer     axelarnetwork/interchain-token-service,
  *                          contracts/interfaces/IInterchainTokenService.sol
  *   DepositForBurn         circlefin/evm-cctp-contracts, src/TokenMessenger.sol
- *   Dispatch               hyperlane-xyz/hyperlane-monorepo, solidity/contracts/interfaces/IMailbox.sol
+ *
+ * Hyperlane used to be listed here. Since the Hyperlane tab exists, a `Dispatch` from the registry
+ * Mailbox is a bridge this app builds (src/protocols/hyperlane/), read by core/analysis/detect.ts.
  *
  * Link sources (each names the URL in the project's own documentation):
  *   Portal Bridge      wormhole.com/docs/products/token-transfers/wrapped-token-transfers/overview/
  *   Axelar ITS portal  docs.axelar.dev/dev/send-tokens/interchain-tokens/intro/
  *   CCTP               circle.com/cross-chain-transfer-protocol
- *   Hyperlane Explorer explorer.hyperlane.xyz
  */
 import { encodeEventTopics, parseAbi, type Hex } from 'viem'
 import type { ChainKey } from '../chains'
@@ -31,10 +32,9 @@ export const foreignEventsAbi = parseAbi([
   'event ContractCallWithToken(address indexed sender, string destinationChain, string destinationContractAddress, bytes32 indexed payloadHash, bytes payload, string symbol, uint256 amount)',
   'event InterchainTransfer(bytes32 indexed tokenId, address indexed sourceAddress, string destinationChain, bytes destinationAddress, uint256 amount, bytes32 indexed dataHash)',
   'event DepositForBurn(uint64 indexed nonce, address indexed burnToken, uint256 amount, address indexed depositor, bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger, bytes32 destinationCaller)',
-  'event Dispatch(address indexed sender, uint32 indexed destination, bytes32 indexed recipient, bytes message)',
 ])
 
-export type ForeignEventName = 'LogMessagePublished' | 'ContractCall' | 'ContractCallWithToken' | 'InterchainTransfer' | 'DepositForBurn' | 'Dispatch'
+export type ForeignEventName = 'LogMessagePublished' | 'ContractCall' | 'ContractCallWithToken' | 'InterchainTransfer' | 'DepositForBurn'
 
 export function foreignTopic(name: ForeignEventName): Hex {
   const [topic] = encodeEventTopics({ abi: foreignEventsAbi, eventName: name })
@@ -48,7 +48,6 @@ export const FOREIGN_TOPICS: Readonly<Record<ForeignEventName, Hex>> = Object.fr
   ContractCallWithToken: foreignTopic('ContractCallWithToken'),
   InterchainTransfer: foreignTopic('InterchainTransfer'),
   DepositForBurn: foreignTopic('DepositForBurn'),
-  Dispatch: foreignTopic('Dispatch'),
 })
 
 /** Where the user should go instead. Absent when no official UI could be confirmed. */
@@ -56,7 +55,6 @@ export const FOREIGN_LINK: Readonly<Partial<Record<ForeignProtocolId, string>>> 
   'wormhole-portal': 'https://portalbridge.com/',
   'axelar-its': 'https://interchain.axelar.dev/',
   cctp: 'https://www.circle.com/cross-chain-transfer-protocol',
-  hyperlane: 'https://explorer.hyperlane.xyz',
   // 'axelar' (plain gateway calls) and 'wormhole-other' have no single user-facing app: the
   // application that sent the message owns the flow, so we name the protocol and stop there.
 })

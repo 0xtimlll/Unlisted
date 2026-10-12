@@ -104,6 +104,51 @@ recipient field (`BookVerdictNote`), just not in the indicator's one visible lin
 
 ---
 
+## A Hyperlane route that charges its gas in the token is refused rather than built
+
+**Where** [`src/protocols/hyperlane/plan.ts`](../src/protocols/hyperlane/plan.ts) (`fee_token_unsupported`),
+[`src/protocols/hyperlane/discover.ts`](../src/protocols/hyperlane/discover.ts) (`feeTokenIsNative`).
+
+**What** Core 12+ warp routes can name a `feeHook()` and quote the Mailbox dispatch fee in the
+token (`feeToken() == token()`). The router then pulls that fee with `transferFrom` on top of the
+charge (a collateral route) or takes it from the sender's balance (a synthetic one), and the
+allowance the approve has to cover is the charge plus that fee. This app models the native-fee case
+only and refuses to build the other, naming the reason, so no approve is ever sent for an amount it
+could not state exactly.
+
+**Why it was left alone** No live route on the thirteen chains served here answers `feeToken()`
+with anything but zero at the time of writing (checked on the registry's PAXG, ETH, HYPER, FUEL,
+DOG and LUMIA routes); the generation that can is days old. Building the allowance arithmetic for a
+case nobody can exercise would be code with no test behind it.
+
+**To close it** When such a route exists on a served chain: read the hook fee through
+`quoteTransferRemote`'s first quote (`token == token()`), add it to the charge for collateral routes,
+model the separate `safeTransferFrom` for synthetic ones, and add the case to
+`tests/core/hyperlane.test.ts` next to the 10+ quote test.
+
+---
+
+## A Hyperlane route's dispatch count is a window, and the window is short on a fast chain
+
+**Where** [`src/protocols/hyperlane/discover.ts`](../src/protocols/hyperlane/discover.ts) (`countDispatches`).
+
+**What** A warp route has no outbound counter of its own, and the Mailbox's `nonce()` is global, so
+the route's history is the number of `Dispatch` events with it as the sender in the newest block
+window a public provider will serve (50 000, then 10 000, then 2 000 blocks). On Ethereum that is a
+week; on Arbitrum or Plasma, where a block is a second or less, it is hours. A quiet but genuine
+route on such a chain can show fewer than twenty dispatches and be coloured "fresh" — a yellow
+nuance with the window written into the reason, never a hold.
+
+**Why it was left alone** Reading further back means many paged `eth_getLogs` calls on the
+critical path of a verdict, against providers that already refuse long ranges. The OFT adapters have
+the same signal with a counter (`outboundNonce` on the endpoint); Hyperlane simply does not keep one.
+
+**To close it** Page backwards in the shrinking spans until twenty dispatches are found or a time
+budget runs out, and say in the reason how far back the search reached (in days, from the block's
+own timestamp — `windowDays` in `lz-risk/probe.ts` already does this).
+
+---
+
 ## The v1 form still switches to a custom recipient with a checkbox
 
 **Where** [`src/ui/BridgeV1.tsx`](../src/ui/BridgeV1.tsx), the "I am sending to an address that is

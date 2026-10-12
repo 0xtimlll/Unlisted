@@ -17,6 +17,7 @@ describe('chain registry', () => {
       scroll: [534352, 30214],
       robinhood: [4663, 30416],
       ink: [57073, 30339],
+      plasma: [9745, 30383],
     }
     expect(evmChains()).toHaveLength(Object.keys(expected).length)
     for (const [key, [chainId, eid]] of Object.entries(expected)) {
@@ -71,6 +72,8 @@ describe('chain registry', () => {
     expect(byChainId(4663)?.key).toBe('robinhood')
     expect(byEid(30339)?.key).toBe('ink')
     expect(byChainId(57073)?.key).toBe('ink')
+    expect(byEid(30383)?.key).toBe('plasma')
+    expect(byChainId(9745)?.key).toBe('plasma')
     expect(byChainId(1)?.key).toBe('ethereum')
     expect(byEid(1)).toBeUndefined()
     expect(byChainId(30101)).toBeUndefined()

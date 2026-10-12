@@ -1,5 +1,5 @@
 /**
- * The gate, asserted the same way on all four protocols.
+ * The gate, asserted the same way on all five protocols.
  *
  * core/severity.ts says what holds the button (the transaction is impossible, or the app would be
  * building something malformed) and what is a note for the indicator; each guard set applies it.
@@ -36,6 +36,7 @@ function emittedCodes(): Set<string> {
     'src/protocols/lz-v1/guards.ts',
     'src/protocols/wormhole-ntt/guards.ts',
     'src/protocols/ccip/guards.ts',
+    'src/protocols/hyperlane/guards.ts',
   ]
   const out = new Set<string>()
   for (const f of files) {
@@ -70,6 +71,12 @@ const DELIBERATE_NOTES = new Set([
   'over_inbound_capacity',
   'peer_back_mismatch',
   'peer_back_unavailable',
+  // Hyperlane: the far router names a mailbox that is not the registry's (red), and the route's
+  // own fee at any size (core/oftFee.ts thresholds), information like the OFT issuer fee.
+  'peer_foreign_mailbox',
+  'route_fee_notice',
+  'route_fee_high',
+  'route_fee_extreme',
   'recipient_is_contract',
   'recipient_lookalike',
   'recipient_pda',
@@ -119,7 +126,7 @@ describe('every code a guard emits has been classified on purpose', () => {
   })
 
   it('what used to be a block and is now a colour: the zero address, a route contract, a twin, a peer that does not point back', () => {
-    for (const c of ['recipient_zero', 'recipient_is_contract', 'recipient_lookalike', 'peer_back_mismatch', 'trusted_remote_back_mismatch', 'ntt_anchor_missing']) {
+    for (const c of ['recipient_zero', 'recipient_is_contract', 'recipient_lookalike', 'peer_back_mismatch', 'trusted_remote_back_mismatch', 'ntt_anchor_missing', 'peer_foreign_mailbox']) {
       expect(isNoteCode(c), c).toBe(true)
       expect(noteLevel(c), c).toBe('red')
     }
@@ -405,7 +412,7 @@ describe('5. a recipient that is merely a contract is not the guards’ business
   })
 
   it('the guard modules never read code — the distinction cannot be drawn there', () => {
-    for (const f of ['src/core/guards.ts', 'src/protocols/lz-v1/guards.ts', 'src/protocols/wormhole-ntt/guards.ts', 'src/protocols/ccip/guards.ts']) {
+    for (const f of ['src/core/guards.ts', 'src/protocols/lz-v1/guards.ts', 'src/protocols/wormhole-ntt/guards.ts', 'src/protocols/ccip/guards.ts', 'src/protocols/hyperlane/guards.ts']) {
       expect(readFileSync(join(ROOT, f), 'utf8'), f).not.toMatch(/getCode|getBytecode|eth_getCode/)
     }
   })
@@ -487,7 +494,7 @@ describe('6. the button is held by the impossible and by nothing else', () => {
   it('every send handler judges the guards of the render it is called from, not of an earlier one', () => {
     // A memoised onSend keeps the guardInput of the render it was created in: the balance and the
     // simulation would be stale at the moment of the click.
-    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
+    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp', 'HyperlaneApp']) {
       const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
       expect(src, f).not.toMatch(/onSend\s*=\s*useCallback/)
       expect(src, f).not.toMatch(/onApprove\s*=\s*useCallback/)
@@ -553,7 +560,7 @@ describe('7. the approve is the next step: offered when only the allowance is sh
   })
 
   it('the screens offer the approve on that rule and put the impossibility in one line under the button', () => {
-    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp']) {
+    for (const f of ['BridgeApp', 'BridgeV1', 'NttApp', 'CcipApp', 'HyperlaneApp']) {
       const src = readFileSync(join(ROOT, 'src/ui', `${f}.tsx`), 'utf8')
       expect(src, f).toContain('shownFailures(report.blocks, { dropPending: true, dropSteps: true })[0]')
       expect(src, f).toMatch(/enabled: waitsOnlyForApprove\(report\.blocks\)/)
@@ -578,6 +585,7 @@ describe('8. a failed simulation is a yellow note that says what the node said, 
     'OFT v1': { simulation: { status: 'reverted', revert: { kind: 'string', message: 'LzApp: destination chain is not a trusted source', meaning: 'generic' } } },
     NTT: { simulation: { ok: false, reason: REASON } },
     CCIP: { simulation: { ok: false, reason: REASON } },
+    Hyperlane: { simulation: { ok: false, reason: REASON } },
   }
 
   it('is classified as a yellow note, never a block', () => {
