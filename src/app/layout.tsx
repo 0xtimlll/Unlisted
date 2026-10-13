@@ -5,7 +5,8 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'Unlisted',
   description: 'Bridge any LayerZero OFT token. Non-custodial, static, no backend.',
-  // Tab icon only (white U on a black disc); the page itself shows no logo. The PNGs are renders
+  // Tab icon only (the owner's mark: a white U with a dot on a black disc with a grey rim, redrawn
+  // as vectors from the supplied 1024px image); the page itself shows no logo. The PNGs are renders
   // of public/icon.svg for browsers that do not take an SVG favicon.
   icons: {
     icon: [
