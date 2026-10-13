@@ -255,6 +255,9 @@ function OftDetails({ chain, info }: { chain: ChainDef; info: OftInfo }) {
         <Row label={d.card.token} mono>
           <Address value={info.token} href={chain.explorerAddrUrl + info.token} short />
         </Row>
+      ) : info.kind === 'NativeOFTAdapter' ? (
+        // No ERC-20 behind it: the coin itself, which `send` takes out of msg.value.
+        <Row label={d.card.token}>{fmt(d.card.nativeToken, { symbol: info.symbol, chain: chain.name })}</Row>
       ) : null}
       {info.lockedInAdapter !== undefined ? (
         <Row label={d.card.locked}>

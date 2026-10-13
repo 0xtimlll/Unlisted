@@ -14,7 +14,7 @@ import { getAddress } from 'viem'
 import { byEid, evmByKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
 import { bytes32ToAddress } from '@/core/encoding'
-import { buildSendPlan } from '@/core/plan'
+import { buildSendPlan, msgValue } from '@/core/plan'
 import { probeOft } from '@/core/probe'
 import { evmRecipient } from '@/core/recipient'
 import { ccipConfig } from '@/protocols/ccip/chains'
@@ -36,6 +36,12 @@ const USDT0_TOKEN_PLASMA = getAddress('0xB8CE59FC3717ada4C02eaDF9682A9e934F625eb
 
 /** sUSDe on Plasma: a self-OFT (token() is itself) that sends to Ethereum. Found the same way. */
 const SUSDE_PLASMA = getAddress('0x211Cc4DD073734dA055fbF44a2b4667d5E5fE5d2')
+
+/**
+ * XPL itself: a NativeOFTAdapter (token() is the zero address) peered to BNB Chain, holding the
+ * XPL bridged out through it. The one OFT shape whose amount travels in msg.value.
+ */
+const XPL_ADAPTER_PLASMA = getAddress('0x405FBc9004D857903bFD6b3357792D71a50726b0')
 
 /**
  * GHO on Plasma, from the CCIP Directory data file (`plasma-mainnet`): its pool lists Arbitrum,
@@ -98,6 +104,26 @@ describe('Plasma: LayerZero OFT', () => {
     expect(eids).toContain(30110)
     const eth = info.routes.find((r) => r.eid === 30101)!
     expect(bytes32ToAddress(eth.peer as `0x${string}`)).toMatch(/^0x[0-9a-fA-F]{40}$/)
+  })
+
+  it('XPL is a native adapter: the coin of the chain, no approve, the amount in msg.value', async () => {
+    const { info } = await probeOft(plasma(), XPL_ADAPTER_PLASMA, evmByKey('plasma').endpointV2)
+    if (info.vm !== 'evm') throw new Error('expected evm')
+    expect(info.kind).toBe('NativeOFTAdapter')
+    expect(info.token).toBe('0x0000000000000000000000000000000000000000')
+    expect(info.symbol).toBe('XPL')
+    expect(info.decimals).toBe(18)
+    expect(info.sharedDecimals).toBe(6)
+    expect(info.approvalRequired).toBe(false)
+    expect(info.lockedInAdapter).toBeGreaterThan(0n)
+    expect(info.routes.map((r) => r.eid)).toEqual([30102])
+
+    const plan = await buildSendPlan(plasma(), { info, src: evmByKey('plasma'), dstEid: 30102, amountInput: '1', sender: SOMEONE, recipient: evmRecipient(SOMEONE) })
+    expect(plan.nativeAmountLD).toBe(10n ** 18n)
+    expect(plan.quote.nativeFee).toBeGreaterThan(0n)
+    expect(plan.value).toBeGreaterThanOrEqual(plan.quote.nativeFee)
+    expect(msgValue(plan)).toBe(plan.value + 10n ** 18n)
+    expect(plan.value).toBeLessThan(evmByKey('plasma').feeCeiling)
   })
 
   it('sUSDe is a self-OFT that sends to Ethereum', async () => {

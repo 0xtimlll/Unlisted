@@ -9,6 +9,7 @@
  *   - **A tier is not a refusal.** The list says what was found; the indicator above it says how
  *     bad it is. Nothing here disables a button or caps an amount.
  */
+import { formatAmount } from '@/core/amounts'
 import { CHECK_IDS, isHard, type CheckId, type CheckState, type RouteRisk } from '@/protocols/lz-risk/risk'
 import { ADAPTER_MIN_LOCKED_BPS, ADAPTER_MIN_OUTBOUND_NONCE } from '@/protocols/lz-risk/adapters'
 import { fmt, useDict, type Dict } from '@/i18n'
@@ -76,7 +77,15 @@ export function RiskChecks(p: { risk: RouteRisk | undefined; loading: boolean; e
           <CheckRow key={id} id={id} state={r.checks[id]} />
         ))}
       </ul>
-      {r.adapter ? (
+      {r.adapter?.native ? (
+        <p className="mt-2 text-xs text-muted">
+          {fmt(d.risk.adapterSignsNative, {
+            held: r.adapter.held === undefined ? '?' : formatAmount(r.adapter.held, 18, { maxFraction: 4 }),
+            sends: r.adapter.outboundNonce === undefined ? '?' : r.adapter.outboundNonce.toString(),
+            minSends: ADAPTER_MIN_OUTBOUND_NONCE.toString(),
+          })}
+        </p>
+      ) : r.adapter ? (
         <p className="mt-2 text-xs text-muted">
           {fmt(d.risk.adapterSigns, {
             locked: r.adapter.lockedBps === undefined ? '?' : `${r.adapter.lockedBps / 100}%`,

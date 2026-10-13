@@ -51,6 +51,7 @@ Any OFT (LayerZero V2) deployed on these chains works, in both directions betwee
 
 - **EVM → Solana** — the Solana side is discovered from `peers(30168)` (program, mint, token program, PeerConfig); the recipient must be a Solana wallet typed by hand (never your EVM address); executor options are derived from the contract's enforced options plus token-account rent when the recipient has none.
 - **Solana → EVM** — paste the token's **OFT Store** address (or the signature of any past `send`); its program, mint, escrow and per-chain PeerConfigs are read from the chain. The `send` instruction is built with LayerZero's own Solana SDK, then decoded back by independent code before your wallet sees it (same self-check as on EVM). The recipient is an EVM address typed by hand; your Solana wallet is never offered as one. The fee is the quoted LayerZero fee plus a buffer: the program takes only the quoted amount, the rest never leaves your wallet.
+- **A chain's own coin** — a `NativeOFTAdapter` (XPL on Plasma, for one) answers `token()` with the zero address and takes the amount out of `msg.value` next to the fee, exactly `fee.nativeFee + amount` or it reverts. The app reads that shape as "native token": the symbol and decimals come from the chain registry, the balance is your coin balance, there is no approve, and the simulation and the send both carry amount plus fee as the value — the fee buffer still sits in `fee.nativeFee`, so the endpoint still refunds it.
 
 Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
 
@@ -124,9 +125,10 @@ shape, is implemented and unit-tested but no deployed contract of that shape was
 against ([`docs/TODO.md`](docs/TODO.md) records how it was searched for). It is listed in
 `UNVERIFIED_WIRES`, and the route indicator below shows every route on it in yellow, with the reason.
 
-**NativeOFT is named and refused.** It takes the transfer amount out of `msg.value` alongside the
-fee, and every amount check here rests on `msg.value` being the fee and nothing else. Loosening that
-for one contract shape would cost more than the shape is worth.
+**v1 NativeOFT is named and refused.** It takes the transfer amount out of `msg.value` alongside the
+fee, and every v1 amount check here rests on `msg.value` being the fee and nothing else. Its V2
+counterpart, `NativeOFTAdapter`, is supported in the V2 path (see above), where the plan carries the
+amount in a field of its own and every check accounts for it; the v1 module has no such field.
 
 `sendFrom` may only be submitted from [`src/protocols/lz-v1/send.ts`](src/protocols/lz-v1/send.ts) —
 the build fails if it appears anywhere else. There is no LayerZero v1 on Solana, so the whole path is

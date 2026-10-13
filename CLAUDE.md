@@ -203,6 +203,24 @@ approve — `core/approveFlow.ts` + `ui/useApproveFlow.ts`: симуляция p
 ввод. Симуляцию держат только блоки (`preOk` = `ok || isNoteCode`): заметка не должна оставлять Send
 серым без причины.
 
+**NativeOFTAdapter (2026-10-13).** Третья форма V2 OFT: `token()` отвечает нулевым адресом,
+`approvalRequired()` — false, `send` требует **ровно** `msg.value == fee.nativeFee +
+removeDust(amountLD)` (devtools, `packages/oft-evm/contracts/NativeOFTAdapter.sol`), иначе
+`IncorrectMessageValue`. В `probeOft` это `kind: 'NativeOFTAdapter'`: символ и decimals берутся из
+реестра сети (`client.chain.nativeCurrency`), ERC-20 не спрашивается, «залочено» = `getBalance(oft)`.
+План несёт сумму в отдельном поле `nativeAmountLD`; `value` по-прежнему только комиссия (так
+`fee.nativeFee`, guard 7 и self-check значат одно), а `msgValue(plan) = value + nativeAmountLD` —
+это и в `writeContract`, и в симуляции (`useCheck`). Буфер комиссии работает: он лежит в
+`fee.nativeFee`, endpoint возвращает излишек. Guard 5 сравнивает сумму с балансом монеты, guard 8
+требует `msgValue + газ`, guard 7 держит инвариант `nativeAmountLD == amountLD` (и `== 0` для
+ERC-20-форм), guard 11 запрещает approve. Standing в `lz-risk`: нативный адаптер списывает деньги
+через `msg.value`, поэтому исключение для `approvalRequired=false` на него не распространяется —
+«залочено» = баланс монеты (доли supply нет), порог «держит хоть что-то» + ≥ 20 отправок; на
+назначении `adapter_liquidity` читает `getBalance(dstOft)`, когда `token()` там нулевой. Три
+причины отказа probe различимы: `not_contract` (нет кода), `not_oft` (сам `token()` не отвечает),
+`token_unreadable` (названный токен не ERC-20, адрес в detail). Фикстура — XPL на Plasma
+`0x405FBc90…26b0` → BNB Chain.
+
 **Solana как источник.** Программа, которую вызывает `send`, — та, что владеет OFT Store, то есть
 факт с цепочки, а не из списка; поэтому store обязан называть endpoint-программу LayerZero
 (`PROGRAM.lzEndpointV2`, иначе `foreign_endpoint`, как `foreign_endpoint` у EVM-probe), а dry run

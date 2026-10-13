@@ -1,14 +1,24 @@
 import type { Address, Hex } from 'viem'
 import type { SvmSourceInfo } from './svm/source'
 
-export type OftKind = 'OFT' | 'OFTAdapter'
+/**
+ * `NativeOFTAdapter` (LayerZero devtools, packages/oft-evm/contracts/NativeOFTAdapter.sol) is the
+ * lockbox for a chain's own coin: `token()` answers the zero address, `approvalRequired()` is
+ * false, and `send` takes the amount out of `msg.value` next to the fee — exactly
+ * `fee.nativeFee + removeDust(amountLD)`, or it reverts with IncorrectMessageValue.
+ */
+export type OftKind = 'OFT' | 'OFTAdapter' | 'NativeOFTAdapter'
 
 /** Result of probeOft() (§5.1). Everything here comes from the contract itself. */
 export type OftInfo = {
   vm: 'evm'
   oft: Address
   kind: OftKind
-  /** ERC-20 whose balanceOf/allowance we read. Equals `oft` for plain OFT. */
+  /**
+   * ERC-20 whose balanceOf/allowance we read. Equals `oft` for plain OFT. The ZERO address for a
+   * NativeOFTAdapter, where there is no ERC-20 at all: the balance is the wallet's coin balance,
+   * and nothing is ever approved.
+   */
   token: Address
   symbol: string
   name: string
@@ -33,6 +43,11 @@ export type OftInfo = {
 
 /** The OFT chosen as the source, on either VM. Shared fields (symbol, decimals, routes, enforced…) are read alike. */
 export type SourceInfo = OftInfo | SvmSourceInfo
+
+/** True for the one shape whose amount travels in msg.value rather than through an ERC-20. */
+export function isNativeAdapter(info: SourceInfo | undefined): boolean {
+  return info?.vm === 'evm' && info.kind === 'NativeOFTAdapter'
+}
 
 /** Soft warnings (§6.16). Shown before signing, never block. */
 export type SuspiciousFlag =

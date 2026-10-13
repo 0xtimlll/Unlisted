@@ -7,7 +7,7 @@ import { byEid, type ChainDef } from '@/core/chains'
 import { isPending, type ApproveIntent, type GuardReport } from '@/core/guards'
 import { approveBusy, type ApprovePhase } from '@/core/approveFlow'
 import { isNoteCode, isStepCode } from '@/core/severity'
-import type { SendPlan } from '@/core/plan'
+import { msgValue, type SendPlan } from '@/core/plan'
 import type { SvmOptionsPlan } from '@/core/options'
 import type { SvmOftInfo } from '@/core/svm/discover'
 import { BASE_FEE_LAMPORTS, svmTxFee } from '@/core/svm/fees'
@@ -83,6 +83,13 @@ export function Details(p: {
                     : fmt(d.step3.feeDetailSvm, { value: fmtNative(plan.value) })}
                 </div>
               </Row>
+              {plan.vm === 'evm' && plan.nativeAmountLD > 0n ? (
+                // A native adapter: the amount leaves the wallet as coin, in the same value as the fee.
+                <Row label={d.step3.nativeValue}>
+                  <b className="tnum">{fmtNative(msgValue(plan))}</b>
+                  <div className="text-xs text-muted">{fmt(d.step3.nativeValueNote, { amount: fmtNative(plan.nativeAmountLD), fee: fmtNative(plan.value) })}</div>
+                </Row>
+              ) : null}
               {plan.vm === 'svm' ? (
                 <Row label={d.step3.computeBudget}>
                   <div className="text-xs">

@@ -100,6 +100,62 @@ export function treadPlan(over: Partial<Omit<EvmSendPlan, 'recipient'>> & { reci
     extraOptions: '0x',
     quote,
     value: computeValue(quote.nativeFee, 4000, HYPER_FEE_STEP),
+    nativeAmountLD: 0n,
+  }
+  return { ...base, ...rest }
+}
+
+/** The XPL NativeOFTAdapter on Plasma (0x405F…26b0): token() is zero, nothing is approved. */
+export const XPL_ADAPTER: Address = '0x405FBc9004D857903bFD6b3357792D71a50726b0'
+export const ENDPOINT_PLASMA: Address = '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B'
+export const PLASMA_CHAIN_ID = 9745
+export const PLASMA_EID = 30383
+export const BSC_EID = 30102
+
+export function xplNativeInfo(over: Partial<OftInfo> = {}): OftInfo {
+  return {
+    vm: 'evm',
+    oft: XPL_ADAPTER,
+    kind: 'NativeOFTAdapter',
+    token: '0x0000000000000000000000000000000000000000',
+    symbol: 'XPL',
+    name: 'XPL',
+    decimals: 18,
+    sharedDecimals: 6,
+    conversionRate: 10n ** 12n,
+    approvalRequired: false,
+    endpoint: ENDPOINT_PLASMA,
+    owner: OWNER,
+    routes: [{ eid: BSC_EID, peer: addressToBytes32(XPL_ADAPTER) }],
+    enforced: { [BSC_EID]: '0x' },
+    lockedInAdapter: 264_871_655n * 10n ** 18n,
+    ...over,
+  }
+}
+
+/** A send of 1 XPL from the native adapter: the amount travels in msg.value next to the fee. */
+export function xplPlan(over: Partial<Omit<EvmSendPlan, 'recipient'>> & { recipient?: Address } = {}, amountInput = '1'): EvmSendPlan {
+  const info = xplNativeInfo()
+  const amounts = computeAmounts(amountInput, info.decimals, info.conversionRate, 0)
+  const quote = quoteFor(amounts.amountLD)
+  const { recipient: recipientOver, ...rest } = over
+  const recipientAddr = recipientOver ?? WALLET
+  const base: EvmSendPlan = {
+    vm: 'evm',
+    oft: XPL_ADAPTER,
+    srcEid: PLASMA_EID,
+    dstEid: BSC_EID,
+    sender: WALLET,
+    recipient: addressToBytes32(recipientAddr),
+    recipientDisplay: recipientAddr,
+    recipientVm: 'evm',
+    amounts,
+    slippageBps: 0,
+    feeBufferBps: 4000,
+    extraOptions: '0x',
+    quote,
+    value: computeValue(quote.nativeFee, 4000, 10n ** 16n),
+    nativeAmountLD: amounts.amountLD,
   }
   return { ...base, ...rest }
 }

@@ -9,7 +9,7 @@ import { makeReadClient, type ReadClient } from '@/core/client'
 import { findAdapterForToken } from '@/core/adapterSearch'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
 import { readDvnConfig } from '@/core/lz/dvn'
-import { assembleSendArgs, buildSendPlan, type EvmSendPlan } from '@/core/plan'
+import { assembleSendArgs, buildSendPlan, msgValue, type EvmSendPlan } from '@/core/plan'
 import { simulateSend, type SimOutcome } from '@/core/sim/preview'
 import type { DecodedRevert } from '@/core/sim/revert'
 import { clientPair, decodeTxQuorum, probeOftQuorum } from '@/core/quorum'
@@ -156,7 +156,7 @@ export function useCheck(
   const client = useReadClient(src)
   return useQuery({
     queryKey: [
-      'check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.amounts.minAmountLD.toString(), plan?.value.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions,
+      'check', src?.key, plan?.oft, plan?.sender, plan?.amounts.amountLD.toString(), plan?.amounts.minAmountLD.toString(), plan?.value.toString(), plan?.nativeAmountLD.toString(), plan?.dstEid, plan?.recipient, plan?.extraOptions,
       approve ? `${approve.token}:${approve.spender}:${approve.amount}` : '', token ?? '',
     ],
     queryFn: async (): Promise<CheckResult> => {
@@ -167,7 +167,8 @@ export function useCheck(
         account: plan!.sender,
         oft: plan!.oft,
         sendArgs: args,
-        value: plan!.value,
+        // The exact msg.value the wallet will send: the fee, plus the coin itself on a native adapter.
+        value: msgValue(plan!),
         ...(approve ? { approve } : {}),
         ...(token ? { token } : {}),
         ...(src ? { chainId: src.chainId } : {}),

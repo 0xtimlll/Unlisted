@@ -57,6 +57,15 @@ export type AdapterStanding = {
   lockedBps: number | undefined
   /** Outbound nonce summed over this adapter's peers, or undefined when a read failed. */
   outboundNonce: bigint | undefined
+  /**
+   * A NativeOFTAdapter (core/types.ts): a lockbox for the chain's own coin. It DOES take funds —
+   * the amount goes in msg.value — so the `approvalRequired === false` exemption above does not
+   * apply to it; but a coin has no `totalSupply()` to divide by, so `lockedBps` stays undefined
+   * and `held` (the adapter's coin balance) stands in: the floor is "holds anything at all", plus
+   * the same history floor.
+   */
+  native?: boolean
+  held?: bigint | undefined
 }
 
 /** Locked share in basis points. `undefined` for a zero or unreadable supply — never 0. */
@@ -70,6 +79,8 @@ export function lockedBps(held: bigint, totalSupply: bigint): number | undefined
  * balance is not a healthy one.
  */
 export function adapterSignsOk(a: AdapterStanding): boolean {
-  if (a.lockedBps === undefined || a.outboundNonce === undefined) return false
-  return a.lockedBps >= ADAPTER_MIN_LOCKED_BPS && a.outboundNonce >= ADAPTER_MIN_OUTBOUND_NONCE
+  if (a.outboundNonce === undefined || a.outboundNonce < ADAPTER_MIN_OUTBOUND_NONCE) return false
+  if (a.native) return a.held !== undefined && a.held > 0n
+  if (a.lockedBps === undefined) return false
+  return a.lockedBps >= ADAPTER_MIN_LOCKED_BPS
 }

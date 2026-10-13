@@ -20,7 +20,7 @@ import { encodeFunctionData, encodePacked, keccak256, parseAbi, type Address, ty
 import { erc20Abi, oftAbi } from '../../core/abi'
 import { byEid, evmByKey, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
-import { sameAddress } from '../../core/encoding'
+import { sameAddress, ZERO_ADDRESS } from '../../core/encoding'
 import { sanitizeText } from '../../core/text'
 import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
@@ -383,11 +383,15 @@ async function checkAdapterLiquidity(c: V2RiskContext): Promise<Outcome> {
   if (sameAddress(token.value, c.dstOft)) {
     return { state: { status: 'skipped', reason: 'the destination mints its own token, so it holds no reserve' } }
   }
-  const held = await attempt(
-    c.dstClient.readContract({ address: token.value, abi: erc20Abi, functionName: 'balanceOf', args: [c.dstOft] }),
-    undefined,
-    'adapter balance',
-  )
+  // token() == 0: a NativeOFTAdapter on the destination, which releases the chain's own coin — its
+  // reserve is its coin balance, not an ERC-20's (core/types.ts).
+  const held = sameAddress(token.value, ZERO_ADDRESS)
+    ? await attempt(c.dstClient.getBalance({ address: c.dstOft }), undefined, 'adapter balance')
+    : await attempt(
+        c.dstClient.readContract({ address: token.value, abi: erc20Abi, functionName: 'balanceOf', args: [c.dstOft] }),
+        undefined,
+        'adapter balance',
+      )
   if (!held.ok) return { state: { status: 'unchecked', reason: held.reason } }
   if (held.value < c.plan.quote.amountReceivedLD) {
     return {
@@ -508,11 +512,18 @@ async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | null
   // impersonation this rule is about has nothing to spend. It also holds no reserve by design, so
   // measuring its locked share would refuse a working bridge for a number that cannot apply:
   // USDT0 on HyperEVM locks 0% of supply across 23k deliveries, and is not an approve risk at all.
-  if (c.info.kind !== 'OFTAdapter' || !c.info.approvalRequired) return null
+  //
+  // A NativeOFTAdapter is the exception to that exemption: it answers false too, but it takes the
+  // amount out of msg.value, so an impersonator has exactly the funds the person sends. Its
+  // reserve is its coin balance, and a coin has no supply to take a share of (adapters.ts).
+  const native = c.info.kind === 'NativeOFTAdapter'
+  if (!native && (c.info.kind !== 'OFTAdapter' || !c.info.approvalRequired)) return null
 
   const [held, supply] = await Promise.all([
-    attempt(c.srcClient.readContract({ address: c.info.token, abi: erc20Abi, functionName: 'balanceOf', args: [c.info.oft] }), undefined, 'adapter balance'),
-    attempt(c.srcClient.readContract({ address: c.info.token, abi: supplyAbi, functionName: 'totalSupply' }), undefined, 'token supply'),
+    native
+      ? attempt(c.srcClient.getBalance({ address: c.info.oft }), undefined, 'adapter balance')
+      : attempt(c.srcClient.readContract({ address: c.info.token, abi: erc20Abi, functionName: 'balanceOf', args: [c.info.oft] }), undefined, 'adapter balance'),
+    native ? Promise.resolve(undefined) : attempt(c.srcClient.readContract({ address: c.info.token, abi: supplyAbi, functionName: 'totalSupply' }), undefined, 'token supply'),
   ])
 
   // Summed over every peer this adapter has, not just the selected route: a legitimate adapter can
@@ -530,7 +541,8 @@ async function adapterStanding(c: V2RiskContext): Promise<AdapterStanding | null
   // floor for a reason that has nothing to do with the adapter.
   const outboundNonce = nonces.every((n) => n.ok) ? nonces.reduce((t, n) => t + BigInt(n.ok ? n.value : 0n), 0n) : undefined
 
-  return { lockedBps: held.ok && supply.ok ? lockedBps(held.value, supply.value) : undefined, outboundNonce }
+  if (native) return { lockedBps: undefined, outboundNonce, native: true, held: held.ok ? held.value : undefined }
+  return { lockedBps: held.ok && supply?.ok ? lockedBps(held.value, supply.value) : undefined, outboundNonce }
 }
 
 export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {

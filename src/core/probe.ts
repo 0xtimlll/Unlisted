@@ -6,7 +6,7 @@ import { getAddress, isAddress, type Address, type Hex } from 'viem'
 import { erc20Abi, MSG_TYPE_SEND, oftAbi } from './abi'
 import { ALL_EIDS } from './chains'
 import type { ReadClient } from './client'
-import { isZeroBytes32, sameAddress } from './encoding'
+import { isZeroBytes32, sameAddress, ZERO_ADDRESS } from './encoding'
 import { labelLooksSpoofed as looksSpoofed, sanitizeLabel as sanitize } from './text'
 import type { OftInfo, SuspiciousFlag } from './types'
 
@@ -94,7 +94,9 @@ export async function probeOft(
   for (const p of peerRes) must(p, 'peers')
 
   const token = getAddress(must(rToken, 'token'))
-  const kind = sameAddress(token, oft) ? 'OFT' : 'OFTAdapter'
+  // token() == address(0) is NativeOFTAdapter's own answer (core/types.ts): the coin, no ERC-20.
+  const native = sameAddress(token, ZERO_ADDRESS)
+  const kind: OftInfo['kind'] = native ? 'NativeOFTAdapter' : sameAddress(token, oft) ? 'OFT' : 'OFTAdapter'
   const approvalRequired = must(rApproval, 'approvalRequired')
   const sharedDecimals = Number(must(rShared, 'sharedDecimals'))
   const conversionRate = must(rRate, 'decimalConversionRate')
@@ -109,21 +111,43 @@ export async function probeOft(
   const owner = rOwner?.status === 'success' ? getAddress(rOwner.result) : undefined
   void rVersion // informational only
 
-  // ERC-20 metadata from the token (== oft for plain OFT), plus what the adapter holds.
-  const meta = await client.multicall({
-    contracts: [
-      { address: token, abi: erc20Abi, functionName: 'decimals' },
-      { address: token, abi: erc20Abi, functionName: 'symbol' },
-      { address: token, abi: erc20Abi, functionName: 'name' },
-      { address: token, abi: erc20Abi, functionName: 'balanceOf', args: [oft] },
-    ],
-    allowFailure: true,
-  })
-  const [mDec, mSym, mName, mLocked] = meta
-  if (!mDec || mDec.status !== 'success') throw new ProbeError('token_unreadable', 'token.decimals() failed')
-  const decimals = Number(mDec.result)
-  const symbol = sanitize(mSym?.status === 'success' ? mSym.result : '')
-  const name = sanitize(mName?.status === 'success' ? mName.result : '')
+  let decimals: number
+  let symbol: string
+  let name: string
+  /** What the adapter holds: the ERC-20 balance of a lockbox, or the coin balance of a native one. */
+  let held: bigint | undefined
+  if (native) {
+    // No ERC-20 to ask. The coin's symbol and decimals are the chain registry's (core/client.ts
+    // puts them on the viem chain), never read from the contract — it has none to give.
+    const currency = client.chain?.nativeCurrency
+    decimals = currency?.decimals ?? 18
+    symbol = sanitize(currency?.symbol ?? '')
+    name = sanitize(currency?.name ?? symbol)
+    try {
+      held = await client.getBalance({ address: oft })
+    } catch {
+      /* best-effort: an unreadable balance is "unknown", never zero */
+    }
+  } else {
+    // ERC-20 metadata from the token (== oft for plain OFT), plus what the adapter holds.
+    const meta = await client.multicall({
+      contracts: [
+        { address: token, abi: erc20Abi, functionName: 'decimals' },
+        { address: token, abi: erc20Abi, functionName: 'symbol' },
+        { address: token, abi: erc20Abi, functionName: 'name' },
+        { address: token, abi: erc20Abi, functionName: 'balanceOf', args: [oft] },
+      ],
+      allowFailure: true,
+    })
+    const [mDec, mSym, mName, mLocked] = meta
+    // The contract named a token that does not answer as an ERC-20: a fact about THAT address,
+    // said with the address, so it is never mistaken for "no code here" or "not an OFT".
+    if (!mDec || mDec.status !== 'success') throw new ProbeError('token_unreadable', `token() names ${token}, which does not answer decimals()`)
+    decimals = Number(mDec.result)
+    symbol = sanitize(mSym?.status === 'success' ? mSym.result : '')
+    name = sanitize(mName?.status === 'success' ? mName.result : '')
+    if (mLocked?.status === 'success') held = mLocked.result
+  }
 
   // OFT defines rate = 10^(decimals - sharedDecimals). Anything else is not an OFT we understand.
   if (decimals < sharedDecimals || conversionRate !== 10n ** BigInt(decimals - sharedDecimals)) {
@@ -144,7 +168,8 @@ export async function probeOft(
   // A name that mixes scripts can impersonate a token the user already trusts. Say so; never refuse.
   if (looksSpoofed(symbol) || looksSpoofed(name)) flags.push('label_lookalike')
   // A lock/unlock adapter that holds nothing has never bridged anything — or is not the real one.
-  const lockedInAdapter = kind === 'OFTAdapter' && approvalRequired && mLocked?.status === 'success' ? mLocked.result : undefined
+  // A native adapter is a lockbox too: what it holds is the coin people have bridged out through it.
+  const lockedInAdapter = (kind === 'OFTAdapter' && approvalRequired) || native ? held : undefined
   if (lockedInAdapter === 0n) flags.push('adapter_empty')
 
   return {

@@ -11,8 +11,8 @@ import { classifyFee, formatBps, issuerFee } from './oftFee'
 import { aboveFeeCeiling, byChainId, byEid } from './chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from './encoding'
 import { hasDangerousOptions, inspectEnforcedOptions, receiveTotals, type EnforcedRisk } from './options'
-import { assembleSendArgs, decodeSendCalldata, planFee, type EvmSendPlan, type SendPlan } from './plan'
-import type { SourceInfo, SuspiciousFlag } from './types'
+import { assembleSendArgs, decodeSendCalldata, msgValue, planFee, type EvmSendPlan, type SendPlan } from './plan'
+import { isNativeAdapter, type SourceInfo, type SuspiciousFlag } from './types'
 import type { SvmRecipientClass } from './svm/recipient'
 import type { SvmDebitCheck } from './svm/plan'
 import type { PeerBackResult } from './verify'
@@ -248,13 +248,14 @@ export function g4RecipientNotContract(i: GuardInput): GuardResult {
   return ok(4)
 }
 
-// 5. amountLD > 0 and <= balance
+// 5. amountLD > 0 and <= balance — the coin balance on a native adapter, the ERC-20's otherwise
 export function g5Amount(i: GuardInput): GuardResult {
   if (!i.plan) return fail(5, 'plan_missing')
   const a = i.plan.amounts.amountLD
   if (a <= 0n) return fail(5, 'amount_zero')
-  if (i.tokenBalance === undefined) return fail(5, 'balance_unknown')
-  if (a > i.tokenBalance) return fail(5, 'insufficient_balance', `${a} > ${i.tokenBalance}`)
+  const balance = isNativeAdapter(i.info) ? i.nativeBalance : i.tokenBalance
+  if (balance === undefined) return fail(5, 'balance_unknown')
+  if (a > balance) return fail(5, 'insufficient_balance', `${a} > ${balance}`)
   return ok(5)
 }
 
@@ -279,27 +280,38 @@ export function g6MinAmount(i: GuardInput): GuardResult {
   return ok(6)
 }
 
-// 7. fee.nativeFee === value, lzTokenFee === 0
+// 7. fee.nativeFee === value, lzTokenFee === 0; and the coin in msg.value is the amount on a native
+//    adapter and nothing on any other shape (an assembly invariant, core/severity.ts)
 export function g7Fee(i: GuardInput): GuardResult {
   if (!i.plan) return fail(7, 'plan_missing')
   const fee = planFee(i.plan)
   if (fee.nativeFee !== i.plan.value) return fail(7, 'fee_mismatch')
   if (fee.lzTokenFee !== 0n) return fail(7, 'lz_token_fee_nonzero')
   if (i.plan.value < i.plan.quote.nativeFee) return fail(7, 'fee_mismatch', 'value < quoted nativeFee')
+  if (i.plan.vm === 'evm') {
+    const expected = isNativeAdapter(i.info) ? i.plan.amounts.amountLD : 0n
+    if (i.plan.nativeAmountLD !== expected) return fail(7, 'fee_mismatch', `nativeAmountLD ${i.plan.nativeAmountLD} != ${expected}`)
+  }
   return ok(7)
 }
 
-// 8. value + gas <= native balance
+/** What leaves the wallet as coin: the fee, plus the amount on a native adapter (plan.ts msgValue). */
+function coinOut(plan: SendPlan): bigint {
+  return plan.vm === 'evm' ? msgValue(plan) : plan.value
+}
+
+// 8. msg.value + gas <= native balance
 export function g8Native(i: GuardInput): GuardResult {
   if (!i.plan) return fail(8, 'plan_missing')
   if (i.nativeBalance === undefined) return fail(8, 'native_balance_unknown')
-  // The fee alone already settles it: say so instead of waiting for a gas estimate that will never
-  // arrive (the simulation an unaffordable fee makes fail is what produces the estimate).
-  if (i.plan.value > i.nativeBalance) return fail(8, 'insufficient_native', `${i.plan.value} > ${i.nativeBalance}`)
+  const out = coinOut(i.plan)
+  // The value alone already settles it: say so instead of waiting for a gas estimate that will
+  // never arrive (the simulation an unaffordable value makes fail is what produces the estimate).
+  if (out > i.nativeBalance) return fail(8, 'insufficient_native', `${out} > ${i.nativeBalance}`)
   // A simulation that has already failed produces no estimate, ever: waiting for one would hold
-  // the button forever behind a note. The fee fits; the gas is what the wallet will price.
+  // the button forever behind a note. The value fits; the gas is what the wallet will price.
   if (i.gasCostWei === undefined) return i.simulation && !i.simulation.ok ? ok(8) : fail(8, 'native_balance_unknown')
-  const need = i.plan.value + i.gasCostWei
+  const need = out + i.gasCostWei
   if (need > i.nativeBalance) return fail(8, 'insufficient_native', `${need} > ${i.nativeBalance}`)
   return ok(8)
 }

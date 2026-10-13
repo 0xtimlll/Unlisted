@@ -19,9 +19,9 @@ import { confirmsTail, tryRecipient, type Recipient } from '@/core/recipient'
 import { familyOfVm } from '@/core/addressBook'
 import { bookConfirms, bookRefuses, RecipientBookAfterSend, useBookVerdict } from './components/RecipientBook'
 import { SvmDiscoverError } from '@/core/svm/errors'
-import type { SourceInfo, SuspiciousFlag } from '@/core/types'
+import { isNativeAdapter, type SourceInfo, type SuspiciousFlag } from '@/core/types'
 import { planSvmOptions } from '@/core/options'
-import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, PlanError } from '@/core/plan'
+import { assembleSendArgs, DEFAULT_FEE_BUFFER_BPS, DEFAULT_SLIPPAGE_BPS, msgValue, PlanError } from '@/core/plan'
 import { ProbeError } from '@/core/probe'
 import type { DvnConfig } from '@/core/lz/dvn'
 import { formatRevert, revertMeaning } from '@/core/sim/revert'
@@ -340,9 +340,20 @@ export function BridgeApp({
         if (primary?.target) applyTarget(primary.target)
         else setSrcKey(a.chain)
         return
-      case 'use_address':
-        applyTarget(primary?.target ?? { chain: a.chain, address: a.address, kind: 'oft' })
+      case 'use_address': {
+        const target = primary?.target ?? { chain: a.chain, address: a.address, kind: 'oft' as const }
+        // A can_bridge result on the selected chain was already applied as it arrived (autoTarget
+        // below), so this click can land on a form that is pointed at the contract already — with
+        // the probe's cached answer, whatever it was. Then the click must still DO something: show
+        // the contract in the box in place of the hash, clear what the last attempt left behind,
+        // and read the contract again.
+        const alreadyThere = target.chain === srcKey && probeTarget?.toLowerCase() === target.address.toLowerCase()
+        setTxError('')
+        applyTarget(target)
+        setHandedOver(target.address)
+        if (alreadyThere) void probe.refetch()
         return
+      }
       case 'open_tab':
         onOpenTab(a.protocol, primary?.target)
         return
@@ -485,13 +496,16 @@ export function BridgeApp({
   /** The plan in hand was built for the probe amount or a stand-in: numbers to look at, not to send. */
   const isPreview = previewing && !!planData
 
-  const evmTokenBalance = useTokenBalance(evmSrc, info?.vm === 'evm' ? info.token : undefined, wallet)
+  // A native adapter has no ERC-20 (core/types.ts): the "token" balance IS the coin balance, and
+  // there is nothing to read balanceOf or allowance on — its token() is the zero address.
+  const nativeAdapter = isNativeAdapter(info)
+  const evmTokenBalance = useTokenBalance(evmSrc, info?.vm === 'evm' && !nativeAdapter ? info.token : undefined, wallet)
   const svmTokenBalance = useSvmTokenBalance(info?.vm === 'svm' ? info : undefined, svmWallet.address, stored.customRpc['solana'])
-  const allowance = useAllowance(evmSrc, info?.vm === 'evm' && info.approvalRequired ? info.token : undefined, wallet, info?.vm === 'evm' ? info.oft : undefined)
+  const allowance = useAllowance(evmSrc, info?.vm === 'evm' && info.approvalRequired && !nativeAdapter ? info.token : undefined, wallet, info?.vm === 'evm' ? info.oft : undefined)
   const dvn = useDvn(evmSrc, info?.vm === 'evm' ? info.endpoint : undefined, info?.vm === 'evm' ? info.oft : undefined, dest.dstEid)
   const evmNativeBalance = useNativeBalance(evmSrc, wallet)
   const svmNativeBalance = useSvmNativeBalance(svmSource ? svmWallet.address : undefined, stored.customRpc['solana'])
-  const tokenBalance = svmSource ? svmTokenBalance.data : evmTokenBalance.data
+  const tokenBalance = svmSource ? svmTokenBalance.data : nativeAdapter ? evmNativeBalance.data?.value : evmTokenBalance.data
   const nativeBalance = svmSource ? svmNativeBalance.data : evmNativeBalance.data?.value
 
   // ---- guards -------------------------------------------------------------------
@@ -660,7 +674,9 @@ export function BridgeApp({
         abi: oftAbi,
         functionName: 'send',
         args: [args[0], args[1], args[2]],
-        value: p.value,
+        // The fee, plus the amount itself on a native adapter (core/plan.ts msgValue) — the same
+        // value the simulation ran with.
+        value: msgValue(p),
         chainId: evmSrc.chainId,
       },
       {

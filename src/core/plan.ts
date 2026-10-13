@@ -71,8 +71,20 @@ export type EvmSendPlan = {
   feeBufferBps: number
   extraOptions: Hex
   quote: SendQuote
-  /** msg.value === fee.nativeFee, strictly. */
+  /** fee.nativeFee, strictly: the buffered LayerZero fee the endpoint refunds the excess of. */
   value: bigint
+  /**
+   * The part of msg.value that is the AMOUNT: `amounts.amountLD` on a NativeOFTAdapter, whose
+   * `send` takes the coin out of msg.value next to the fee (core/types.ts), and 0 on every other
+   * shape. msg.value itself is `msgValue()` below; `value` stays the fee alone so the calldata's
+   * `fee.nativeFee`, guard 7 and the self-check keep meaning one thing.
+   */
+  nativeAmountLD: bigint
+}
+
+/** msg.value of the send: the fee, plus the amount itself on a native adapter. */
+export function msgValue(plan: EvmSendPlan): bigint {
+  return plan.value + plan.nativeAmountLD
 }
 
 /**
@@ -263,6 +275,9 @@ export async function buildSendPlan(client: ReadClient, p: BuildSendPlanInput): 
     extraOptions,
     quote: fullQuote,
     value: computeValue(fullQuote.nativeFee, feeBufferBps, p.src.feeStepWei),
+    // NativeOFTAdapter.send requires msg.value == fee.nativeFee + removeDust(amountLD) exactly;
+    // amountLD is already dust-free (computeAmounts), so this is the amount as sent.
+    nativeAmountLD: p.info.kind === 'NativeOFTAdapter' ? provisional.amountLD : 0n,
   }
 }
 

@@ -124,6 +124,8 @@ export const en = {
       'Non-standard Solana OFT — the account format could not be confirmed, so the token and the recipient’s token account cannot be checked on that side. This exact path is confirmed by a successful delivery on LayerZero Scan. Sending is still possible; start with a small amount.',
     flag_svm_single_provider: 'Solana reads use a single public RPC provider — set your own RPC in settings for a real cross-check',
     locked: 'Locked in adapter',
+    /** A NativeOFTAdapter: the chain's own coin, with no ERC-20 behind the OFT. */
+    nativeToken: '{symbol} — the native coin of {chain}; sent as value, no approve',
     store: 'OFT Store',
     program: 'OFT program',
     mint: 'Mint',
@@ -171,6 +173,8 @@ export const en = {
     lzFee: 'LayerZero fee',
     feeDetail: 'paying {value}, ~{refund} returned',
     feeDetailSvm: 'authorizing up to {value}; the program takes only the quoted fee, the rest never leaves your wallet',
+    nativeValue: 'Sent as value',
+    nativeValueNote: 'native token: the amount ({amount}) and the fee ({fee}) leave the wallet in one value; the contract requires exactly this',
     computeBudget: 'Compute budget',
     computeBudgetDetail: '{cu} CU × {price} µL = {priority} SOL priority fee + {base} SOL base fee',
     feePayer: 'Fee payer / signer',
@@ -797,7 +801,7 @@ export const en = {
     probe_invalid_address: 'That is not a valid address.',
     probe_not_contract: 'No contract at this address on the selected chain.',
     probe_not_oft: 'This is not a LayerZero V2 OFT: it does not answer peers()/quoteSend().',
-    probe_token_unreadable: 'Could not read the underlying token.',
+    probe_token_unreadable: 'This OFT names a token that does not answer as an ERC-20 (decimals() reverted) — the adapter is wired to something that is not a token on this network.',
     probe_rate_mismatch: 'Contract decimals are inconsistent — refusing to continue.',
     probe_foreign_endpoint:
       'This contract names an Endpoint that is not LayerZero’s on this network. Every route check asks that address about this contract, so a contract that chooses its own Endpoint is answering the questions about itself.',
@@ -963,6 +967,7 @@ export const en = {
     checksTitle: 'all {n} route checks',
     legend: '✓ passed · ✗ failed · ○ not checked (counts as neither) · – does not apply',
     adapterSigns: 'Adapter: {locked} of supply locked (green from {floor}), {sends} sends recorded by the endpoint (green from {minSends}). Read from the real token and the real endpoint.',
+    adapterSignsNative: 'Native adapter: holds {held} of the coin (green when above zero), {sends} sends recorded by the endpoint (green from {minSends}). A coin has no supply to take a share of; read from the chain and the real endpoint.',
     notCovered: 'The eight route checks do not assess this route',
     notCoveredNtt:
       'The eight route checks cover LayerZero transfers. An NTT transfer is held to this tab’s own checks instead — the token list, the manager the token vouches for, peers in both directions, the transceiver, and both rate limits.',

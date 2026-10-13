@@ -185,7 +185,11 @@ const RANK: Record<Tier, number> = { BLOCKED: 0, UNVERIFIED: 1, CAUTION: 2, OK: 
 /** Why an adapter is called fresh — which floor it missed, or which read failed. */
 function adapterFreshReason(a: AdapterStanding): string {
   const parts: string[] = []
-  if (a.lockedBps === undefined) parts.push('the share of supply it locks could not be read')
+  if (a.native) {
+    // A coin has no supply to take a share of: the adapter either holds some of it or none.
+    if (a.held === undefined) parts.push('the coin it holds could not be read')
+    else if (a.held === 0n) parts.push('it holds none of the coin it bridges')
+  } else if (a.lockedBps === undefined) parts.push('the share of supply it locks could not be read')
   else if (a.lockedBps < ADAPTER_MIN_LOCKED_BPS) parts.push(`it locks ${a.lockedBps / 100}% of supply, under ${ADAPTER_MIN_LOCKED_BPS / 100}%`)
   if (a.outboundNonce === undefined) parts.push('its delivery history could not be read')
   else if (a.outboundNonce < ADAPTER_MIN_OUTBOUND_NONCE) parts.push(`the endpoint records ${a.outboundNonce} sends through it, under ${ADAPTER_MIN_OUTBOUND_NONCE}`)
