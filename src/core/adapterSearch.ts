@@ -43,22 +43,33 @@ export type AdapterSearch = {
   rejected: Address[]
 }
 
+/** How long the fan-out waits for the slowest chain before counting it as "could not ask". */
+export const ADAPTER_SEARCH_BUDGET_MS = 5_000
+
 /**
  * Ask every other chain, then verify every distinct answer on the source chain.
  *
  * `chains` are the chains to ask (the source itself is skipped). Asking is parallel and a chain
  * that fails is recorded, not fatal: "no adapter" and "could not ask three chains" are different
- * answers, and the screen says which one it got.
+ * answers, and the screen says which one it got. A chain that has not answered within the budget
+ * is recorded the same way: with a hundred chains asked at once, one provider's dead node must
+ * not set the pace for the search, and the screen still says how many could not be asked.
  */
 export async function findAdapterForToken(
-  p: { token: Address; srcChain: ChainKey; srcEid: number; chains: readonly ChainKey[] },
+  p: { token: Address; srcChain: ChainKey; srcEid: number; chains: readonly ChainKey[]; budgetMs?: number },
   deps: AdapterSearchDeps,
 ): Promise<AdapterSearch> {
   const asked = p.chains.filter((c) => c !== p.srcChain)
+  const budget = p.budgetMs ?? ADAPTER_SEARCH_BUDGET_MS
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<'expired'>((resolve) => {
+    timer = setTimeout(() => resolve('expired'), budget)
+  })
   const answers = await Promise.all(
     asked.map(async (chain): Promise<{ chain: ChainKey; peer?: Address; failed?: true }> => {
       try {
-        const peer = await deps.readPeer(chain, p.token, p.srcEid)
+        const peer = await Promise.race([deps.readPeer(chain, p.token, p.srcEid), expired])
+        if (peer === 'expired') return { chain, failed: true }
         if (isZeroBytes32(peer)) return { chain }
         const address = peerToAddress(peer)
         return address ? { chain, peer: address } : { chain }
@@ -67,6 +78,7 @@ export async function findAdapterForToken(
       }
     }),
   )
+  clearTimeout(timer)
 
   const failed = answers.filter((a) => a.failed).map((a) => a.chain)
   const named = answers.filter((a) => a.peer).map((a) => a.chain)

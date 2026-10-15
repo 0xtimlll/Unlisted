@@ -31,8 +31,8 @@ export function makeWagmiConfig(customRpc: Partial<Record<ChainKey, string>>): C
   const chains = evmChains().map(toViemChain) as [ReturnType<typeof toViemChain>, ...ReturnType<typeof toViemChain>[]]
   const transports = Object.fromEntries(
     evmChains().map((c) => {
-      const { urls, headers } = readUrls(c, customRpc[c.key])
-      return [c.chainId, transportFor(urls, headers)]
+      const { urls, headers, viaProxy } = readUrls(c, customRpc[c.key])
+      return [c.chainId, transportFor(urls, headers, viaProxy)]
     }),
   )
 

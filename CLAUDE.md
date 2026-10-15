@@ -84,10 +84,30 @@
 
 ## Архитектура
 
-**Реестр сетей** — `src/core/chains.ts`. `ChainDef` — размеченное объединение по `vm`
-(`'evm' | 'svm'`). Всё, чему нужен `chainId` или wei, обязано сначала сузиться через `isEvm()`.
-У каждой сети есть `feeCeiling` — намеренно щедрый потолок комиссии в наименьшей единице
-(guard 21 не отказывает, а просит подтвердить сумму).
+**Реестр сетей (2026-10-15)** — `src/core/chains.ts` строится из **сгенерированного**
+`src/core/networks.ts`: один закоммиченный файл, из которого читают и реестр, и таблицы всех
+протоколов (`lz-v1/chains.ts`, `wormhole-ntt/chains.ts`, `ccip/chains.ts`, `hyperlane/chains.ts`),
+и цвета (`ui/brand.ts`). Его пишет `scripts/update-networks.ts` («обнови сети»: `npm run
+update:networks`, сверка — `check:networks`; вручную, никогда в сборке и никогда в рантайме) из
+официальных источников: metadata LayerZero (eid, EndpointV2, v1), константы Wormhole SDK (chain id,
+core/token bridge), chain-selectors + CCIP Directory (selector, Router, TokenAdminRegistry), реестр
+Hyperlane (Mailbox, domain, RPC, block time), ethereum-lists/chains (RPC, валюта, эксплорер),
+DefiLlama (TVL — порядок в окне сети, цена монеты — потолок комиссии новой сети), web3icons (знак и
+фирменный цвет). Включаются все EVM-сети, где есть LayerZero v2/v1, NTT или CCIP, плюс Solana.
+**Каждый адрес проверяется на цепочке до записи** (eid(), chainId(), typeAndVersion(),
+localDomain()/VERSION(), библиотеки Endpoint v1, код по якорю на каждом RPC); протокол, чей
+контракт не подтвердился, снимается с сети (`NETWORKS_DISCREPANCIES`), сеть без единого
+подтверждённого протокола или без доступного RPC не пишется (`NETWORKS_EXCLUDED` с причиной —
+Sepolia у LayerZero значится как mainnet и исключена по имени). Ручные поля —
+`scripts/networks-curated.json`: ключи, имена, RPC с операторами, эксплореры, потолки и шаги
+комиссии, подсказки подтверждений, цвета и знаки пятнадцати первых сетей (они не меняются от
+прогона к прогону), `names` для сетей с неудачными именами в источниках, `exclude`. `ChainKey`
+выводится из файла; сеть без LayerZero получает `eid: 0` и нулевой `endpointV2` (`byEid(0)` не
+находит ничего; вкладки OFT и Rescue, поиск адаптера — только `lzChains()` / `lzEvmChains()`).
+`CHAINS` отсортирован по TVL. `ChainDef` — размеченное объединение по `vm` (`'evm' | 'svm'`). Всё,
+чему нужен `chainId` или wei, обязано сначала сузиться через `isEvm()`. У каждой сети есть
+`feeCeiling` — намеренно щедрый потолок комиссии в наименьшей единице (guard 21 не отказывает, а
+просит подтвердить сумму); у новых сетей это ~100 USD монеты по цене DefiLlama, округлённые вверх.
 
 **Ядро** — `src/core/`: `probe.ts` (детект OFT), `plan.ts` (квота в два шага: `quoteOFT` с
 `minAmountLD = 0`, чтобы комиссия эмитента была ответом, а не ревертом `SlippageExceeded`; затем
@@ -112,7 +132,7 @@
 | `hyperlane/` | Hyperlane warp routes (2026-10-12): `chains.ts` (Mailbox + domain на каждую сеть, проверены on-chain), `discover.ts` (роутер → тип/токен/маршруты, кворум, дальняя сторона, standing), `plan.ts`, `guards.ts` (14 guard'ов), `preview.ts` (self-check + симуляция, при нехватке allowance — батч approve+transferRemote через `eth_simulateV1`), `status.ts`, `track.ts`, `warpRoutes.json` (подсказка token → router из реестра Hyperlane) |
 | `src/core/svm/` | Solana (на `@layerzerolabs/oft-v2-solana-sdk`) |
 
-Таблицы, а не хардкод: `lz-v1/chains.json` (v1 chainId, endpoint, ULN, `v1Active` + причина),
+Таблицы, а не хардкод: `core/networks.ts` (все сети и адреса протоколов, см. выше),
 `lz-risk/dvns.json` (614 DVN, 94 deprecated), `hyperlane/warpRoutes.json` (warp-маршруты реестра
 Hyperlane на наших сетях — только подсказка для поиска, цвет от неё не зависит). Все генерируются —
 см. ниже.
@@ -363,7 +383,36 @@ CCIP: три поколения on-ramp (1.5 / 1.6 / 2.0) дают разный 
 
 **Кворум RPC.** Primary в `clientPair` падает назад **только внутри своего оператора**: иначе
 primary с упавшим первым URL тихо отвечал бы с URL secondary, и «два оператора согласны» было бы
-одним оператором дважды.
+одним оператором дважды. Через прокси это правило держит `?provider=` (см. ниже).
+
+**RPC через функцию Cloudflare Pages (2026-10-15).** Страница не ходит ни к одному EVM-RPC
+напрямую: каждое чтение — `POST /rpc/<chainId>` (и `/rpc/solana`) на свой же origin,
+`functions/rpc/[chain].ts`; connect-src в CSP — `'self'`, хосты Solana и три API (LayerZero Scan,
+Wormholescan, Sourcify). Кошелёк по-прежнему отправляет транзакции через свой RPC. Функция
+пропускает **только методы чтения** (белый список в файле; `eth_sendRawTransaction`, `eth_sign*`,
+`personal_sign`, `wallet_*`, Solana `sendTransaction` — 403 до обращения к узлу, в том числе внутри
+batch), берёт узлы только из `networks.ts` (плюс `RPC_<chainId>` / `RPC_SOLANA` из окружения Pages и
+персональный RPC из заголовка `x-rpc-url` — только https, стандартный порт, публичное имя, и только
+после ответа `eth_chainId` / `getGenesisHash` для этой сети, проверенного в самой функции), падает на
+следующий узел при тайм-ауте/429/5xx/ошибке уровня провайдера (реверт контракта возвращается как
+есть), помнит последний ответивший узел по сети, при двух и более узлах через 400 мс молчания
+запускает второй (хеджирование), и ограничивает частоту на IP. `?provider=<оператор>` ограничивает
+очередь узлами одного оператора — так кворум остаётся кворумом двух операторов. Клиент —
+`core/rpcProxy.ts`: в браузере viem-транспорты смотрят на прокси (без повторов: прокси уже сделал
+фейловер), в Node (интеграционные тесты, скрипты) — прямые публичные RPC. **Исключение — путь
+отправки Solana** (`core/svm/urls.ts`): umi собирает, прогоняет и отправляет транзакцию через прямой
+RPC, потому что submit прокси отвергает; поэтому хосты Solana остаются в CSP, а персональный
+Solana-RPC обязан быть у известного провайдера (`rpcPolicy.ts`); чтения Solana (probe, балансы,
+статус) идут через `/rpc/solana`. `scripts/serve.mjs` монтирует ту же функцию на `/rpc`, так что
+экспорт можно прогнать в браузере локально. Веер по сетям: поиск транзакции по хешу отвечает первой
+нашедшей сетью, поиск адаптера ждёт не дольше `ADAPTER_SEARCH_BUDGET_MS` (не ответившие сети
+записываются как «не удалось спросить»).
+
+**Окно выбора сети (2026-10-15).** Порядок по умолчанию — по TVL из конфига; переключатель
+«Popular / Recent first» (`ui/networkOrder.ts`, чистые функции с тестами) хранится вместе с
+настройками (`stored.networkOrder`, `stored.recentChains` — до пяти последних выборов) через
+`ui/networkPrefs.tsx`. Сеть без знака — инициалы на нейтральной плитке (`brand.logo === false`),
+знаки грузятся лениво, карточки ниже сгиба — `content-visibility: auto`.
 
 ## Команды
 
@@ -381,7 +430,7 @@ npm run audit
 Генераторы таблиц (`gen:` перезаписывает, `check:` только сверяет — годится для CI):
 
 ```
-npm run gen:lz-v1    / npm run check:lz-v1     # lz-v1/chains.json из metadata LayerZero + RPC
+npm run update:networks / npm run check:networks   # core/networks.ts из официальных источников + проверка on-chain («обнови сети»)
 npm run gen:lz-dvns  / npm run check:lz-dvns   # lz-risk/dvns.json
 npm run gen:hyperlane-warp / npm run check:hyperlane-warp  # hyperlane/warpRoutes.json из реестра Hyperlane
 npm run headers                                 # заголовки для Cloudflare

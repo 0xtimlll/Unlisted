@@ -44,26 +44,32 @@ function explorerOf(c: EvmChainDef): { name: string; url: string } {
 /** The timeout a read gets: the function answers within its own budget, so the browser waits a little longer than that. */
 export const READ_TIMEOUT_MS = 20_000
 
-/** The transport for a list of URLs that are one opinion: they fall back among each other. */
-export function transportFor(urls: readonly string[], headers: Record<string, string>) {
-  const one = (u: string) => http(u, { timeout: READ_TIMEOUT_MS, retryCount: 1, ...(Object.keys(headers).length ? { fetchOptions: { headers } } : {}) })
+/**
+ * The transport for a list of URLs that are one opinion: they fall back among each other.
+ *
+ * Through the proxy there is no retry: the function has already tried every node of the operator
+ * and a 502 from it means none answered, so asking again only doubles the wait — on a search that
+ * fans out to a hundred chains, the slowest chain's doubled wait is everyone's.
+ */
+export function transportFor(urls: readonly string[], headers: Record<string, string>, viaProxy = false) {
+  const one = (u: string) => http(u, { timeout: READ_TIMEOUT_MS, retryCount: viaProxy ? 0 : 1, ...(Object.keys(headers).length ? { fetchOptions: { headers } } : {}) })
   return urls.length === 1 ? one(urls[0]!) : fallback(urls.map(one), { rank: false })
 }
 
 export function makeReadClient(c: EvmChainDef, customRpc?: string): ReadClient {
-  const { urls, headers } = readUrls(c, customRpc)
+  const { urls, headers, viaProxy } = readUrls(c, customRpc)
   return createPublicClient({
     chain: toViemChain(c),
-    transport: transportFor(urls, headers),
+    transport: transportFor(urls, headers, viaProxy),
     batch: { multicall: { wait: 16 } },
   })
 }
 
 /** A client bound to exactly the given URLs (one operator), for the cross-check's separate opinions. */
-export function makeReadClientFor(c: EvmChainDef, urls: readonly string[], headers: Record<string, string> = {}): ReadClient {
+export function makeReadClientFor(c: EvmChainDef, urls: readonly string[], headers: Record<string, string> = {}, viaProxy = false): ReadClient {
   return createPublicClient({
     chain: toViemChain(c),
-    transport: transportFor(urls, headers),
+    transport: transportFor(urls, headers, viaProxy),
     batch: { multicall: { wait: 16 } },
   })
 }

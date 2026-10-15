@@ -272,8 +272,8 @@ describe('the page side (core/rpcProxy.ts)', () => {
       expect(targets.map((t) => t.provider)).toEqual([...new Set(ETH.rpcs.map((r) => r.provider))])
       for (const t of targets) expect(t.urls).toEqual([`https://unlisted.example/rpc/1?provider=${t.provider}`])
       const mine = readTargets(ETH, 'https://mine.example.org/x')
-      expect(mine[0]).toEqual({ provider: 'example.org', urls: ['https://unlisted.example/rpc/1?provider=example.org'], headers: { 'x-rpc-url': 'https://mine.example.org/x' } })
-      expect(readUrls(ETH, 'https://mine.example.org/x')).toEqual({ urls: ['https://unlisted.example/rpc/1'], headers: { 'x-rpc-url': 'https://mine.example.org/x' } })
+      expect(mine[0]).toEqual({ provider: 'example.org', urls: ['https://unlisted.example/rpc/1?provider=example.org'], headers: { 'x-rpc-url': 'https://mine.example.org/x' }, viaProxy: true })
+      expect(readUrls(ETH, 'https://mine.example.org/x')).toEqual({ urls: ['https://unlisted.example/rpc/1'], headers: { 'x-rpc-url': 'https://mine.example.org/x' }, viaProxy: true })
     } finally {
       delete g.location
     }

@@ -224,3 +224,45 @@ any send form. The V2, NTT and CCIP forms use an "Edit / Use my wallet" link for
 **Why it was left alone** Deferred by the owner on 2026-10-01.
 
 **To close it** Replace it with the same link the other three forms use.
+
+---
+
+## The Solana send path still talks to its RPC from the page
+
+**Where** [`src/core/svm/urls.ts`](../src/core/svm/urls.ts) (`svmRpcUrls`), [`src/core/svm/send.ts`](../src/core/svm/send.ts)
+(`createSvmSendContext`, `umiFor`), [`src/core/rpcPolicy.ts`](../src/core/rpcPolicy.ts) (`SOLANA_PROVIDER_PATTERNS`).
+
+**What** Every EVM read goes through the site's `/rpc` function since 2026-10-15, and the
+Content-Security-Policy's connect-src is the site's origin for them. The Solana send path does not:
+the LayerZero SDK's umi client assembles, dry-runs and submits the transaction through one direct
+endpoint, and a submit (`sendTransaction`) is exactly what the function refuses. So the Solana hosts
+stay in connect-src, a personal Solana RPC must be one of the known providers, and the Solana
+dry run (as opposed to the probe, balances and status, which use `/rpc/solana`) bypasses the proxy.
+
+**Why it was left alone** Moving the submit to the wallet (`signAndSendTransaction`) changes the
+send path and the whitelist (`sendTransaction*` is forbidden under every name); letting the function
+forward one write method contradicts the rule the function exists for. Either is a decision, not a fix.
+
+**To close it** Decide between the two; with the wallet broadcasting, `/rpc/solana` can carry the
+dry run too and connect-src becomes `'self'` plus the three APIs.
+
+---
+
+## Twenty-odd networks have one RPC operator, and sixteen have none the proxy can reach
+
+**Where** [`src/core/networks.ts`](../src/core/networks.ts) (`NETWORKS_EXCLUDED`, and every entry with one `provider`).
+
+**What** The generator keeps up to four verified public RPCs per chain, one per operator where it
+can. For the long tail (Astar, Citrea, Conflux, Tempo and others) only one operator answers for
+the chain, so the cross-check cannot run there and the route shows the `not_cross_checked` nuance;
+sixteen chains the sources list have no public https RPC on the default port that answers
+`eth_chainId` and serves the anchor contract at all (XRPL EVM's only endpoint names a port the
+Workers runtime cannot reach, Nexus's does not resolve), and are recorded with the reason.
+
+**Why it was left alone** A chain with one operator is still a chain with its protocols verified on
+it; refusing it would contradict "every network with one of our protocols". A chain with no
+reachable RPC cannot be served honestly.
+
+**To close it** Set `RPC_<chainId>` in the Pages environment for a chain that matters (the function
+puts it first, and it counts as its own operator), or add a second public RPC to
+`scripts/networks-curated.json` and re-run `npm run update:networks`.

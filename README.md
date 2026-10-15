@@ -54,7 +54,7 @@ Any OFT (LayerZero V2) deployed on these chains works, in both directions betwee
 - **Solana → EVM** — paste the token's **OFT Store** address (or the signature of any past `send`); its program, mint, escrow and per-chain PeerConfigs are read from the chain. The `send` instruction is built with LayerZero's own Solana SDK, then decoded back by independent code before your wallet sees it (same self-check as on EVM). The recipient is an EVM address typed by hand; your Solana wallet is never offered as one. The fee is the quoted LayerZero fee plus a buffer: the program takes only the quoted amount, the rest never leaves your wallet.
 - **A chain's own coin** — a `NativeOFTAdapter` (XPL on Plasma, for one) answers `token()` with the zero address and takes the amount out of `msg.value` next to the fee, exactly `fee.nativeFee + amount` or it reverts. The app reads that shape as "native token": the symbol and decimals come from the chain registry, the balance is your coin balance, there is no approve, and the simulation and the send both carry amount plus fee as the value — the fee buffer still sits in `fee.nativeFee`, so the endpoint still refunds it.
 
-Adding a chain is one entry in [`src/core/chains.ts`](src/core/chains.ts).
+The registry itself is generated: [`src/core/networks.ts`](src/core/networks.ts) is written by [`scripts/update-networks.ts`](scripts/update-networks.ts) (`npm run update:networks`) from LayerZero's metadata, the Wormhole SDK's constants, Chainlink's chain selectors and CCIP Directory, the Hyperlane registry, ethereum-lists/chains and DefiLlama, and every address in it is read back on chain before it is written — a protocol whose contract does not confirm itself is dropped from that chain, a chain with no reachable public RPC is left out with the reason. The table above is the hand-verified core; the registry serves every EVM network where LayerZero, Wormhole NTT or CCIP has a mainnet deployment (over a hundred at the time of writing), ordered by DefiLlama TVL in the network picker.
 
 ## LayerZero v1
 
@@ -118,7 +118,7 @@ still returns the number it was deployed with before LayerZero renumbered mainne
 has nothing to route a message through, and is written as `v1Active: false` with the reason. Thirteen of
 the fourteen are active — Robinhood Chain has the endpoint deployed and answering `getChainId()` with
 416, and neither library set, so it is offered as neither a source nor a destination for v1. Its V2
-routes are unaffected. `npm run check:lz-v1` re-asks, so "LayerZero wired it up since" becomes a
+routes are unaffected. `npm run check:networks` re-asks, so "LayerZero wired it up since" becomes a
 failing check rather than a silent gap.
 
 One standard carries a caveat the code states out loud: `OFT` / `ProxyOFT`, the original `bytes`
@@ -412,7 +412,7 @@ Every event signature, error signature, chain id and selector used for this come
 - For lock/unlock adapters the app shows how much the adapter holds and flags an empty one.
 - Slippage is capped at 5%. Sending to an address other than your own wallet requires an explicit switch and re-typing the address's last characters.
 
-**Nothing leaves your browser** except calls to the chain's RPC, the transaction hash to LayerZero Scan for tracking, Wormhole's own explorer for the official NTT token list and delivery status, and — only when a simulation reverts with an error none of the built-in ABIs can name — the chain id and that contract's address to [Sourcify](https://sourcify.dev), to read the contract's own verified error ABI so the failure can be shown by name instead of as four bytes of hex. No key, no account, no amount, and nothing at all when the revert is already understood. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
+**Nothing leaves your browser** except calls to the chain's RPC — made through the site's own `/rpc/<chain>` function ([`functions/rpc/[chain].ts`](functions/rpc/[chain].ts)), which forwards read methods only to the public nodes written down in the registry, fails over between them and refuses `eth_sendRawTransaction` and every signing method before any node is contacted; your wallet sends transactions through its own RPC, and the Solana send path talks to its RPC directly because a submit is exactly what the function refuses — the transaction hash to LayerZero Scan for tracking, Wormhole's own explorer for the official NTT token list and delivery status, and — only when a simulation reverts with an error none of the built-in ABIs can name — the chain id and that contract's address to [Sourcify](https://sourcify.dev), to read the contract's own verified error ABI so the failure can be shown by name instead of as four bytes of hex. No key, no account, no amount, and nothing at all when the revert is already understood. No analytics, no telemetry, no third-party scripts or fonts; a strict Content-Security-Policy enforces it. Recent transfers live in your browser's local storage only.
 
 **The build is defended, not just the page.** No dependency may run code at install time: `ignore-scripts` is set in [`.npmrc`](.npmrc) and passed explicitly in CI. A `postinstall` in any transitive package executes on the machine that deploys, and that machine is where a compromise would rewrite `out/` — and recompute the very CSP hashes that protect it. Every native addon in the tree ships a pure-JS fallback, so nothing is lost by refusing.
 
@@ -423,7 +423,7 @@ Every event signature, error signature, chain id and selector used for this come
 - Tell a real token from a fake one with the same name. For a plain OFT your balance under the contract is the proof — the contract *is* the token. For an OFTAdapter your balance belongs to the token, not the bridge: take adapter addresses from the project's official sources.
 - Guarantee delivery. Rate limits, paused destinations or missing executor gas are the contract's and LayerZero's domain. The app warns where it can and links to LayerZero Scan.
 - Undo anything. Cross-chain transfers are irreversible; try a small amount first.
-- Protect you from an RPC you chose yourself. If you set a custom endpoint in settings, it answers every balance, quote, peer check and simulation on the screen — the checks are only as honest as it is. The allow-list behind that field is about what the browser's security policy can reach, not about who runs the endpoint, and the settings dialog says so. The two things a hostile RPC still cannot touch are the self-check, which is arithmetic on your own calldata, and the recipient's type, which is decided before any request goes out.
+- Protect you from an RPC you chose yourself. If you set a custom endpoint in settings, it answers every balance, quote, peer check and simulation on the screen — the checks are only as honest as it is. The `/rpc` function checks that it serves the network it was set for (`eth_chainId`, Solana's genesis hash) before using it, and nothing more; for Solana the host must also be one the browser's security policy can reach, because the send goes to it from the page. The two things a hostile RPC still cannot touch are the self-check, which is arithmetic on your own calldata, and the recipient's type, which is decided before any request goes out.
 
 ## Development
 
@@ -437,8 +437,8 @@ npm test                # write-whitelist check + unit tests (the whitelist gate
 npm run audit           # npm audit against the reviewed exception list
 npm run build           # static export to out/ + security headers
 npm start               # serve out/ with the same headers as production
-npm run gen:lz-v1       # regenerate the committed LayerZero v1 chain table from LayerZero's metadata
-npm run check:lz-v1     # fail if that committed table no longer matches the metadata or the chains
+npm run update:networks # regenerate the committed network registry from the official sources, verifying every address on chain
+npm run check:networks  # fail if that committed registry no longer matches the sources or the chains
 npm run gen:lz-dvns     # regenerate the committed DVN table (names, ids, LayerZero's deprecated flag)
 npm run check:lz-dvns   # fail if that committed table no longer matches the metadata
 npm run gen:hyperlane-warp    # regenerate the committed Hyperlane warp-route hint table from the Hyperlane registry

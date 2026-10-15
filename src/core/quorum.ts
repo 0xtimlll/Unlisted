@@ -43,10 +43,10 @@ export function clientPair(chain: EvmChainDef, customRpc?: string): Pair {
   const [primary, ...rest] = readTargets(chain, customRpc)
   if (!primary) throw new Error(`${chain.name} has no RPC`)
   return {
-    primary: makeReadClientFor(chain, primary.urls, primary.headers),
+    primary: makeReadClientFor(chain, primary.urls, primary.headers, primary.viaProxy),
     primaryProvider: primary.provider,
     endpointV2: chain.endpointV2,
-    secondaries: rest.map((t) => ({ client: makeReadClientFor(chain, t.urls, t.headers), provider: t.provider })),
+    secondaries: rest.map((t) => ({ client: makeReadClientFor(chain, t.urls, t.headers, t.viaProxy), provider: t.provider })),
   }
 }
 

@@ -51,20 +51,20 @@ export function proxyHeaders(customRpc: string | undefined): Record<string, stri
  * browser each target is a proxy URL pinned to that operator; in Node it is the operator's URLs
  * themselves (one target may hold several, which fall back among each other and are one opinion).
  */
-export type ReadTarget = { provider: string; urls: readonly string[]; headers: Record<string, string> }
+export type ReadTarget = { provider: string; urls: readonly string[]; headers: Record<string, string>; viaProxy: boolean }
 
 export function readTargets(c: ChainDef, customRpc?: string): ReadTarget[] {
   const out: ReadTarget[] = []
   const origin = proxyOrigin()
   if (customRpc) {
     const provider = providerOfUrl(customRpc)
-    out.push({ provider, urls: origin ? [proxyUrl(c, provider)!] : [customRpc], headers: proxyHeaders(customRpc) })
+    out.push({ provider, urls: origin ? [proxyUrl(c, provider)!] : [customRpc], headers: proxyHeaders(customRpc), viaProxy: !!origin })
   }
   const seen = new Set(out.map((t) => t.provider))
   for (const r of c.rpcs) {
     if (seen.has(r.provider)) continue
     seen.add(r.provider)
-    out.push({ provider: r.provider, urls: origin ? [proxyUrl(c, r.provider)!] : c.rpcs.filter((x) => x.provider === r.provider).map((x) => x.url), headers: {} })
+    out.push({ provider: r.provider, urls: origin ? [proxyUrl(c, r.provider)!] : c.rpcs.filter((x) => x.provider === r.provider).map((x) => x.url), headers: {}, viaProxy: !!origin })
   }
   return out
 }
@@ -74,8 +74,8 @@ export function readTargets(c: ChainDef, customRpc?: string): ReadTarget[] {
  * browser (personal RPC, the deployment's node, the registry with its remembered good node first),
  * the personal RPC then the registry's URLs in Node.
  */
-export function readUrls(c: ChainDef, customRpc?: string): { urls: readonly string[]; headers: Record<string, string> } {
+export function readUrls(c: ChainDef, customRpc?: string): { urls: readonly string[]; headers: Record<string, string>; viaProxy: boolean } {
   const origin = proxyOrigin()
-  if (origin) return { urls: [proxyUrl(c)!], headers: proxyHeaders(customRpc) }
-  return { urls: customRpc ? [customRpc, ...c.rpcUrls] : [...c.rpcUrls], headers: {} }
+  if (origin) return { urls: [proxyUrl(c)!], headers: proxyHeaders(customRpc), viaProxy: true }
+  return { urls: customRpc ? [customRpc, ...c.rpcUrls] : [...c.rpcUrls], headers: {}, viaProxy: false }
 }

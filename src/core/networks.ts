@@ -88,15 +88,12 @@ export const NETWORKS_EXCLUDED: readonly { readonly chainId: number; readonly na
   { chainId: 261131, name: 'Chain 261131', reason: 'no public https RPC answered eth_chainId with this id and served the anchor contract' },
   { chainId: 1440000, name: 'XRPL EVM', reason: 'no public https RPC answered eth_chainId with this id and served the anchor contract' },
   { chainId: 5064014, name: 'Chain 5064014', reason: 'no public https RPC answered eth_chainId with this id and served the anchor contract' },
-  { chainId: 5734951, name: 'Jovay', reason: 'none of its protocol contracts verified on chain: CCIP contracts could not be read: HTTP 429' },
   { chainId: 21000000, name: 'Corn', reason: 'no public https RPC answered eth_chainId with this id and served the anchor contract' },
 ]
 
 /** Addresses a source named that the chain did not confirm; the protocol was dropped from that chain. */
 export const NETWORKS_DISCREPANCIES: readonly string[] = [
-  'Astar (592): CCIP contracts could not be read: HTTP 429',
-  'Astar (592): LayerZero Endpoint v1 could not be read: HTTP 429',
-  'Jovay (5734951): CCIP contracts could not be read: HTTP 429',
+
 ]
 
 export const NETWORKS = {
@@ -146,7 +143,7 @@ export const NETWORKS = {
     blockTimeSec: 1,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 3394804,
+    tvlUsd: 3396261,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'abstract',
@@ -194,7 +191,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '20000000000000000000',
-    tvlUsd: 1339256,
+    tvlUsd: 1338906,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -227,7 +224,7 @@ export const NETWORKS = {
     blockTimeSec: 1.6,
     feeStep: '1000000000000000',
     feeCeiling: '800000000000000000000',
-    tvlUsd: 2744867,
+    tvlUsd: 2756510,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'ape',
@@ -311,7 +308,7 @@ export const NETWORKS = {
     blockTimeSec: 0.2,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 1360861249,
+    tvlUsd: 1361426510,
     coingeckoPlatform: 'arbitrum-one',
     lz: {
       chainKey: 'arbitrum',
@@ -364,7 +361,7 @@ export const NETWORKS = {
     blockTimeSec: 0.4,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 528936814,
+    tvlUsd: 528081869,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'arc',
@@ -417,16 +414,30 @@ export const NETWORKS = {
     blockTimeSec: 11.4,
     feeStep: '1000000000000000',
     feeCeiling: '20000000000000000000000',
-    tvlUsd: 1133379,
+    tvlUsd: 1129632,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'astar',
       eid: 30210,
       endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-      v1: null,
+      v1: {
+        chainId: 210,
+        endpoint: '0xb6319cC6c8c27A8F5dAF0dD3DF91EA35C4720dd7',
+        uln: '0x38dE71124f7a447a01D67945a51eDcE9FF491251',
+        active: true,
+        inactiveReason: null,
+      },
     },
     wormhole: null,
-    ccip: null,
+    ccip: {
+      selector: '6422105447186081193',
+      registryName: 'polkadot-mainnet-astar',
+      directoryKey: 'polkadot-mainnet-astar',
+      router: '0x8D5c5CB8ec58285B424C93436189fB865e437feF',
+      routerVersion: '1.2.0',
+      tokenAdminRegistry: '0xB98eEd70e3cE8E342B0f770589769E3A6bc20A09',
+      tokenAdminRegistryVersion: '1.5.0',
+    },
     hyperlane: null,
     brand: {
       bg: '#0AE2FF',
@@ -447,7 +458,7 @@ export const NETWORKS = {
     blockTimeSec: 1.6,
     feeStep: '1000000000000000',
     feeCeiling: '5000000000000000000',
-    tvlUsd: 583113340,
+    tvlUsd: 579909086,
     coingeckoPlatform: 'avalanche',
     lz: {
       chainKey: 'avalanche',
@@ -533,7 +544,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 6058413672,
+    tvlUsd: 6053551515,
     coingeckoPlatform: 'base',
     lz: {
       chainKey: 'base',
@@ -586,7 +597,7 @@ export const NETWORKS = {
     blockTimeSec: 8.6,
     feeStep: '1000000000000000',
     feeCeiling: '40000000000000000000000',
-    tvlUsd: 1258050,
+    tvlUsd: 1251748,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'beam',
@@ -622,7 +633,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '1000000000000000',
     feeCeiling: '500000000000000000000',
-    tvlUsd: 34972735,
+    tvlUsd: 34728100,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'bera',
@@ -671,7 +682,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000',
-    tvlUsd: 474064,
+    tvlUsd: 473318,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -704,7 +715,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 9536891,
+    tvlUsd: 9511130,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'blast',
@@ -740,7 +751,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 10105396,
+    tvlUsd: 10103602,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'bob',
@@ -788,7 +799,7 @@ export const NETWORKS = {
     blockTimeSec: 1.4,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000',
-    tvlUsd: 5292494003,
+    tvlUsd: 5282068182,
     coingeckoPlatform: 'binance-smart-chain',
     lz: {
       chainKey: 'bsc',
@@ -834,14 +845,14 @@ export const NETWORKS = {
     chainId: 42220,
     nativeSymbol: 'CELO',
     nativeDecimals: 18,
-    rpcs: [{ url: 'https://forno.celo.org', provider: 'celo.org' }, { url: 'https://rpc.ankr.com/celo', provider: 'ankr.com' }, { url: 'https://42220.rpc.thirdweb.com', provider: 'thirdweb.com' }, { url: 'https://celo-rpc.blockreq.com/v1/rpc/public', provider: 'blockreq.com' }],
+    rpcs: [{ url: 'https://forno.celo.org', provider: 'celo.org' }, { url: 'https://rpc.ankr.com/celo', provider: 'ankr.com' }, { url: 'https://celo.drpc.org', provider: 'drpc.org' }, { url: 'https://42220.rpc.thirdweb.com', provider: 'thirdweb.com' }],
     explorerTxUrl: 'https://celoscan.io/tx/',
     explorerAddrUrl: 'https://celoscan.io/address/',
     srcConfirmationsHint: 20,
     blockTimeSec: 0.9,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 13324235,
+    tvlUsd: 13112678,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'celo',
@@ -894,7 +905,7 @@ export const NETWORKS = {
     blockTimeSec: 2.7,
     feeStep: '1000000000000000',
     feeCeiling: '8000000000000000000000',
-    tvlUsd: 1323328,
+    tvlUsd: 1295829,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'chiliz',
@@ -930,7 +941,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000',
-    tvlUsd: 8976283,
+    tvlUsd: 8947363,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'citrea',
@@ -1124,7 +1135,7 @@ export const NETWORKS = {
     blockTimeSec: 5.2,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 137317330,
+    tvlUsd: 137232019,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'cronosevm',
@@ -1168,7 +1179,7 @@ export const NETWORKS = {
     blockTimeSec: 2,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 720461,
+    tvlUsd: 720299,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -1201,7 +1212,7 @@ export const NETWORKS = {
     blockTimeSec: 0.9,
     feeStep: '1000000000000000',
     feeCeiling: '3000000000000000000000',
-    tvlUsd: 1671840,
+    tvlUsd: 1673502,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'dexalot',
@@ -1237,7 +1248,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 672317,
+    tvlUsd: 673035,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'doma',
@@ -1306,7 +1317,7 @@ export const NETWORKS = {
     blockTimeSec: 10.8,
     feeStep: '100000000000000',
     feeCeiling: '100000000000000000',
-    tvlUsd: 49456659558,
+    tvlUsd: 49399882881,
     coingeckoPlatform: 'ethereum',
     lz: {
       chainKey: 'ethereum',
@@ -1359,7 +1370,7 @@ export const NETWORKS = {
     blockTimeSec: 0.6,
     feeStep: '1000000000000000',
     feeCeiling: '400000000000000000000',
-    tvlUsd: 15909669,
+    tvlUsd: 15901146,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'etherlink',
@@ -1403,7 +1414,7 @@ export const NETWORKS = {
     blockTimeSec: 1.1,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 3551269,
+    tvlUsd: 3540207,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'fantom',
@@ -1439,7 +1450,7 @@ export const NETWORKS = {
     blockTimeSec: 2.1,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 182464827,
+    tvlUsd: 182438968,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'flare',
@@ -1475,7 +1486,7 @@ export const NETWORKS = {
     blockTimeSec: 0.7,
     feeStep: '1000000000000000',
     feeCeiling: '4000000000000000000000',
-    tvlUsd: 10067488,
+    tvlUsd: 10049054,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'flow',
@@ -1511,7 +1522,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '1000000000000000',
     feeCeiling: '400000000000000000000',
-    tvlUsd: 18811536,
+    tvlUsd: 18793348,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'fraxtal',
@@ -1552,14 +1563,14 @@ export const NETWORKS = {
     chainId: 122,
     nativeSymbol: 'FUSE',
     nativeDecimals: 18,
-    rpcs: [{ url: 'https://rpc.fuse.io', provider: 'fuse.io' }, { url: 'https://fuse.drpc.org', provider: 'drpc.org' }],
+    rpcs: [{ url: 'https://122.rpc.thirdweb.com', provider: 'thirdweb.com' }, { url: 'https://rpc.fuse.io', provider: 'fuse.io' }, { url: 'https://fuse.drpc.org', provider: 'drpc.org' }],
     explorerTxUrl: 'https://explorer.fuse.io/tx/',
     explorerAddrUrl: 'https://explorer.fuse.io/address/',
     srcConfirmationsHint: 20,
     blockTimeSec: 4.5,
     feeStep: '1000000000000000',
     feeCeiling: '20000000000000000000000',
-    tvlUsd: 388411,
+    tvlUsd: 388497,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'fuse',
@@ -1631,7 +1642,7 @@ export const NETWORKS = {
     blockTimeSec: 5,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 92794340,
+    tvlUsd: 92620204,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -1668,7 +1679,7 @@ export const NETWORKS = {
     blockTimeSec: 3.5,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000',
-    tvlUsd: 104807,
+    tvlUsd: 104210,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'goat',
@@ -1776,7 +1787,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 1429,
+    tvlUsd: 1420,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'hashkey',
@@ -1820,7 +1831,7 @@ export const NETWORKS = {
     blockTimeSec: 1.7,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 33216619,
+    tvlUsd: 33151754,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'hedera',
@@ -1864,7 +1875,7 @@ export const NETWORKS = {
     blockTimeSec: 10.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 1214839,
+    tvlUsd: 1211323,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'hemi',
@@ -2013,7 +2024,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 53700510,
+    tvlUsd: 53556979,
     coingeckoPlatform: null,
     lz: null,
     wormhole: {
@@ -2096,7 +2107,7 @@ export const NETWORKS = {
     blockTimeSec: 0.6,
     feeStep: '1000000000000000',
     feeCeiling: '20000000000000000000',
-    tvlUsd: 12631270,
+    tvlUsd: 12537227,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'injectiveevm',
@@ -2132,7 +2143,7 @@ export const NETWORKS = {
     blockTimeSec: 1,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 200165928,
+    tvlUsd: 200675247,
     coingeckoPlatform: 'ink',
     lz: {
       chainKey: 'ink',
@@ -2185,7 +2196,7 @@ export const NETWORKS = {
     blockTimeSec: 2.7,
     feeStep: '1000000000000000',
     feeCeiling: '3000000000000000000000',
-    tvlUsd: 328480,
+    tvlUsd: 328801,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'iota',
@@ -2280,6 +2291,39 @@ export const NETWORKS = {
       logo: true,
     },
   },
+  jovay: {
+    vm: 'evm',
+    name: 'Jovay',
+    chainId: 5734951,
+    nativeSymbol: 'ETH',
+    nativeDecimals: 18,
+    rpcs: [{ url: 'https://rpc.jovay.io', provider: 'jovay.io' }],
+    explorerTxUrl: 'https://explorer.jovay.io/l2/tx/',
+    explorerAddrUrl: 'https://explorer.jovay.io/l2/address/',
+    srcConfirmationsHint: 20,
+    blockTimeSec: null,
+    feeStep: '10000000000000',
+    feeCeiling: '100000000000000000000',
+    tvlUsd: 0,
+    coingeckoPlatform: null,
+    lz: null,
+    wormhole: null,
+    ccip: {
+      selector: '1523760397290643893',
+      registryName: 'jovay-mainnet',
+      directoryKey: 'jovay-mainnet',
+      router: '0x492641F648a4986844848E0beFE66D14817bCE34',
+      routerVersion: '1.2.0',
+      tokenAdminRegistry: '0xA27056438FfA1f286AB197488808692F0db93F8B',
+      tokenAdminRegistryVersion: '1.5.0',
+    },
+    hyperlane: null,
+    brand: {
+      bg: '#3a3a3a',
+      dark: false,
+      logo: false,
+    },
+  },
   katana: {
     vm: 'evm',
     name: 'Katana',
@@ -2293,7 +2337,7 @@ export const NETWORKS = {
     blockTimeSec: 0.9,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 37369018,
+    tvlUsd: 37295832,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'katana',
@@ -2341,7 +2385,7 @@ export const NETWORKS = {
     blockTimeSec: 5.3,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 21008390,
+    tvlUsd: 20568677,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'kava',
@@ -2413,7 +2457,7 @@ export const NETWORKS = {
     blockTimeSec: 0.9,
     feeStep: '1000000000000000',
     feeCeiling: '3000000000000000000000',
-    tvlUsd: 8040023,
+    tvlUsd: 8002750,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'klaytn',
@@ -2506,7 +2550,7 @@ export const NETWORKS = {
     blockTimeSec: 2.8,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 23333559,
+    tvlUsd: 23289224,
     coingeckoPlatform: 'linea',
     lz: {
       chainKey: 'linea',
@@ -2559,7 +2603,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 25600,
+    tvlUsd: 25980,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'lisk',
@@ -2639,7 +2683,7 @@ export const NETWORKS = {
     blockTimeSec: 9,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 3071181,
+    tvlUsd: 3004466,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'manta',
@@ -2675,7 +2719,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 94417636,
+    tvlUsd: 95326372,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'mantle',
@@ -2723,7 +2767,7 @@ export const NETWORKS = {
     blockTimeSec: 0.9,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 12503362,
+    tvlUsd: 12489225,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'megaeth',
@@ -2808,7 +2852,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 6368880,
+    tvlUsd: 6479938,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -2878,7 +2922,7 @@ export const NETWORKS = {
     blockTimeSec: 10,
     feeStep: '1000000000000000',
     feeCeiling: '30000000000000000000',
-    tvlUsd: 2593053,
+    tvlUsd: 2612368,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'metis',
@@ -2926,7 +2970,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000',
-    tvlUsd: 73120254,
+    tvlUsd: 73230075,
     coingeckoPlatform: null,
     lz: null,
     wormhole: {
@@ -3001,7 +3045,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 615469,
+    tvlUsd: 614697,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'mode',
@@ -3049,7 +3093,7 @@ export const NETWORKS = {
     blockTimeSec: 0.3,
     feeStep: '10000000000000000',
     feeCeiling: '50000000000000000000',
-    tvlUsd: 1004707760,
+    tvlUsd: 1011036387,
     coingeckoPlatform: 'monad',
     lz: {
       chainKey: 'monad',
@@ -3132,7 +3176,7 @@ export const NETWORKS = {
     blockTimeSec: 3.6,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 81915740,
+    tvlUsd: 81724182,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'morph',
@@ -3176,7 +3220,7 @@ export const NETWORKS = {
     blockTimeSec: 7.1,
     feeStep: '1000000000000000',
     feeCeiling: '80000000000000000000',
-    tvlUsd: 4304,
+    tvlUsd: 4367,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'neox',
@@ -3220,7 +3264,7 @@ export const NETWORKS = {
     blockTimeSec: 1.5,
     feeStep: '1000000000000000',
     feeCeiling: '300000000000000000000000',
-    tvlUsd: 341347,
+    tvlUsd: 341076,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'nibiru',
@@ -3256,7 +3300,7 @@ export const NETWORKS = {
     blockTimeSec: 0.3,
     feeStep: '1000000000000000',
     feeCeiling: '500000000000000000000',
-    tvlUsd: 3745418,
+    tvlUsd: 3779979,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'og',
@@ -3345,7 +3389,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000',
-    tvlUsd: 1069487,
+    tvlUsd: 1070254,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -3378,7 +3422,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 435177782,
+    tvlUsd: 436734290,
     coingeckoPlatform: 'optimistic-ethereum',
     lz: {
       chainKey: 'optimism',
@@ -3467,7 +3511,7 @@ export const NETWORKS = {
     blockTimeSec: 6,
     feeStep: '1000000000000000',
     feeCeiling: '3000000000000000000000',
-    tvlUsd: 793421,
+    tvlUsd: 789560,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'peaq',
@@ -3503,7 +3547,7 @@ export const NETWORKS = {
     blockTimeSec: 0.7,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 71428088,
+    tvlUsd: 71448370,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'pharos',
@@ -3539,7 +3583,7 @@ export const NETWORKS = {
     blockTimeSec: 1,
     feeStep: '10000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 561836784,
+    tvlUsd: 560162174,
     coingeckoPlatform: 'plasma',
     lz: {
       chainKey: 'plasma',
@@ -3587,7 +3631,7 @@ export const NETWORKS = {
     blockTimeSec: 1.2,
     feeStep: '1000000000000000',
     feeCeiling: '6000000000000000000000',
-    tvlUsd: 2654367,
+    tvlUsd: 2641241,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'plumephoenix',
@@ -3636,7 +3680,7 @@ export const NETWORKS = {
     blockTimeSec: 2,
     feeStep: '10000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 669223940,
+    tvlUsd: 672618708,
     coingeckoPlatform: 'polygon-pos',
     lz: {
       chainKey: 'polygon',
@@ -3761,7 +3805,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 9344059,
+    tvlUsd: 9342484,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'reya',
@@ -3797,7 +3841,7 @@ export const NETWORKS = {
     blockTimeSec: 0.9,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 33385612,
+    tvlUsd: 33379564,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'rise',
@@ -3833,7 +3877,7 @@ export const NETWORKS = {
     blockTimeSec: 0.1,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 1036707480,
+    tvlUsd: 1035284993,
     coingeckoPlatform: 'robinhood',
     lz: {
       chainKey: 'robinhood',
@@ -3886,7 +3930,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 10951090,
+    tvlUsd: 10907346,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -3919,7 +3963,7 @@ export const NETWORKS = {
     blockTimeSec: 20.5,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000',
-    tvlUsd: 79655582,
+    tvlUsd: 79468069,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'rootstock',
@@ -3963,7 +4007,7 @@ export const NETWORKS = {
     blockTimeSec: 2.7,
     feeStep: '10000000000000',
     feeCeiling: '20000000000000000',
-    tvlUsd: 7943060,
+    tvlUsd: 7708341,
     coingeckoPlatform: 'scroll',
     lz: {
       chainKey: 'scroll',
@@ -4007,7 +4051,7 @@ export const NETWORKS = {
     blockTimeSec: 0.5,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 27762372,
+    tvlUsd: 27682547,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'sei',
@@ -4056,7 +4100,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 138737,
+    tvlUsd: 138728,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -4089,7 +4133,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '10000',
     feeCeiling: '1000000000',
-    tvlUsd: 5931649344,
+    tvlUsd: 5919435638,
     coingeckoPlatform: 'solana',
     lz: {
       chainKey: 'solana',
@@ -4124,7 +4168,7 @@ export const NETWORKS = {
     blockTimeSec: 0.1,
     feeStep: '1000000000000000',
     feeCeiling: '600000000000000000000',
-    tvlUsd: 2877106,
+    tvlUsd: 2869023,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'somnia',
@@ -4164,7 +4208,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 4944556,
+    tvlUsd: 4940786,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'soneium',
@@ -4212,7 +4256,7 @@ export const NETWORKS = {
     blockTimeSec: 0.4,
     feeStep: '1000000000000000',
     feeCeiling: '2000000000000000000000',
-    tvlUsd: 19457602,
+    tvlUsd: 19326108,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'sonic',
@@ -4256,7 +4300,7 @@ export const NETWORKS = {
     blockTimeSec: 0.7,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 29651284,
+    tvlUsd: 29651218,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'stable',
@@ -4304,7 +4348,7 @@ export const NETWORKS = {
     blockTimeSec: 2.1,
     feeStep: '1000000000000000',
     feeCeiling: '600000000000000000000',
-    tvlUsd: 32175,
+    tvlUsd: 32181,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'story',
@@ -4388,7 +4432,7 @@ export const NETWORKS = {
     blockTimeSec: 1.5,
     feeStep: '1000000000000000',
     feeCeiling: '90000000000000000000000',
-    tvlUsd: 355223,
+    tvlUsd: 354956,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'tac',
@@ -4424,7 +4468,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 213152,
+    tvlUsd: 213825,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -4450,14 +4494,14 @@ export const NETWORKS = {
     chainId: 40,
     nativeSymbol: 'TLOS',
     nativeDecimals: 18,
-    rpcs: [{ url: 'https://40.rpc.thirdweb.com', provider: 'thirdweb.com' }, { url: 'https://rpc.telos.net', provider: 'telos.net' }, { url: 'https://telos.drpc.org', provider: 'drpc.org' }],
+    rpcs: [{ url: 'https://40.rpc.thirdweb.com', provider: 'thirdweb.com' }, { url: 'https://rpc.telos.net', provider: 'telos.net' }],
     explorerTxUrl: 'https://teloscan.io/tx/',
     explorerAddrUrl: 'https://teloscan.io/address/',
     srcConfirmationsHint: 20,
     blockTimeSec: 0.4,
     feeStep: '1000000000000000',
     feeCeiling: '6000000000000000000000',
-    tvlUsd: 2865707,
+    tvlUsd: 2773222,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'telos',
@@ -4493,7 +4537,7 @@ export const NETWORKS = {
     blockTimeSec: 0.5,
     feeStep: '1000000000000000',
     feeCeiling: '200000000000000000000',
-    tvlUsd: 106009382,
+    tvlUsd: 106504454,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'tempo',
@@ -4546,7 +4590,7 @@ export const NETWORKS = {
     blockTimeSec: 0.9,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 25890692,
+    tvlUsd: 25896799,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'unichain',
@@ -4599,7 +4643,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 2701916,
+    tvlUsd: 2702155,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,
@@ -4632,7 +4676,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 39987936,
+    tvlUsd: 39581397,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'worldchain',
@@ -4685,7 +4729,7 @@ export const NETWORKS = {
     blockTimeSec: 2,
     feeStep: '1000000000000000',
     feeCeiling: '100000000000000000000',
-    tvlUsd: 2161610,
+    tvlUsd: 2167912,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'xdc',
@@ -4777,7 +4821,7 @@ export const NETWORKS = {
     blockTimeSec: 1.8,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 124287,
+    tvlUsd: 115897,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'zircuit',
@@ -4821,7 +4865,7 @@ export const NETWORKS = {
     blockTimeSec: 2.7,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 14716782,
+    tvlUsd: 14602160,
     coingeckoPlatform: null,
     lz: {
       chainKey: 'zksync',
@@ -4865,7 +4909,7 @@ export const NETWORKS = {
     blockTimeSec: null,
     feeStep: '10000000000000',
     feeCeiling: '50000000000000000',
-    tvlUsd: 42927,
+    tvlUsd: 42827,
     coingeckoPlatform: null,
     lz: null,
     wormhole: null,

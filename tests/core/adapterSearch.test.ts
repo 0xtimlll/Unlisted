@@ -98,3 +98,16 @@ describe('findAdapterForToken', () => {
     expect(r).toEqual({ found: [], named: [], failed: [], rejected: [] })
   })
 })
+
+describe('findAdapterForToken: the time budget', () => {
+  it('a chain that does not answer within the budget is "could not ask", and the rest still answer', async () => {
+    const never = new Promise<Hex>(() => {})
+    const log: string[] = []
+    const d = deps({ bsc: pad(ADAPTER, { size: 32 }), polygon: never as unknown as Hex, optimism: new Error('down') }, { [ADAPTER.toLowerCase()]: treadAdapterInfo({ oft: ADAPTER, token: TOKEN }) }, log)
+    const t0 = Date.now()
+    const r = await findAdapterForToken({ token: TOKEN, srcChain: 'ethereum', srcEid: 30101, chains: ['ethereum', 'bsc', 'polygon', 'optimism'], budgetMs: 200 }, d)
+    expect(Date.now() - t0).toBeLessThan(2_000)
+    expect(r.found.map((f) => f.adapter)).toEqual([ADAPTER])
+    expect(r.failed.sort()).toEqual(['optimism', 'polygon'])
+  })
+})

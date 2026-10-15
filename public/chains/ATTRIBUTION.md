@@ -96,4 +96,4 @@ listed at the end.
 
 ## No mark (initials on a neutral tile)
 
-abcore, adichain, apexfusionnexus, arc, b2, bitlayer, coredao, creditcoin, dexalot, doma, edge, flow, gensyn, goat, hemi, henesys, horizen, humanity, hydration, injectiveevm, irys, kite, lens, memecore, merlin, metal, mezo, moca, morph, og, onemoney, opbnb, pharos, rayls, redbelly, rise, shibarium, somnia, story, subtensorevm, tac, zora
+abcore, adichain, apexfusionnexus, arc, b2, bitlayer, coredao, creditcoin, dexalot, doma, edge, flow, gensyn, goat, hemi, henesys, horizen, humanity, hydration, injectiveevm, irys, jovay, kite, lens, memecore, merlin, metal, mezo, moca, morph, og, onemoney, opbnb, pharos, rayls, redbelly, rise, shibarium, somnia, story, subtensorevm, tac, zora

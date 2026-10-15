@@ -90,6 +90,8 @@ export const SOLANA_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d'
 
 export const LIMITS = {
   upstreamTimeoutMs: 6_000,
+  /** A log scan over tens of thousands of blocks or a simulation is slow by nature; it gets this long. */
+  heavyTimeoutMs: 15_000,
   hedgeAfterMs: 400,
   maxBodyBytes: 128 * 1024,
   maxBatch: 20,
@@ -117,6 +119,8 @@ export type RpcProxyDeps = {
 }
 
 type Attempt = { ok: true; status: number; body: string; url: string } | { ok: false; reason: string; url: string }
+
+const HEAVY_METHODS: ReadonlySet<string> = new Set(['eth_getLogs', 'eth_simulateV1', 'simulateTransaction', 'getTransaction'])
 
 const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra } })
@@ -200,9 +204,9 @@ function takeToken(ip: string, now: number): boolean {
 }
 
 export function createRpcProxy(deps: RpcProxyDeps) {
-  async function call(url: string, body: string, signal: AbortSignal): Promise<Attempt> {
+  async function call(url: string, body: string, signal: AbortSignal, timeoutMs: number = LIMITS.upstreamTimeoutMs): Promise<Attempt> {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(new Error('upstream timeout')), LIMITS.upstreamTimeoutMs)
+    const timer = setTimeout(() => ctrl.abort(new Error('upstream timeout')), timeoutMs)
     const onOuter = () => ctrl.abort(signal.reason)
     signal.addEventListener('abort', onOuter, { once: true })
     try {
@@ -235,7 +239,7 @@ export function createRpcProxy(deps: RpcProxyDeps) {
    * Try the upstreams in order with at most two in flight: the next one starts when the current
    * one fails, or after `hedgeAfterMs` of silence. The first success wins and the rest are aborted.
    */
-  async function race(urls: readonly string[], body: string, hedge: boolean): Promise<Attempt> {
+  async function race(urls: readonly string[], body: string, hedge: boolean, timeoutMs: number): Promise<Attempt> {
     const outer = new AbortController()
     const failures: Attempt[] = []
     let next = 0
@@ -252,7 +256,7 @@ export function createRpcProxy(deps: RpcProxyDeps) {
         if (done || next >= urls.length) return
         const url = urls[next++]!
         inFlight++
-        void call(url, body, outer.signal).then((a) => {
+        void call(url, body, outer.signal, timeoutMs).then((a) => {
           inFlight--
           if (a.ok) return finish(a)
           failures.push(a)
@@ -347,10 +351,12 @@ export function createRpcProxy(deps: RpcProxyDeps) {
     const eligible = wantProvider ? queue.filter((r) => r.provider === wantProvider) : queue
     if (eligible.length === 0) return rpcError(400, null, -32600, `no RPC of operator ${wantProvider.slice(0, 64)} for this chain`)
 
+    const heavy = items.some((it) => HEAVY_METHODS.has(String((it as { method: string }).method)))
     const a = await race(
       eligible.map((r) => r.url),
       text,
       !Array.isArray(parsed),
+      heavy ? LIMITS.heavyTimeoutMs : LIMITS.upstreamTimeoutMs,
     )
     if (!a.ok) {
       if (remembered === a.url) lastGood.delete(route.key)
