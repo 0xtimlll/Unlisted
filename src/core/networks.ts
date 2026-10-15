@@ -28,7 +28,8 @@ export type NetworkCcip = {
   readonly tokenAdminRegistryVersion: string
 }
 export type NetworkHyperlane = { readonly domain: number; readonly registryName: string; readonly mailbox: string }
-export type NetworkBrand = { readonly bg: string; readonly dark: boolean; readonly logo: boolean }
+/** `mark` is the file in public/chains the tile shows, or null for a network drawn as its initials. */
+export type NetworkBrand = { readonly bg: string; readonly dark: boolean; readonly mark: string | null }
 export type NetworkSpec = {
   readonly vm: 'evm' | 'svm'
   readonly name: string
@@ -125,9 +126,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#2055C9',
       dark: false,
-      logo: false,
+      mark: 'abcore.png',
     },
   },
   abstract: {
@@ -175,7 +176,7 @@ export const NETWORKS = {
     brand: {
       bg: '#054729',
       dark: false,
-      logo: true,
+      mark: 'abstract.svg',
     },
   },
   adichain: {
@@ -206,9 +207,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: 'linear-gradient(180deg, #FE7109, #003BFF)',
       dark: false,
-      logo: false,
+      mark: 'adichain.svg',
     },
   },
   ape: {
@@ -256,12 +257,12 @@ export const NETWORKS = {
     brand: {
       bg: '#0054FA',
       dark: false,
-      logo: true,
+      mark: 'ape.svg',
     },
   },
   apexfusionnexus: {
     vm: 'evm',
-    name: 'Apex Fusion Nexus',
+    name: 'Apex Fusion',
     chainId: 9069,
     nativeSymbol: 'AP3X',
     nativeDecimals: 18,
@@ -290,9 +291,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#0F1B1A',
       dark: false,
-      logo: false,
+      mark: 'apexfusionnexus.png',
     },
   },
   arbitrum: {
@@ -345,7 +346,7 @@ export const NETWORKS = {
     brand: {
       bg: '#1C4ADD',
       dark: false,
-      logo: true,
+      mark: 'arbitrum.svg',
     },
   },
   arc: {
@@ -396,9 +397,9 @@ export const NETWORKS = {
       mailbox: '0x7f50C5776722630a0024fAE05fDe8b47571D7B39',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#1B3158',
       dark: false,
-      logo: false,
+      mark: 'arc.svg',
     },
   },
   astar: {
@@ -440,9 +441,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#0AE2FF',
-      dark: true,
-      logo: true,
+      bg: 'linear-gradient(180deg, #0AE2FF, #0279C2)',
+      dark: false,
+      mark: 'astar.svg',
     },
   },
   avalanche: {
@@ -495,7 +496,7 @@ export const NETWORKS = {
     brand: {
       bg: '#E84142',
       dark: false,
-      logo: true,
+      mark: 'avalanche.svg',
     },
   },
   b2: {
@@ -526,9 +527,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#FFB852',
+      dark: true,
+      mark: 'b2.png',
     },
   },
   base: {
@@ -581,12 +582,12 @@ export const NETWORKS = {
     brand: {
       bg: '#0000FF',
       dark: false,
-      logo: true,
+      mark: 'base.svg',
     },
   },
   beam: {
     vm: 'evm',
-    name: 'Merit Circle',
+    name: 'Beam',
     chainId: 4337,
     nativeSymbol: 'BEAM',
     nativeDecimals: 18,
@@ -617,7 +618,7 @@ export const NETWORKS = {
     brand: {
       bg: '#0B76FF',
       dark: false,
-      logo: true,
+      mark: 'beam.svg',
     },
   },
   bera: {
@@ -664,9 +665,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#FB9942',
+      bg: '#472920',
       dark: false,
-      logo: true,
+      mark: 'bera.svg',
     },
   },
   bitlayer: {
@@ -697,9 +698,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: false,
+      mark: 'bitlayer.svg',
     },
   },
   blast: {
@@ -733,9 +734,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: true,
+      bg: '#FCFC03',
+      dark: true,
+      mark: 'blast.svg',
     },
   },
   bob: {
@@ -783,7 +784,7 @@ export const NETWORKS = {
     brand: {
       bg: '#F25D00',
       dark: false,
-      logo: true,
+      mark: 'bob.svg',
     },
   },
   bsc: {
@@ -836,7 +837,7 @@ export const NETWORKS = {
     brand: {
       bg: '#FFE900',
       dark: true,
-      logo: true,
+      mark: 'bsc.svg',
     },
   },
   celo: {
@@ -887,14 +888,14 @@ export const NETWORKS = {
       mailbox: '0x50da3B3907A08a24fe4999F4Dcf337E8dC7954bb',
     },
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: true,
+      bg: '#FCFE52',
+      dark: true,
+      mark: 'celo.svg',
     },
   },
   chiliz: {
     vm: 'evm',
-    name: 'Chiliz Chain',
+    name: 'Chiliz',
     chainId: 88888,
     nativeSymbol: 'CHZ',
     nativeDecimals: 18,
@@ -925,7 +926,7 @@ export const NETWORKS = {
     brand: {
       bg: '#F60250',
       dark: false,
-      logo: true,
+      mark: 'chiliz.svg',
     },
   },
   citrea: {
@@ -963,9 +964,9 @@ export const NETWORKS = {
       mailbox: '0x3a464f746D23Ab22155710f44dB16dcA53e0775E',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#FD7F00',
       dark: false,
-      logo: true,
+      mark: 'citrea.svg',
     },
   },
   codex: {
@@ -1001,12 +1002,12 @@ export const NETWORKS = {
     brand: {
       bg: '#F8E6B6',
       dark: true,
-      logo: true,
+      mark: 'codex.svg',
     },
   },
   conflux: {
     vm: 'evm',
-    name: 'Conflux eSpace',
+    name: 'Conflux',
     chainId: 1030,
     nativeSymbol: 'CFX',
     nativeDecimals: 18,
@@ -1037,12 +1038,12 @@ export const NETWORKS = {
     brand: {
       bg: '#37A1DB',
       dark: false,
-      logo: true,
+      mark: 'conflux.svg',
     },
   },
   coredao: {
     vm: 'evm',
-    name: 'Core Blockchain',
+    name: 'Core',
     chainId: 1116,
     nativeSymbol: 'CORE',
     nativeDecimals: 18,
@@ -1079,9 +1080,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#FF9211',
       dark: false,
-      logo: false,
+      mark: 'coredao.svg',
     },
   },
   creditcoin: {
@@ -1117,9 +1118,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#4976FF',
       dark: false,
-      logo: false,
+      mark: 'creditcoin.png',
     },
   },
   cronosevm: {
@@ -1161,9 +1162,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#051221',
       dark: false,
-      logo: true,
+      mark: 'cronosevm.svg',
     },
   },
   cronoszkevm: {
@@ -1194,14 +1195,14 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#051221',
       dark: false,
-      logo: true,
+      mark: 'cronoszkevm.svg',
     },
   },
   dexalot: {
     vm: 'evm',
-    name: 'Dexalot Subnet',
+    name: 'Dexalot',
     chainId: 432204,
     nativeSymbol: 'ALOT',
     nativeDecimals: 18,
@@ -1230,9 +1231,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#E71771',
       dark: false,
-      logo: false,
+      mark: 'dexalot.png',
     },
   },
   doma: {
@@ -1266,9 +1267,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#4B76FA',
       dark: false,
-      logo: false,
+      mark: 'doma.png',
     },
   },
   edge: {
@@ -1299,9 +1300,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: false,
+      mark: 'edge.png',
     },
   },
   ethereum: {
@@ -1354,7 +1355,7 @@ export const NETWORKS = {
     brand: {
       bg: 'linear-gradient(180deg, #88AAF1, #C9B3F5)',
       dark: false,
-      logo: true,
+      mark: 'ethereum.svg',
     },
   },
   etherlink: {
@@ -1398,7 +1399,7 @@ export const NETWORKS = {
     brand: {
       bg: '#38FF9C',
       dark: true,
-      logo: true,
+      mark: 'etherlink.svg',
     },
   },
   fantom: {
@@ -1432,9 +1433,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#26B6EA',
+      bg: '#1969FF',
       dark: false,
-      logo: true,
+      mark: 'fantom.svg',
     },
   },
   flare: {
@@ -1470,7 +1471,7 @@ export const NETWORKS = {
     brand: {
       bg: '#E62058',
       dark: false,
-      logo: true,
+      mark: 'flare.svg',
     },
   },
   flow: {
@@ -1504,9 +1505,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#00EF8B',
+      dark: true,
+      mark: 'flow.svg',
     },
   },
   fraxtal: {
@@ -1552,9 +1553,9 @@ export const NETWORKS = {
       mailbox: '0x2f9DB5616fa3fAd1aB06cB2C906830BA63d135e3',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'fraxtal.svg',
     },
   },
   fuse: {
@@ -1590,7 +1591,7 @@ export const NETWORKS = {
     brand: {
       bg: '#B4F9B9',
       dark: true,
-      logo: true,
+      mark: 'fuse.svg',
     },
   },
   gensyn: {
@@ -1624,9 +1625,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#FFD4CF',
+      dark: true,
+      mark: 'gensyn.png',
     },
   },
   gnosis: {
@@ -1663,7 +1664,7 @@ export const NETWORKS = {
     brand: {
       bg: '#3E6957',
       dark: false,
-      logo: true,
+      mark: 'gnosis.svg',
     },
   },
   goat: {
@@ -1697,14 +1698,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#D39820',
       dark: false,
-      logo: false,
+      mark: 'goat.png',
     },
   },
   gravity: {
     vm: 'evm',
-    name: 'Gravity Alpha',
+    name: 'Gravity',
     chainId: 1625,
     nativeSymbol: 'G',
     nativeDecimals: 18,
@@ -1734,8 +1735,8 @@ export const NETWORKS = {
     hyperlane: null,
     brand: {
       bg: '#FFAC43',
-      dark: true,
-      logo: true,
+      dark: false,
+      mark: 'gravity.svg',
     },
   },
   gunz: {
@@ -1769,14 +1770,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#C2FCCD',
+      bg: 'linear-gradient(180deg, #C2FCCD, #D3F1FB)',
       dark: true,
-      logo: true,
+      mark: 'gunz.svg',
     },
   },
   hashkey: {
     vm: 'evm',
-    name: 'HashKey Chain',
+    name: 'HashKey',
     chainId: 177,
     nativeSymbol: 'HSK',
     nativeDecimals: 18,
@@ -1813,9 +1814,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#0080FF',
+      bg: '#0072E5',
       dark: false,
-      logo: true,
+      mark: 'hashkey.svg',
     },
   },
   hedera: {
@@ -1857,9 +1858,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'hedera.svg',
     },
   },
   hemi: {
@@ -1901,9 +1902,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#FF6C15',
       dark: false,
-      logo: false,
+      mark: 'hemi.svg',
     },
   },
   henesys: {
@@ -1934,9 +1935,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#14122B',
       dark: false,
-      logo: false,
+      mark: 'henesys.png',
     },
   },
   horizen: {
@@ -1970,14 +1971,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#FFCB17',
+      dark: true,
+      mark: 'horizen.png',
     },
   },
   humanity: {
     vm: 'evm',
-    name: 'Humanity Protocol',
+    name: 'Humanity',
     chainId: 6985385,
     nativeSymbol: 'H',
     nativeDecimals: 18,
@@ -2006,9 +2007,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#EDFCEC',
+      dark: true,
+      mark: 'humanity.png',
     },
   },
   hydration: {
@@ -2036,9 +2037,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#E53E76',
       dark: false,
-      logo: false,
+      mark: 'hydration.svg',
     },
   },
   hyperevm: {
@@ -2091,7 +2092,7 @@ export const NETWORKS = {
     brand: {
       bg: 'linear-gradient(180deg, #042C24, #031D1A)',
       dark: false,
-      logo: true,
+      mark: 'hyperevm.svg',
     },
   },
   injectiveevm: {
@@ -2125,9 +2126,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#4D3DFF',
       dark: false,
-      logo: false,
+      mark: 'injectiveevm.svg',
     },
   },
   ink: {
@@ -2180,12 +2181,12 @@ export const NETWORKS = {
     brand: {
       bg: '#7538F5',
       dark: false,
-      logo: true,
+      mark: 'ink.svg',
     },
   },
   iota: {
     vm: 'evm',
-    name: 'IOTA EVM',
+    name: 'IOTA',
     chainId: 8822,
     nativeSymbol: 'IOTA',
     nativeDecimals: 18,
@@ -2214,14 +2215,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'iota.svg',
     },
   },
   irys: {
     vm: 'evm',
-    name: 'Irys Beta',
+    name: 'Irys',
     chainId: 3282,
     nativeSymbol: 'IRYS',
     nativeDecimals: 18,
@@ -2250,9 +2251,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#51FFD6',
+      dark: true,
+      mark: 'irys.png',
     },
   },
   islander: {
@@ -2286,9 +2287,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: true,
+      bg: '#F0F0E9',
+      dark: true,
+      mark: 'islander.svg',
     },
   },
   jovay: {
@@ -2319,9 +2320,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#326CFF',
       dark: false,
-      logo: false,
+      mark: 'jovay.png',
     },
   },
   katana: {
@@ -2367,9 +2368,9 @@ export const NETWORKS = {
       mailbox: '0x3a464f746D23Ab22155710f44dB16dcA53e0775E',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#0541B2',
       dark: false,
-      logo: true,
+      mark: 'katana.svg',
     },
   },
   kava: {
@@ -2403,14 +2404,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#FF564F',
+      bg: '#FF433E',
       dark: false,
-      logo: true,
+      mark: 'kava.svg',
     },
   },
   kite: {
     vm: 'evm',
-    name: 'KiteAI',
+    name: 'Kite',
     chainId: 2366,
     nativeSymbol: 'KITE',
     nativeDecimals: 18,
@@ -2439,9 +2440,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#1D1A16',
       dark: false,
-      logo: false,
+      mark: 'kite.svg',
     },
   },
   klaytn: {
@@ -2490,7 +2491,7 @@ export const NETWORKS = {
     brand: {
       bg: '#BFF009',
       dark: true,
-      logo: true,
+      mark: 'klaytn.svg',
     },
   },
   lens: {
@@ -2532,9 +2533,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: false,
+      mark: 'lens.svg',
     },
   },
   linea: {
@@ -2587,7 +2588,7 @@ export const NETWORKS = {
     brand: {
       bg: '#61DFFF',
       dark: true,
-      logo: true,
+      mark: 'linea.svg',
     },
   },
   lisk: {
@@ -2629,14 +2630,14 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#0C152E',
       dark: false,
-      logo: true,
+      mark: 'lisk.svg',
     },
   },
   lyra: {
     vm: 'evm',
-    name: 'Lyra Chain',
+    name: 'Lyra',
     chainId: 957,
     nativeSymbol: 'ETH',
     nativeDecimals: 18,
@@ -2667,7 +2668,7 @@ export const NETWORKS = {
     brand: {
       bg: '#25FAAF',
       dark: true,
-      logo: true,
+      mark: 'lyra.svg',
     },
   },
   manta: {
@@ -2701,9 +2702,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#29CCB9',
+      bg: 'linear-gradient(180deg, #29CCB9, #0091FF, #FF66B7)',
       dark: false,
-      logo: true,
+      mark: 'manta.svg',
     },
   },
   mantle: {
@@ -2749,9 +2750,9 @@ export const NETWORKS = {
       mailbox: '0x398633D19f4371e1DB5a8EFE90468eB70B1176AA',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#06110D',
       dark: false,
-      logo: true,
+      mark: 'mantle.svg',
     },
   },
   megaeth: {
@@ -2798,9 +2799,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#19191A',
       dark: false,
-      logo: true,
+      mark: 'megaeth.svg',
     },
   },
   memecore: {
@@ -2834,9 +2835,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#CBBBFB',
+      dark: true,
+      mark: 'memecore.svg',
     },
   },
   merlin: {
@@ -2867,9 +2868,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#6335FF',
       dark: false,
-      logo: false,
+      mark: 'merlin.svg',
     },
   },
   metal: {
@@ -2904,14 +2905,14 @@ export const NETWORKS = {
       mailbox: '0x730f8a4128Fa8c53C777B62Baa1abeF94cAd34a9',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#0E0E10',
       dark: false,
-      logo: false,
+      mark: 'metal.svg',
     },
   },
   metis: {
     vm: 'evm',
-    name: 'Metis Andromeda',
+    name: 'Metis',
     chainId: 1088,
     nativeSymbol: 'METIS',
     nativeDecimals: 18,
@@ -2954,7 +2955,7 @@ export const NETWORKS = {
     brand: {
       bg: '#00D8C1',
       dark: true,
-      logo: true,
+      mark: 'metis.svg',
     },
   },
   mezo: {
@@ -2982,14 +2983,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#FF004D',
       dark: false,
-      logo: false,
+      mark: 'mezo.svg',
     },
   },
   moca: {
     vm: 'evm',
-    name: 'Moca Chain',
+    name: 'Moca',
     chainId: 2288,
     nativeSymbol: 'MOCA',
     nativeDecimals: 18,
@@ -3027,9 +3028,9 @@ export const NETWORKS = {
       mailbox: '0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#EF61B4',
       dark: false,
-      logo: false,
+      mark: 'moca.svg',
     },
   },
   mode: {
@@ -3077,7 +3078,7 @@ export const NETWORKS = {
     brand: {
       bg: '#DFFE00',
       dark: true,
-      logo: true,
+      mark: 'mode.svg',
     },
   },
   monad: {
@@ -3130,7 +3131,7 @@ export const NETWORKS = {
     brand: {
       bg: '#836EF9',
       dark: false,
-      logo: true,
+      mark: 'monad.svg',
     },
   },
   moonbeam: {
@@ -3158,9 +3159,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#53CBC9',
+      bg: '#CB1F7A',
       dark: false,
-      logo: true,
+      mark: 'moonbeam.svg',
     },
   },
   morph: {
@@ -3202,9 +3203,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#14A800',
       dark: false,
-      logo: false,
+      mark: 'morph.svg',
     },
   },
   neox: {
@@ -3248,7 +3249,7 @@ export const NETWORKS = {
     brand: {
       bg: '#00E599',
       dark: true,
-      logo: true,
+      mark: 'neox.svg',
     },
   },
   nibiru: {
@@ -3282,9 +3283,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#F29AC4',
-      dark: false,
-      logo: true,
+      bg: 'linear-gradient(180deg, #F29AC4, #CDC6D7)',
+      dark: true,
+      mark: 'nibiru.svg',
     },
   },
   og: {
@@ -3335,9 +3336,9 @@ export const NETWORKS = {
       mailbox: '0x8428a1a7E97Fc75Fb7Ba5c4aec31B55e52bbe9D6',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#9200E1',
       dark: false,
-      logo: false,
+      mark: 'og.svg',
     },
   },
   onemoney: {
@@ -3371,9 +3372,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#073387',
       dark: false,
-      logo: false,
+      mark: 'onemoney.svg',
     },
   },
   opbnb: {
@@ -3404,9 +3405,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#F0B90B',
+      dark: true,
+      mark: 'opbnb.svg',
     },
   },
   optimism: {
@@ -3459,7 +3460,7 @@ export const NETWORKS = {
     brand: {
       bg: '#FF0420',
       dark: false,
-      logo: true,
+      mark: 'optimism.svg',
     },
   },
   orderly: {
@@ -3495,7 +3496,7 @@ export const NETWORKS = {
     brand: {
       bg: '#5D00BA',
       dark: false,
-      logo: true,
+      mark: 'orderly.svg',
     },
   },
   peaq: {
@@ -3531,7 +3532,7 @@ export const NETWORKS = {
     brand: {
       bg: '#6666FE',
       dark: false,
-      logo: true,
+      mark: 'peaq.svg',
     },
   },
   pharos: {
@@ -3565,9 +3566,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#0007B9',
       dark: false,
-      logo: false,
+      mark: 'pharos.png',
     },
   },
   plasma: {
@@ -3615,7 +3616,7 @@ export const NETWORKS = {
     brand: {
       bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'plasma.svg',
     },
   },
   plumephoenix: {
@@ -3664,7 +3665,7 @@ export const NETWORKS = {
     brand: {
       bg: '#FF3D00',
       dark: false,
-      logo: true,
+      mark: 'plumephoenix.svg',
     },
   },
   polygon: {
@@ -3717,7 +3718,7 @@ export const NETWORKS = {
     brand: {
       bg: 'linear-gradient(180deg, #7F49F3, #693CC8)',
       dark: false,
-      logo: true,
+      mark: 'polygon.svg',
     },
   },
   rayls: {
@@ -3751,14 +3752,14 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: false,
+      mark: 'rayls.svg',
     },
   },
   redbelly: {
     vm: 'evm',
-    name: 'Redbelly Network',
+    name: 'Redbelly',
     chainId: 151,
     nativeSymbol: 'RBNT',
     nativeDecimals: 18,
@@ -3787,9 +3788,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#FF4848',
       dark: false,
-      logo: false,
+      mark: 'redbelly.svg',
     },
   },
   reya: {
@@ -3825,7 +3826,7 @@ export const NETWORKS = {
     brand: {
       bg: '#08F06A',
       dark: true,
-      logo: true,
+      mark: 'reya.svg',
     },
   },
   rise: {
@@ -3859,9 +3860,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#04DF83',
+      dark: true,
+      mark: 'rise.png',
     },
   },
   robinhood: {
@@ -3914,7 +3915,7 @@ export const NETWORKS = {
     brand: {
       bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'robinhood.svg',
     },
   },
   ronin: {
@@ -3947,7 +3948,7 @@ export const NETWORKS = {
     brand: {
       bg: '#004DE5',
       dark: false,
-      logo: true,
+      mark: 'ronin.svg',
     },
   },
   rootstock: {
@@ -3991,7 +3992,7 @@ export const NETWORKS = {
     brand: {
       bg: '#FF9103',
       dark: false,
-      logo: true,
+      mark: 'rootstock.svg',
     },
   },
   scroll: {
@@ -4035,7 +4036,7 @@ export const NETWORKS = {
     brand: {
       bg: '#FFEEDA',
       dark: true,
-      logo: true,
+      mark: 'scroll.svg',
     },
   },
   sei: {
@@ -4082,9 +4083,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#90305C',
+      bg: '#9E1F19',
       dark: false,
-      logo: true,
+      mark: 'sei.svg',
     },
   },
   shibarium: {
@@ -4115,9 +4116,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#F00500',
       dark: false,
-      logo: false,
+      mark: 'shibarium.svg',
     },
   },
   solana: {
@@ -4152,7 +4153,7 @@ export const NETWORKS = {
     brand: {
       bg: 'linear-gradient(0deg, #1A1622, #121212)',
       dark: false,
-      logo: true,
+      mark: 'solana.svg',
     },
   },
   somnia: {
@@ -4190,9 +4191,9 @@ export const NETWORKS = {
       mailbox: '0xc5068BB6803ADbe5600DE5189fe27A4dAcE31170',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#0B0B14',
       dark: false,
-      logo: false,
+      mark: 'somnia.svg',
     },
   },
   soneium: {
@@ -4238,9 +4239,9 @@ export const NETWORKS = {
       mailbox: '0x3a464f746D23Ab22155710f44dB16dcA53e0775E',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'soneium.svg',
     },
   },
   sonic: {
@@ -4282,9 +4283,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#141416',
       dark: false,
-      logo: true,
+      mark: 'sonic.svg',
     },
   },
   stable: {
@@ -4330,9 +4331,9 @@ export const NETWORKS = {
       mailbox: '0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#011F1E',
       dark: false,
-      logo: true,
+      mark: 'stable.svg',
     },
   },
   story: {
@@ -4366,9 +4367,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: false,
+      mark: 'story.svg',
     },
   },
   subtensorevm: {
@@ -4414,9 +4415,9 @@ export const NETWORKS = {
       mailbox: '0xF767D698c510FE5E53b46BA6Fd1174F5271e390A',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: false,
+      mark: 'subtensorevm.svg',
     },
   },
   tac: {
@@ -4450,9 +4451,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#91029B',
       dark: false,
-      logo: false,
+      mark: 'tac.svg',
     },
   },
   taiko: {
@@ -4485,12 +4486,12 @@ export const NETWORKS = {
     brand: {
       bg: '#E81899',
       dark: false,
-      logo: true,
+      mark: 'taiko.svg',
     },
   },
   telos: {
     vm: 'evm',
-    name: 'TelosEVM',
+    name: 'Telos',
     chainId: 40,
     nativeSymbol: 'TLOS',
     nativeDecimals: 18,
@@ -4519,9 +4520,9 @@ export const NETWORKS = {
     ccip: null,
     hyperlane: null,
     brand: {
-      bg: '#42A0B9',
+      bg: 'linear-gradient(180deg, #00F2FE, #4FACFE, #C471F5)',
       dark: false,
-      logo: true,
+      mark: 'telos.svg',
     },
   },
   tempo: {
@@ -4572,9 +4573,9 @@ export const NETWORKS = {
       mailbox: '0x3a867fCfFeC2B790970eeBDC9023E75B0a172aa7',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'tempo.svg',
     },
   },
   unichain: {
@@ -4627,12 +4628,12 @@ export const NETWORKS = {
     brand: {
       bg: '#F50DB4',
       dark: false,
-      logo: true,
+      mark: 'unichain.svg',
     },
   },
   wemix30: {
     vm: 'evm',
-    name: 'WEMIX3.0',
+    name: 'WEMIX',
     chainId: 1111,
     nativeSymbol: 'WEMIX',
     nativeDecimals: 18,
@@ -4660,7 +4661,7 @@ export const NETWORKS = {
     brand: {
       bg: '#27EA84',
       dark: true,
-      logo: true,
+      mark: 'wemix30.svg',
     },
   },
   worldchain: {
@@ -4711,9 +4712,9 @@ export const NETWORKS = {
       mailbox: '0x2f2aFaE1139Ce54feFC03593FeE8AB2aDF4a85A7',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'worldchain.svg',
     },
   },
   xdc: {
@@ -4757,12 +4758,12 @@ export const NETWORKS = {
     brand: {
       bg: '#9FF3FF',
       dark: true,
-      logo: true,
+      mark: 'xdc.svg',
     },
   },
   xlayer: {
     vm: 'evm',
-    name: 'XLayer',
+    name: 'X Layer',
     chainId: 196,
     nativeSymbol: 'OKB',
     nativeDecimals: 18,
@@ -4803,9 +4804,9 @@ export const NETWORKS = {
       mailbox: '0x2f2aFaE1139Ce54feFC03593FeE8AB2aDF4a85A7',
     },
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'xlayer.svg',
     },
   },
   zircuit: {
@@ -4847,9 +4848,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#169E00',
+      bg: '#092306',
       dark: false,
-      logo: true,
+      mark: 'zircuit.svg',
     },
   },
   zksync: {
@@ -4891,9 +4892,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
+      bg: '#000000',
       dark: false,
-      logo: true,
+      mark: 'zksync.svg',
     },
   },
   zora: {
@@ -4924,9 +4925,9 @@ export const NETWORKS = {
     },
     hyperlane: null,
     brand: {
-      bg: '#3a3a3a',
-      dark: false,
-      logo: false,
+      bg: '#F2CEFE',
+      dark: true,
+      mark: 'zora.svg',
     },
   },
 } as const

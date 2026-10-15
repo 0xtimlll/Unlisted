@@ -2,9 +2,9 @@
  * How each network is drawn: the colour of its card and tile, whether the name on the card is
  * dark or light, and whether it has a mark at all. Read from the generated src/core/networks.ts:
  * the hand-curated chains keep the colours chosen for them (scripts/networks-curated.json), the
- * rest take the most-used colour of their web3icons branded mark, and a network with no mark is
- * drawn as its initials on a neutral tile. The logo itself is `public/chains/<key>.svg` (see
- * ATTRIBUTION.md there).
+ * rest take theirs from scripts/networks-brand.json, and a network with no mark anywhere is
+ * drawn as its initials on its tile. The mark itself is `public/chains/<mark>` (see ATTRIBUTION.md
+ * there); scripts/networks-brand.json says where each one came from.
  */
 import { type ChainKey } from '@/core/chains'
 import { NETWORKS } from '@/core/networks'
@@ -14,14 +14,14 @@ export type Brand = {
   bg: string
   /** The name on the card is drawn in near-black rather than white. */
   dark?: boolean
-  /** False when there is no mark in public/chains: the tile shows the network's initials instead. */
-  logo: boolean
+  /** The mark's file in /chains (SVG or PNG), or null: the tile shows the network's initials instead. */
+  mark: string | null
 }
 
 export const BRAND: Record<ChainKey, Brand> = Object.fromEntries(
   (Object.keys(NETWORKS) as ChainKey[]).map((key) => {
     const b = NETWORKS[key].brand
-    return [key, { bg: b.bg, ...(b.dark ? { dark: true } : {}), logo: b.logo }]
+    return [key, { bg: b.bg, ...(b.dark ? { dark: true } : {}), mark: b.mark }]
   }),
 ) as Record<ChainKey, Brand>
 

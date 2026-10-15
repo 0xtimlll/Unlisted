@@ -411,8 +411,15 @@ Solana-RPC обязан быть у известного провайдера (`
 **Окно выбора сети (2026-10-15).** Порядок по умолчанию — по TVL из конфига; переключатель
 «Popular / Recent first» (`ui/networkOrder.ts`, чистые функции с тестами) хранится вместе с
 настройками (`stored.networkOrder`, `stored.recentChains` — до пяти последних выборов) через
-`ui/networkPrefs.tsx`. Сеть без знака — инициалы на нейтральной плитке (`brand.logo === false`),
-знаки грузятся лениво, карточки ниже сгиба — `content-visibility: auto`.
+`ui/networkPrefs.tsx`. Таблетки фильтров и порядка — один компонент `Pill`; `content-visibility` на
+карточках не использовать: он включает paint containment и обрезает увеличение при наведении и тень.
+Знаки грузятся лениво. **Цвета и знаки сетей** — таблица `scripts/networks-brand.json` (цвет плитки,
+источник знака `w3:` / `hl:` / `el:` / `site:` / `copy:` и режим `mono` / `white` / `asis` /
+`raster-white` / `raster`), рисует `scripts/network-brands.ts`; `npm run update:networks -- --brand-only`
+перерисовывает только бренды и курируемые имена, не трогая ничего проверенного on-chain. SVG со
+скриптом, обработчиком, foreignObject или внешней ссылкой отвергается. `brand.mark` — имя файла
+(SVG или PNG) или null (инициалы). Бренд чёрно-белый — плитка чёрная, как у Robinhood и Plasma;
+серого «нейтрального» цвета у сетей быть не должно.
 
 ## Команды
 

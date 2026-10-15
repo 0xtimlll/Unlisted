@@ -7,6 +7,7 @@
  *   node scripts/update-networks.ts                write networks.ts, public/chains/*.svg, ATTRIBUTION.md
  *   node scripts/update-networks.ts --check        fetch and verify again; fail if the committed file differs
  *   node scripts/update-networks.ts --skip-icons   do not download or recolour logos
+ *   node scripts/update-networks.ts --brand-only   redraw only the tiles and marks (scripts/networks-brand.json) of the committed registry
  *   node scripts/update-networks.ts --only=1,56    restrict the on-chain work to these chain ids (debugging)
  *
  * Run by hand. Never part of the build and never of the runtime: an app that took a chain id, an
@@ -24,7 +25,8 @@
  *   chainlist   ethereum-lists/chains — chain id, name, native currency, explorer, public RPCs
  *   DefiLlama   api.llama.fi/v2/chains — TVL, the number the network picker sorts by; and
  *               coins.llama.fi for the native coin's price, which sizes a new chain's fee ceiling
- *   web3icons   0xa3k5/web3icons (MIT) — network marks and their brand colour
+ *   web3icons   0xa3k5/web3icons (MIT) — network marks and their brand colour; the table that picks
+ *               each generated network's colour and mark is scripts/networks-brand.json (scripts/network-brands.ts)
  *
  * A chain is included when at least one of LayerZero (v2 or v1), Wormhole NTT or CCIP serves it
  * and it is EVM. Solana is the one non-EVM chain and is curated. Testnets are dropped by name
@@ -45,6 +47,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import yaml from 'js-yaml'
 import { decodeAbiParameters, getAddress, isAddress, toFunctionSelector, type Hex } from 'viem'
+import { drawBrand, guessBrand, type BrandSpec } from './network-brands.ts'
 
 const ROOT = new URL('..', import.meta.url).pathname
 const OUT = join(ROOT, 'src/core/networks.ts')
@@ -55,6 +58,8 @@ const ATTRIBUTION = join(ICONS, 'ATTRIBUTION.md')
 const args = process.argv.slice(2)
 const CHECK = args.includes('--check')
 const SKIP_ICONS = args.includes('--skip-icons')
+const BRAND_ONLY = args.includes('--brand-only')
+const BRAND_TABLE = join(ROOT, 'scripts/networks-brand.json')
 const VERBOSE = args.includes('--verbose')
 const ONLY = new Set((args.find((a) => a.startsWith('--only='))?.slice(7) ?? '').split(',').filter(Boolean).map(Number))
 const CONCURRENCY = Number(args.find((a) => a.startsWith('--concurrency='))?.slice(14) ?? 3)
@@ -86,7 +91,7 @@ type Lz = { chainKey: string; eid: number; endpointV2: string | null; v1: LzV1 |
 type Wormhole = { chainName: string; chainId: number; coreBridge: string; tokenBridge: string | null }
 type Ccip = { selector: string; registryName: string; directoryKey: string; router: string; routerVersion: string; tokenAdminRegistry: string; tokenAdminRegistryVersion: string }
 type Hyperlane = { domain: number; registryName: string; mailbox: string }
-type Brand = { bg: string; dark: boolean; logo: boolean }
+type Brand = { bg: string; dark: boolean; mark: string | null }
 type Network = {
   vm: 'evm' | 'svm'
   name: string
@@ -459,58 +464,10 @@ async function chooseRpcs(chainId: number, pinned: Rpc[], candidates: string[], 
 }
 
 /* ------------------------------------------------------------------------------------------ */
-/* Colours and marks                                                                          */
+/* Colours and marks (the rest lives in scripts/network-brands.ts)                            */
 
-function hexToRgb(hex: string): [number, number, number] | undefined {
-  let h = hex.replace('#', '')
-  if (h.length === 3 || h.length === 4) h = [...h.slice(0, 3)].map((c) => c + c).join('')
-  if (h.length === 8) h = h.slice(0, 6)
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) return undefined
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
-}
-function luminance([r, g, b]: [number, number, number]): number {
-  const f = (c: number) => {
-    const s = c / 255
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
-  }
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
-}
-function saturation([r, g, b]: [number, number, number]): number {
-  const max = Math.max(r, g, b) / 255
-  const min = Math.min(r, g, b) / 255
-  return max === 0 ? 0 : (max - min) / max
-}
-
-/** The neutral tile for a network with no mark of its own, or whose mark carries no colour. */
+/** The placeholder tile before scripts/networks-brand.json draws a network. */
 const NEUTRAL_BG = '#3a3a3a'
-
-/** The most-used saturated colour in a branded mark; undefined when the mark is only greys. */
-function dominantColour(svg: string): string | undefined {
-  const counts = new Map<string, number>()
-  for (const m of svg.matchAll(/(?:fill|stop-color|stroke)\s*[:=]\s*["']?(#[0-9a-fA-F]{3,8})\b/g)) {
-    const rgb = hexToRgb(m[1]!)
-    if (!rgb) continue
-    const L = luminance(rgb)
-    if (L > 0.9 || L < 0.03 || saturation(rgb) < 0.15) continue
-    const key = '#' + rgb.map((c) => c.toString(16).padStart(2, '0')).join('').toUpperCase()
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-  }
-  let best: string | undefined
-  let n = 0
-  for (const [k, v] of counts) {
-    if (v > n) {
-      best = k
-      n = v
-    }
-  }
-  return best
-}
-
-/** web3icons publishes mono marks in white; on a light tile the mark is turned near-black. */
-function recolourMono(svg: string, dark: boolean): string {
-  if (!dark) return svg
-  return svg.replace(/(fill|stroke)=["'](?:white|#fff|#ffffff)["']/gi, '$1="#0B0E11"').replace(/(fill|stroke):\s*(?:white|#fff|#ffffff)/gi, '$1:#0B0E11')
-}
 
 /* ------------------------------------------------------------------------------------------ */
 /* Fee ceiling for a chain the curated file does not size: about 100 USD of the native coin,     */
@@ -530,7 +487,60 @@ function ceilingFor(priceUsd: number | undefined, decimals: number): string {
 /* ------------------------------------------------------------------------------------------ */
 /* Main                                                                                       */
 
+function loadBrandTable(): Record<string, BrandSpec> {
+  return (JSON.parse(readFileSync(BRAND_TABLE, 'utf8')) as { chains: Record<string, BrandSpec> }).chains
+}
+
+/**
+ * `--brand-only`: the committed registry, redrawn. Everything verified on chain stays byte for
+ * byte; only `brand` and the marks in public/chains change. For a colour or a logo fix there is no
+ * reason to ask a hundred chains their eid again.
+ */
+async function brandOnly() {
+  const mod = (await import(OUT)) as { NETWORKS: Record<string, Network>; NETWORKS_GENERATED: string; NETWORKS_EXCLUDED: { chainId: number; name: string; reason: string }[]; NETWORKS_DISCREPANCIES: string[] }
+  const curated = JSON.parse(readFileSync(CURATED, 'utf8')) as CuratedFile
+  const curatedKeys = new Set(Object.values(curated.chains).map((c) => c.key))
+  const table = loadBrandTable()
+  const rows: string[] = []
+  const entries: [string, Network][] = []
+  for (const [key, n0] of Object.entries(mod.NETWORKS)) {
+    const n: Network = JSON.parse(JSON.stringify(n0))
+    // Display names are curated data too, and are re-applied here; nothing verified on chain is.
+    const named = n.chainId !== null ? curated.names[String(n.chainId)] : undefined
+    if (named) n.name = named
+    if (curatedKeys.has(key)) {
+      const c = Object.values(curated.chains).find((x) => x.key === key)!
+      n.brand = { bg: c.brand.bg, dark: c.brand.dark ?? false, mark: `${key}.svg` }
+    } else {
+      const spec = table[key]
+      if (!spec) console.error(`${key}: not in scripts/networks-brand.json — left as it was`)
+      else {
+        const drawn = await drawBrand(key, spec, { iconsDir: ICONS, check: CHECK })
+        n.brand = drawn.brand
+        if (drawn.attribution) rows.push(drawn.attribution)
+        if (drawn.note) console.error(`${key}: ${drawn.note}`)
+      }
+    }
+    entries.push([key, n])
+  }
+  entries.sort((a, b) => (a[0] < b[0] ? -1 : 1))
+  const text = render(entries, mod.NETWORKS_GENERATED, [...mod.NETWORKS_EXCLUDED], [...mod.NETWORKS_DISCREPANCIES])
+  if (CHECK) {
+    if (readFileSync(OUT, 'utf8') !== text) {
+      console.error('networks.ts brands differ from scripts/networks-brand.json — run with --brand-only')
+      process.exit(1)
+    }
+    console.log('brands match scripts/networks-brand.json')
+    return
+  }
+  writeFileSync(OUT, text)
+  writeAttribution(rows, entries.filter(([, n]) => !n.brand.mark).map(([k]) => k))
+  const noMark = entries.filter(([, n]) => !n.brand.mark).map(([k]) => k)
+  console.log(`redrew ${rows.length} marks; ${noMark.length} network(s) show initials: ${noMark.join(' ')}`)
+}
+
 async function main() {
+  if (BRAND_ONLY) return brandOnly()
   const curated = JSON.parse(readFileSync(CURATED, 'utf8')) as CuratedFile
   const curatedByKey = new Map(Object.values(curated.chains).map((c) => [c.key, c]))
 
@@ -795,7 +805,7 @@ async function main() {
         wormhole: whOut,
         ccip: ccipOut,
         hyperlane: hlOut,
-        brand: { bg: cur?.brand.bg ?? NEUTRAL_BG, dark: cur?.brand.dark ?? false, logo: cur?.logo === 'keep' },
+        brand: { bg: cur?.brand.bg ?? NEUTRAL_BG, dark: cur?.brand.dark ?? false, mark: cur?.logo === 'keep' ? `${key}.svg` : null },
       }
       const iconId = cur ? undefined : w3ByChainId.get(chainId)?.id
       built.push({ key, chainId, net, iconId, notes: [...log, ...(cur ? [] : [`cgId ${l?.cgId ?? h?.cgId ?? llamaById.get(chainId)?.gasTokenGeckoId ?? '-'}`])] })
@@ -829,26 +839,15 @@ async function main() {
   // Marks and brand colours for the chains the curated file does not draw.
   const attributionRows: string[] = []
   if (!SKIP_ICONS) {
+    const table = loadBrandTable()
     for (const b of built) {
-      if (b.net.brand.logo) continue
-      if (!b.iconId) {
-        b.notes.push('no mark in web3icons — the tile shows initials')
-        continue
-      }
-      try {
-        const [mono, branded] = await Promise.all([fetchText(`${SOURCES.web3iconsSvg}mono/${b.iconId}.svg`), fetchText(`${SOURCES.web3iconsSvg}branded/${b.iconId}.svg`).catch(() => '')])
-        if (!mono.includes('<svg')) throw new Error('not an svg')
-        const bg = dominantColour(branded) ?? NEUTRAL_BG
-        const rgb = hexToRgb(bg)!
-        const dark = luminance(rgb) > 0.5
-        b.net.brand = { bg, dark, logo: true }
-        const file = join(ICONS, `${b.key}.svg`)
-        if (!CHECK) writeFileSync(file, recolourMono(mono, dark))
-        else if (!existsSync(file)) discrepancies.push(`${b.net.name}: public/chains/${b.key}.svg is missing`)
-        attributionRows.push(`| ${b.key}.svg | networks/mono/${b.iconId}.svg | mono, ${dark ? '#0B0E11 (recoloured)' : 'white (as published)'}; tile ${bg} from networks/branded/${b.iconId}.svg |`)
-      } catch (e) {
-        b.notes.push(`web3icons mark ${b.iconId} could not be fetched (${String((e as Error).message)}) — the tile shows initials`)
-      }
+      if (curated.chains[String(b.chainId)]) continue
+      const spec = table[b.key] ?? (await guessBrand(b.iconId))
+      if (!table[b.key]) b.notes.push('not in scripts/networks-brand.json — tile colour and mark guessed from web3icons; add it to the table')
+      const drawn = await drawBrand(b.key, spec, { iconsDir: ICONS, check: CHECK })
+      b.net.brand = drawn.brand
+      if (drawn.attribution) attributionRows.push(drawn.attribution)
+      if (drawn.note) b.notes.push(drawn.note)
     }
   }
 
@@ -878,7 +877,7 @@ async function main() {
     wormhole: { chainName: 'Solana', chainId: 1, coreBridge: wh.solana.coreBridge, tokenBridge: null },
     ccip: null,
     hyperlane: null,
-    brand: { bg: sol.brand.bg, dark: sol.brand.dark ?? false, logo: true },
+    brand: { bg: sol.brand.bg, dark: sol.brand.dark ?? false, mark: 'solana.svg' },
   }
 
   const entries = [...built.map((b) => [b.key, b.net] as const), ['solana', solana] as const].sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -903,7 +902,7 @@ async function main() {
     console.log(`networks.ts matches the sources and the chains themselves (${entries.length} networks)`)
   } else {
     writeFileSync(OUT, text)
-    if (!SKIP_ICONS) writeAttribution(attributionRows, entries.filter(([, n]) => !n.brand.logo).map(([k]) => k))
+    if (!SKIP_ICONS) writeAttribution(attributionRows, entries.filter(([, n]) => !n.brand.mark).map(([k]) => k))
     console.log(`wrote ${OUT}: ${entries.length} networks`)
   }
 
@@ -912,7 +911,7 @@ async function main() {
   console.log(`\nLayerZero v2 ${by((n) => !!n.lz?.endpointV2)} · LayerZero v1 ${by((n) => !!n.lz?.v1)} (active ${by((n) => n.lz?.v1?.active === true)}) · Wormhole ${by((n) => !!n.wormhole)} · CCIP ${by((n) => !!n.ccip)} · Hyperlane ${by((n) => !!n.hyperlane)}`)
   const single = entries.filter(([, n]) => new Set(n.rpcs.map((r) => r.provider)).size < 2).map(([k]) => k)
   console.log(`one RPC operator only (${single.length}): ${single.join(' ')}`)
-  const noIcon = entries.filter(([, n]) => !n.brand.logo).map(([k]) => k)
+  const noIcon = entries.filter(([, n]) => !n.brand.mark).map(([k]) => k)
   console.log(`no mark, initials shown (${noIcon.length}): ${noIcon.join(' ')}`)
   const noTvl = entries.filter(([, n]) => n.tvlUsd === 0).map(([k]) => k)
   console.log(`no TVL on DefiLlama (${noTvl.length}): ${noTvl.join(' ')}`)
@@ -979,7 +978,8 @@ export type NetworkCcip = {
   readonly tokenAdminRegistryVersion: string
 }
 export type NetworkHyperlane = { readonly domain: number; readonly registryName: string; readonly mailbox: string }
-export type NetworkBrand = { readonly bg: string; readonly dark: boolean; readonly logo: boolean }
+/** \`mark\` is the file in public/chains the tile shows, or null for a network drawn as its initials. */
+export type NetworkBrand = { readonly bg: string; readonly dark: boolean; readonly mark: string | null }
 export type NetworkSpec = {
   readonly vm: 'evm' | 'svm'
   readonly name: string
@@ -1035,17 +1035,20 @@ export const NETWORKS = {
 function writeAttribution(rows: string[], initials: string[]) {
   const header = `# Network logos
 
-Vector marks from [web3icons](https://github.com/0xa3k5/web3icons) (\`raw-svgs/networks/\`, MIT
-licence), vendored here so the app never loads images from third-party hosts (CSP \`img-src 'self'\`).
-Each mark is a trademark of the respective network and is used solely to identify that network.
-Unlisted is not affiliated with or endorsed by any of them.
+Marks for the networks this app serves, vendored here so the app never loads images from
+third-party hosts (CSP \`img-src 'self'\`). Each mark is a trademark of the respective network and is
+used solely to identify that network. Unlisted is not affiliated with or endorsed by any of them.
 
-The "mono" variants were recoloured (white or near-black) to sit on the network's brand colour, which
-is applied by the tile around them (\`src/core/networks.ts\`, \`brand\`); the "branded" variants are
-used as published. The first table is hand-placed; the second is written by
-\`scripts/update-networks.ts\`, which takes the tile colour from the most-used colour of the branded
-mark. A network with no mark in web3icons shows its initials on a neutral tile instead; those are
-listed at the end.
+The first table is hand-placed, from [web3icons](https://github.com/0xa3k5/web3icons)
+(\`raw-svgs/networks/\`, MIT). The second is written by \`scripts/update-networks.ts\` from the
+table in \`scripts/networks-brand.json\`, which names each network's tile colour and the source of its
+mark: web3icons (MIT), the [Hyperlane registry](https://github.com/hyperlane-xyz/hyperlane-registry)
+(\`chains/<name>/logo.svg\`, MIT), [ethereum-lists/chains](https://github.com/ethereum-lists/chains)
+(\`_data/icons\`, MIT; icons submitted by each network's own team, fetched from IPFS), or the
+network's own website. "mono" marks are white and turned near-black on a light tile; a mark drawn
+"every colour set to white" is the official mark as a one-colour silhouette; the tile colour is
+applied around it (\`src/core/networks.ts\`, \`brand\`). A network with no mark anywhere shows its
+initials on its tile; those are listed at the end.
 
 | file | source | variant |
 |---|---|---|
@@ -1071,7 +1074,7 @@ listed at the end.
 |---|---|---|
 ${rows.sort().join('\n')}
 
-## No mark (initials on a neutral tile)
+## No mark (initials on the tile)
 
 ${initials.sort().join(', ')}
 `

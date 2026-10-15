@@ -1,16 +1,19 @@
 # Network logos
 
-Vector marks from [web3icons](https://github.com/0xa3k5/web3icons) (`raw-svgs/networks/`, MIT
-licence), vendored here so the app never loads images from third-party hosts (CSP `img-src 'self'`).
-Each mark is a trademark of the respective network and is used solely to identify that network.
-Unlisted is not affiliated with or endorsed by any of them.
+Marks for the networks this app serves, vendored here so the app never loads images from
+third-party hosts (CSP `img-src 'self'`). Each mark is a trademark of the respective network and is
+used solely to identify that network. Unlisted is not affiliated with or endorsed by any of them.
 
-The "mono" variants were recoloured (white or near-black) to sit on the network's brand colour, which
-is applied by the tile around them (`src/core/networks.ts`, `brand`); the "branded" variants are
-used as published. The first table is hand-placed; the second is written by
-`scripts/update-networks.ts`, which takes the tile colour from the most-used colour of the branded
-mark. A network with no mark in web3icons shows its initials on a neutral tile instead; those are
-listed at the end.
+The first table is hand-placed, from [web3icons](https://github.com/0xa3k5/web3icons)
+(`raw-svgs/networks/`, MIT). The second is written by `scripts/update-networks.ts` from the
+table in `scripts/networks-brand.json`, which names each network's tile colour and the source of its
+mark: web3icons (MIT), the [Hyperlane registry](https://github.com/hyperlane-xyz/hyperlane-registry)
+(`chains/<name>/logo.svg`, MIT), [ethereum-lists/chains](https://github.com/ethereum-lists/chains)
+(`_data/icons`, MIT; icons submitted by each network's own team, fetched from IPFS), or the
+network's own website. "mono" marks are white and turned near-black on a light tile; a mark drawn
+"every colour set to white" is the official mark as a one-colour silhouette; the tile colour is
+applied around it (`src/core/networks.ts`, `brand`). A network with no mark anywhere shows its
+initials on its tile; those are listed at the end.
 
 | file | source | variant |
 |---|---|---|
@@ -34,66 +37,109 @@ listed at the end.
 
 | file | source | variant |
 |---|---|---|
-| abstract.svg | networks/mono/abstract.svg | mono, white (as published); tile #054729 from networks/branded/abstract.svg |
-| ape.svg | networks/mono/apechain.svg | mono, white (as published); tile #0054FA from networks/branded/apechain.svg |
-| astar.svg | networks/mono/astar.svg | mono, #0B0E11 (recoloured); tile #0AE2FF from networks/branded/astar.svg |
-| beam.svg | networks/mono/beam.svg | mono, white (as published); tile #0B76FF from networks/branded/beam.svg |
-| bera.svg | networks/mono/berachain.svg | mono, white (as published); tile #FB9942 from networks/branded/berachain.svg |
-| blast.svg | networks/mono/blast.svg | mono, white (as published); tile #3a3a3a from networks/branded/blast.svg |
-| bob.svg | networks/mono/bob.svg | mono, white (as published); tile #F25D00 from networks/branded/bob.svg |
-| celo.svg | networks/mono/celo.svg | mono, white (as published); tile #3a3a3a from networks/branded/celo.svg |
-| chiliz.svg | networks/mono/chiliz.svg | mono, white (as published); tile #F60250 from networks/branded/chiliz.svg |
-| citrea.svg | networks/mono/citrea.svg | mono, white (as published); tile #3a3a3a from networks/branded/citrea.svg |
-| codex.svg | networks/mono/codex.svg | mono, #0B0E11 (recoloured); tile #F8E6B6 from networks/branded/codex.svg |
-| conflux.svg | networks/mono/conflux.svg | mono, white (as published); tile #37A1DB from networks/branded/conflux.svg |
-| cronosevm.svg | networks/mono/cronos.svg | mono, white (as published); tile #3a3a3a from networks/branded/cronos.svg |
-| cronoszkevm.svg | networks/mono/cronos-zkevm.svg | mono, white (as published); tile #3a3a3a from networks/branded/cronos-zkevm.svg |
-| etherlink.svg | networks/mono/etherlink.svg | mono, #0B0E11 (recoloured); tile #38FF9C from networks/branded/etherlink.svg |
-| fantom.svg | networks/mono/fantom.svg | mono, white (as published); tile #26B6EA from networks/branded/fantom.svg |
-| flare.svg | networks/mono/flare.svg | mono, white (as published); tile #E62058 from networks/branded/flare.svg |
-| fraxtal.svg | networks/mono/fraxtal.svg | mono, white (as published); tile #3a3a3a from networks/branded/fraxtal.svg |
-| fuse.svg | networks/mono/fuse.svg | mono, #0B0E11 (recoloured); tile #B4F9B9 from networks/branded/fuse.svg |
-| gnosis.svg | networks/mono/gnosis.svg | mono, white (as published); tile #3E6957 from networks/branded/gnosis.svg |
-| gravity.svg | networks/mono/gravity.svg | mono, #0B0E11 (recoloured); tile #FFAC43 from networks/branded/gravity.svg |
-| gunz.svg | networks/mono/gunz.svg | mono, #0B0E11 (recoloured); tile #C2FCCD from networks/branded/gunz.svg |
-| hashkey.svg | networks/mono/hashkey.svg | mono, white (as published); tile #0080FF from networks/branded/hashkey.svg |
-| hedera.svg | networks/mono/hedera-hashgraph.svg | mono, white (as published); tile #3a3a3a from networks/branded/hedera-hashgraph.svg |
-| iota.svg | networks/mono/iota-evm.svg | mono, white (as published); tile #3a3a3a from networks/branded/iota-evm.svg |
-| islander.svg | networks/mono/vana.svg | mono, white (as published); tile #3a3a3a from networks/branded/vana.svg |
-| katana.svg | networks/mono/katana.svg | mono, white (as published); tile #3a3a3a from networks/branded/katana.svg |
-| kava.svg | networks/mono/kava.svg | mono, white (as published); tile #FF564F from networks/branded/kava.svg |
-| klaytn.svg | networks/mono/kaia.svg | mono, #0B0E11 (recoloured); tile #BFF009 from networks/branded/kaia.svg |
-| lisk.svg | networks/mono/lisk.svg | mono, white (as published); tile #3a3a3a from networks/branded/lisk.svg |
-| lyra.svg | networks/mono/lyra.svg | mono, #0B0E11 (recoloured); tile #25FAAF from networks/branded/lyra.svg |
-| manta.svg | networks/mono/manta-pacific.svg | mono, white (as published); tile #29CCB9 from networks/branded/manta-pacific.svg |
-| mantle.svg | networks/mono/mantle.svg | mono, white (as published); tile #3a3a3a from networks/branded/mantle.svg |
-| megaeth.svg | networks/mono/mega-eth.svg | mono, white (as published); tile #3a3a3a from networks/branded/mega-eth.svg |
-| metis.svg | networks/mono/metis-andromeda.svg | mono, #0B0E11 (recoloured); tile #00D8C1 from networks/branded/metis-andromeda.svg |
-| mode.svg | networks/mono/mode.svg | mono, #0B0E11 (recoloured); tile #DFFE00 from networks/branded/mode.svg |
-| moonbeam.svg | networks/mono/moonbeam.svg | mono, white (as published); tile #53CBC9 from networks/branded/moonbeam.svg |
-| neox.svg | networks/mono/neo-x.svg | mono, #0B0E11 (recoloured); tile #00E599 from networks/branded/neo-x.svg |
-| nibiru.svg | networks/mono/nibiru.svg | mono, white (as published); tile #F29AC4 from networks/branded/nibiru.svg |
-| orderly.svg | networks/mono/orderly.svg | mono, white (as published); tile #5D00BA from networks/branded/orderly.svg |
-| peaq.svg | networks/mono/peaq.svg | mono, white (as published); tile #6666FE from networks/branded/peaq.svg |
-| plumephoenix.svg | networks/mono/plume.svg | mono, white (as published); tile #FF3D00 from networks/branded/plume.svg |
-| reya.svg | networks/mono/reya.svg | mono, #0B0E11 (recoloured); tile #08F06A from networks/branded/reya.svg |
-| ronin.svg | networks/mono/ronin.svg | mono, white (as published); tile #004DE5 from networks/branded/ronin.svg |
-| rootstock.svg | networks/mono/rootstock.svg | mono, white (as published); tile #FF9103 from networks/branded/rootstock.svg |
-| sei.svg | networks/mono/sei-network.svg | mono, white (as published); tile #90305C from networks/branded/sei-network.svg |
-| soneium.svg | networks/mono/soneium.svg | mono, white (as published); tile #3a3a3a from networks/branded/soneium.svg |
-| sonic.svg | networks/mono/sonic.svg | mono, white (as published); tile #3a3a3a from networks/branded/sonic.svg |
-| stable.svg | networks/mono/stable.svg | mono, white (as published); tile #3a3a3a from networks/branded/stable.svg |
-| taiko.svg | networks/mono/taiko.svg | mono, white (as published); tile #E81899 from networks/branded/taiko.svg |
-| telos.svg | networks/mono/telos.svg | mono, white (as published); tile #42A0B9 from networks/branded/telos.svg |
-| tempo.svg | networks/mono/tempo.svg | mono, white (as published); tile #3a3a3a from networks/branded/tempo.svg |
-| unichain.svg | networks/mono/unichain.svg | mono, white (as published); tile #F50DB4 from networks/branded/unichain.svg |
-| wemix30.svg | networks/mono/wemix.svg | mono, #0B0E11 (recoloured); tile #27EA84 from networks/branded/wemix.svg |
-| worldchain.svg | networks/mono/world.svg | mono, white (as published); tile #3a3a3a from networks/branded/world.svg |
-| xdc.svg | networks/mono/xdc.svg | mono, #0B0E11 (recoloured); tile #9FF3FF from networks/branded/xdc.svg |
-| xlayer.svg | networks/mono/x-layer.svg | mono, white (as published); tile #3a3a3a from networks/branded/x-layer.svg |
-| zircuit.svg | networks/mono/zircuit.svg | mono, white (as published); tile #169E00 from networks/branded/zircuit.svg |
-| zksync.svg | networks/mono/zksync.svg | mono, white (as published); tile #3a3a3a from networks/branded/zksync.svg |
+| abcore.png | the network's own site, www.ab.org | raster, resized; tile #2055C9 |
+| abstract.svg | web3icons raw-svgs/networks/mono/abstract.svg (MIT) | mono, white as published; tile #054729 |
+| adichain.svg | web3icons raw-svgs/tokens/mono/ADI.svg (MIT) | mono, white as published; tile linear-gradient(180deg, #FE7109, #003BFF) |
+| ape.svg | web3icons raw-svgs/networks/mono/apechain.svg (MIT) | mono, white as published; tile #0054FA |
+| apexfusionnexus.png | ethereum-lists/chains _data/icons/apexfusion.json (MIT) | raster, resized; tile #0F1B1A |
+| arc.svg | hyperlane-registry chains/arc/logo.svg (MIT) | every colour set to white; tile #1B3158 |
+| astar.svg | web3icons raw-svgs/networks/mono/astar.svg (MIT) | mono, white as published; tile linear-gradient(180deg, #0AE2FF, #0279C2) |
+| b2.png | ethereum-lists/chains _data/icons/bsquare.json (MIT) | raster, resized; tile #FFB852 |
+| beam.svg | web3icons raw-svgs/networks/mono/beam.svg (MIT) | mono, white as published; tile #0B76FF |
+| bera.svg | web3icons raw-svgs/networks/branded/berachain.svg (MIT) | as published; tile #472920 |
+| bitlayer.svg | hyperlane-registry chains/bitlayer/logo.svg (MIT) | as published; tile #000000 |
+| blast.svg | web3icons raw-svgs/networks/mono/blast.svg (MIT) | mono, recoloured near-black; tile #FCFC03 |
+| bob.svg | web3icons raw-svgs/networks/mono/bob.svg (MIT) | mono, white as published; tile #F25D00 |
+| celo.svg | web3icons raw-svgs/networks/mono/celo.svg (MIT) | mono, recoloured near-black; tile #FCFE52 |
+| chiliz.svg | web3icons raw-svgs/networks/mono/chiliz.svg (MIT) | mono, white as published; tile #F60250 |
+| citrea.svg | web3icons raw-svgs/networks/mono/citrea.svg (MIT) | mono, white as published; tile #FD7F00 |
+| codex.svg | web3icons raw-svgs/networks/mono/codex.svg (MIT) | mono, recoloured near-black; tile #F8E6B6 |
+| conflux.svg | web3icons raw-svgs/networks/mono/conflux.svg (MIT) | mono, white as published; tile #37A1DB |
+| coredao.svg | hyperlane-registry chains/coredao/logo.svg (MIT) | every colour set to white; tile #FF9211 |
+| creditcoin.png | ethereum-lists/chains _data/icons/creditcoin.json (MIT) | raster, cropped to a rounded square; tile #4976FF |
+| cronosevm.svg | web3icons raw-svgs/networks/mono/cronos.svg (MIT) | mono, white as published; tile #051221 |
+| cronoszkevm.svg | web3icons raw-svgs/networks/mono/cronos-zkevm.svg (MIT) | mono, white as published; tile #051221 |
+| dexalot.png | ethereum-lists/chains _data/icons/dexalot.json (MIT) | raster turned into a white silhouette; tile #E71771 |
+| doma.png | ethereum-lists/chains _data/icons/doma.json (MIT) | raster turned into a white silhouette; tile #4B76FA |
+| edge.png | the network's own site, pro.edgex.exchange | raster, cropped to a rounded square; tile #000000 |
+| etherlink.svg | web3icons raw-svgs/networks/mono/etherlink.svg (MIT) | mono, recoloured near-black; tile #38FF9C |
+| fantom.svg | web3icons raw-svgs/networks/mono/fantom.svg (MIT) | mono, white as published; tile #1969FF |
+| flare.svg | web3icons raw-svgs/networks/mono/flare.svg (MIT) | mono, white as published; tile #E62058 |
+| flow.svg | web3icons raw-svgs/tokens/mono/FLOW.svg (MIT) | mono, recoloured near-black; tile #00EF8B |
+| fraxtal.svg | web3icons raw-svgs/networks/mono/fraxtal.svg (MIT) | mono, white as published; tile #000000 |
+| fuse.svg | web3icons raw-svgs/networks/mono/fuse.svg (MIT) | mono, recoloured near-black; tile #B4F9B9 |
+| gensyn.png | ethereum-lists/chains _data/icons/gensyn.json (MIT) | raster, resized; tile #FFD4CF |
+| gnosis.svg | web3icons raw-svgs/networks/mono/gnosis.svg (MIT) | mono, white as published; tile #3E6957 |
+| goat.png | ethereum-lists/chains _data/icons/goat.json (MIT) | raster, cropped to a rounded square; tile #D39820 |
+| gravity.svg | web3icons raw-svgs/networks/mono/gravity.svg (MIT) | mono, white as published; tile #FFAC43 |
+| gunz.svg | web3icons raw-svgs/networks/mono/gunz.svg (MIT) | mono, recoloured near-black; tile linear-gradient(180deg, #C2FCCD, #D3F1FB) |
+| hashkey.svg | web3icons raw-svgs/networks/mono/hashkey.svg (MIT) | mono, white as published; tile #0072E5 |
+| hedera.svg | web3icons raw-svgs/networks/mono/hedera-hashgraph.svg (MIT) | mono, white as published; tile #000000 |
+| hemi.svg | hyperlane-registry chains/hemi/logo.svg (MIT) | every colour set to white; tile #FF6C15 |
+| henesys.png | ethereum-lists/chains _data/icons/nexpace.json (MIT) | raster, resized; tile #14122B |
+| horizen.png | ethereum-lists/chains _data/icons/horizen.json (MIT) | raster, cropped to a rounded square; tile #FFCB17 |
+| humanity.png | the network's own site, framerusercontent.com | raster, cropped to a rounded square; tile #EDFCEC |
+| hydration.svg | ethereum-lists/chains _data/icons/hydration.json (MIT) | every colour set to white; tile #E53E76 |
+| injectiveevm.svg | web3icons raw-svgs/networks/mono/injective.svg (MIT) | mono, white as published; tile #4D3DFF |
+| iota.svg | web3icons raw-svgs/networks/mono/iota-evm.svg (MIT) | mono, white as published; tile #000000 |
+| irys.png | ethereum-lists/chains _data/icons/irys.json (MIT) | raster, cropped to a rounded square; tile #51FFD6 |
+| islander.svg | web3icons raw-svgs/networks/mono/vana.svg (MIT) | mono, recoloured near-black; tile #F0F0E9 |
+| jovay.png | ethereum-lists/chains _data/icons/jovay.json (MIT) | raster, cropped to a rounded square; tile #326CFF |
+| katana.svg | web3icons raw-svgs/networks/branded/katana.svg (MIT) | as published; tile #0541B2 |
+| kava.svg | web3icons raw-svgs/networks/mono/kava.svg (MIT) | mono, white as published; tile #FF433E |
+| kite.svg | the network's own site, gokite.ai | as published; tile #1D1A16 |
+| klaytn.svg | web3icons raw-svgs/networks/mono/kaia.svg (MIT) | mono, recoloured near-black; tile #BFF009 |
+| lens.svg | web3icons raw-svgs/networks/mono/lens.svg (MIT) | mono, white as published; tile #000000 |
+| lisk.svg | web3icons raw-svgs/networks/mono/lisk.svg (MIT) | mono, white as published; tile #0C152E |
+| lyra.svg | web3icons raw-svgs/networks/mono/lyra.svg (MIT) | mono, recoloured near-black; tile #25FAAF |
+| manta.svg | web3icons raw-svgs/networks/mono/manta-pacific.svg (MIT) | mono, white as published; tile linear-gradient(180deg, #29CCB9, #0091FF, #FF66B7) |
+| mantle.svg | web3icons raw-svgs/networks/mono/mantle.svg (MIT) | mono, white as published; tile #06110D |
+| megaeth.svg | web3icons raw-svgs/networks/mono/mega-eth.svg (MIT) | mono, white as published; tile #19191A |
+| memecore.svg | ethereum-lists/chains _data/icons/memecore.json (MIT) | as published; tile #CBBBFB |
+| merlin.svg | hyperlane-registry chains/merlin/logo.svg (MIT) | as published; tile #6335FF |
+| metal.svg | hyperlane-registry chains/metal/logo.svg (MIT) | as published; tile #0E0E10 |
+| metis.svg | web3icons raw-svgs/networks/mono/metis-andromeda.svg (MIT) | mono, recoloured near-black; tile #00D8C1 |
+| mezo.svg | the network's own site, mezo.org | every colour set to white; tile #FF004D |
+| moca.svg | hyperlane-registry chains/mocachain/logo.svg (MIT) | every colour set to white; tile #EF61B4 |
+| mode.svg | web3icons raw-svgs/networks/mono/mode.svg (MIT) | mono, recoloured near-black; tile #DFFE00 |
+| moonbeam.svg | web3icons raw-svgs/networks/mono/moonbeam.svg (MIT) | mono, white as published; tile #CB1F7A |
+| morph.svg | hyperlane-registry chains/morph/logo.svg (MIT) | every colour set to white; tile #14A800 |
+| neox.svg | web3icons raw-svgs/networks/mono/neo-x.svg (MIT) | mono, recoloured near-black; tile #00E599 |
+| nibiru.svg | web3icons raw-svgs/networks/mono/nibiru.svg (MIT) | mono, recoloured near-black; tile linear-gradient(180deg, #F29AC4, #CDC6D7) |
+| og.svg | hyperlane-registry chains/zerogravity/logo.svg (MIT) | as published; tile #9200E1 |
+| onemoney.svg | ethereum-lists/chains _data/icons/1moneynetwork.json (MIT) | as published; tile #073387 |
+| opbnb.svg | the bsc mark above | as published; tile #F0B90B |
+| orderly.svg | web3icons raw-svgs/networks/mono/orderly.svg (MIT) | mono, white as published; tile #5D00BA |
+| peaq.svg | web3icons raw-svgs/networks/mono/peaq.svg (MIT) | mono, white as published; tile #6666FE |
+| pharos.png | ethereum-lists/chains _data/icons/pharos.json (MIT) | raster turned into a white silhouette; tile #0007B9 |
+| plumephoenix.svg | web3icons raw-svgs/networks/mono/plume.svg (MIT) | mono, white as published; tile #FF3D00 |
+| rayls.svg | ethereum-lists/chains _data/icons/rayls.json (MIT) | as published; tile #000000 |
+| redbelly.svg | ethereum-lists/chains _data/icons/redbelly.json (MIT) | every colour set to white; tile #FF4848 |
+| reya.svg | web3icons raw-svgs/networks/mono/reya.svg (MIT) | mono, recoloured near-black; tile #08F06A |
+| rise.png | the network's own site, risechain.com | raster, cropped to a rounded square; tile #04DF83 |
+| ronin.svg | web3icons raw-svgs/networks/mono/ronin.svg (MIT) | mono, white as published; tile #004DE5 |
+| rootstock.svg | web3icons raw-svgs/networks/mono/rootstock.svg (MIT) | mono, white as published; tile #FF9103 |
+| sei.svg | web3icons raw-svgs/networks/mono/sei-network.svg (MIT) | mono, white as published; tile #9E1F19 |
+| shibarium.svg | hyperlane-registry chains/shibarium/logo.svg (MIT) | as published; tile #F00500 |
+| somnia.svg | hyperlane-registry chains/somnia/logo.svg (MIT) | as published; tile #0B0B14 |
+| soneium.svg | web3icons raw-svgs/networks/mono/soneium.svg (MIT) | mono, white as published; tile #000000 |
+| sonic.svg | web3icons raw-svgs/networks/mono/sonic.svg (MIT) | mono, white as published; tile #141416 |
+| stable.svg | web3icons raw-svgs/networks/mono/stable.svg (MIT) | mono, white as published; tile #011F1E |
+| story.svg | hyperlane-registry chains/story/logo.svg (MIT) | as published; tile #000000 |
+| subtensorevm.svg | hyperlane-registry chains/subtensor/logo.svg (MIT) | every colour set to white; tile #000000 |
+| tac.svg | hyperlane-registry chains/tac/logo.svg (MIT) | every colour set to white; tile #91029B |
+| taiko.svg | web3icons raw-svgs/networks/mono/taiko.svg (MIT) | mono, white as published; tile #E81899 |
+| telos.svg | web3icons raw-svgs/networks/mono/telos.svg (MIT) | mono, white as published; tile linear-gradient(180deg, #00F2FE, #4FACFE, #C471F5) |
+| tempo.svg | web3icons raw-svgs/networks/mono/tempo.svg (MIT) | mono, white as published; tile #000000 |
+| unichain.svg | web3icons raw-svgs/networks/mono/unichain.svg (MIT) | mono, white as published; tile #F50DB4 |
+| wemix30.svg | web3icons raw-svgs/networks/mono/wemix.svg (MIT) | mono, recoloured near-black; tile #27EA84 |
+| worldchain.svg | web3icons raw-svgs/networks/mono/world.svg (MIT) | mono, white as published; tile #000000 |
+| xdc.svg | web3icons raw-svgs/networks/mono/xdc.svg (MIT) | mono, recoloured near-black; tile #9FF3FF |
+| xlayer.svg | web3icons raw-svgs/networks/mono/x-layer.svg (MIT) | mono, white as published; tile #000000 |
+| zircuit.svg | web3icons raw-svgs/networks/branded/zircuit.svg (MIT) | as published; tile #092306 |
+| zksync.svg | web3icons raw-svgs/networks/mono/zksync.svg (MIT) | mono, white as published; tile #000000 |
+| zora.svg | web3icons raw-svgs/networks/branded/zora.svg (MIT) | as published; tile #F2CEFE |
 
-## No mark (initials on a neutral tile)
+## No mark (initials on the tile)
 
-abcore, adichain, apexfusionnexus, arc, b2, bitlayer, coredao, creditcoin, dexalot, doma, edge, flow, gensyn, goat, hemi, henesys, horizen, humanity, hydration, injectiveevm, irys, jovay, kite, lens, memecore, merlin, metal, mezo, moca, morph, og, onemoney, opbnb, pharos, rayls, redbelly, rise, shibarium, somnia, story, subtensorevm, tac, zora
+

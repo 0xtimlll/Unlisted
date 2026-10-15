@@ -17,10 +17,10 @@ export function ChainIcon({ chain, size = 32, className = '' }: { chain: ChainKe
       style={{ width: size, height: size, borderRadius: Math.max(4, Math.round(size / 4)), background: b.bg }}
       aria-hidden
     >
-      {b.logo ? (
+      {b.mark ? (
         // Static file from /public; next/image is pointless for a static export.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={`/chains/${chain}.svg`} alt="" width={logo} height={logo} loading="lazy" decoding="async" draggable={false} style={{ width: logo, height: logo }} />
+        <img src={`/chains/${b.mark}`} alt="" width={logo} height={logo} loading="lazy" decoding="async" draggable={false} style={{ width: logo, height: logo }} />
       ) : (
         <span className={`font-semibold leading-none ${b.dark ? 'text-[#0b0e11]' : 'text-white'}`} style={{ fontSize: Math.max(8, Math.round(size * 0.36)) }}>
           {initialsOf(byKey(chain).name)}

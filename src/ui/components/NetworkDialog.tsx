@@ -8,9 +8,9 @@
  * on the "To" side the ones the contract has no route to are shown dimmed, so the absence of a
  * route is visible rather than silent.
  *
- * Built for a hundred-odd cards: the marks load lazily and the rows below the fold are not laid
- * out until scrolled to (`card-lazy`), so opening, searching and scrolling cost the same as with
- * fifteen.
+ * Built for a hundred-odd cards: the marks load lazily (`loading="lazy"`), so opening and
+ * searching cost what they did with fifteen. Every pill — the VM filters and the order switch — is
+ * the same pill, and a card grows on hover without anything clipping it.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { byKey, type ChainKey } from '@/core/chains'
@@ -19,7 +19,7 @@ import { BRAND, initialsOf } from '../brand'
 import { orderNetworks, type NetworkOrder } from '../networkOrder'
 import { useNetworkPrefs } from '../networkPrefs'
 import { CheckIcon, CloseIcon, SearchIcon, SwapIcon } from './icons'
-import { Kbd, Tabs, useDismiss } from './ui'
+import { Kbd, useDismiss } from './ui'
 
 type Filter = 'all' | 'evm' | 'svm'
 
@@ -147,27 +147,20 @@ export function NetworkDialog({
           </div>
 
           <div className="w-full max-w-5xl pb-8">
-            <div className="flex items-center justify-between gap-4 px-6 py-1">
-              <div className="flex items-center gap-2">
-                {filters.map((f) => {
-                  const active = filter === f.value
-                  return (
-                    <button
-                      key={f.value}
-                      type="button"
-                      onClick={() => setFilter(f.value)}
-                      aria-pressed={active}
-                      className="relative flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-full px-4 pr-5 text-sm font-semibold text-ink transition hover:scale-[1.03] outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
-                    >
-                      <span aria-hidden className={`absolute inset-0 bg-surface transition ${active ? 'opacity-100' : 'opacity-30'}`} />
-                      <span className={`relative z-10 ${active ? 'text-ink' : 'text-muted'}`}>{f.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              {/* The order switch: a pill pair in the page's own style, remembered across reloads. */}
-              <div className="flex h-12 items-center rounded-full bg-surface/30 px-1" role="group" aria-label={d.network.order}>
-                <Tabs<NetworkOrder> value={prefs.order} onChange={prefs.setOrder} items={orderItems} />
+            <div className="flex items-center justify-center gap-2 px-6 py-1">
+              {filters.map((f) => (
+                <Pill key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
+                  {f.label}
+                </Pill>
+              ))}
+              {/* The order switch: the same pills, after a hairline; remembered across reloads. */}
+              <span aria-hidden className="mx-2 h-6 w-px bg-line" />
+              <div className="flex items-center gap-2" role="group" aria-label={d.network.order}>
+                {orderItems.map((o) => (
+                  <Pill key={o.value} active={prefs.order === o.value} onClick={() => prefs.setOrder(o.value)}>
+                    {o.label}
+                  </Pill>
+                ))}
               </div>
             </div>
           </div>
@@ -180,7 +173,7 @@ export function NetworkDialog({
               return (
                 // The entrance animation lives on a wrapper: an animation's final keyframe would
                 // otherwise pin the opacity and hide the dimming of a card with no route.
-                <div key={x.key} className="card-lazy animate-card-in" style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}>
+                <div key={x.key} className="animate-card-in" style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}>
                   <button
                     type="button"
                     disabled={x.dim}
@@ -190,9 +183,9 @@ export function NetworkDialog({
                     className="relative flex aspect-[3.25/4] w-full shrink-0 cursor-pointer flex-col overflow-hidden rounded-[28px] shadow-sm transition enabled:hover:scale-[1.03] disabled:cursor-not-allowed disabled:opacity-30 outline-none focus-visible:ring-4 focus-visible:ring-ink/40"
                   >
                     <span className="relative z-10 flex w-full grow flex-col items-center justify-center gap-4 px-6">
-                      {b.logo ? (
+                      {b.mark ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={`/chains/${x.key}.svg`} alt="" width={80} height={80} loading="lazy" decoding="async" draggable={false} className="pointer-events-none h-20 w-20" />
+                        <img src={`/chains/${b.mark}`} alt="" width={80} height={80} loading="lazy" decoding="async" draggable={false} className="pointer-events-none h-20 w-20" />
                       ) : (
                         <span aria-hidden className={`flex h-20 w-20 items-center justify-center rounded-full text-3xl font-semibold ${b.dark ? 'bg-[#0b0e11]/10 text-[#0b0e11]' : 'bg-white/10 text-white'}`}>
                           {initialsOf(c.name)}
@@ -214,5 +207,23 @@ export function NetworkDialog({
         </div>
       </main>
     </div>
+  )
+}
+
+/**
+ * One pill of the filter row: a card-coloured layer behind the label, full when active and faded
+ * when not, growing a little on hover — the filters had it first, the order switch shares it.
+ */
+function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="relative flex h-12 shrink-0 items-center gap-2 overflow-hidden rounded-full px-4 pr-5 text-sm font-semibold text-ink transition hover:scale-[1.03] outline-none focus-visible:ring-2 focus-visible:ring-ink/30"
+    >
+      <span aria-hidden className={`absolute inset-0 bg-surface transition ${active ? 'opacity-100' : 'opacity-30'}`} />
+      <span className={`relative z-10 ${active ? 'text-ink' : 'text-muted'}`}>{children}</span>
+    </button>
   )
 }

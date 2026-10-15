@@ -1,0 +1,753 @@
+{
+  "$note": "How each generated network is drawn: the tile colour (`bg`, a CSS colour or gradient), whether the mark and the name are dark (`dark`, for a light tile), and where its mark comes from (`mark.src`) and how it is drawn (`mark.mode`). Read by scripts/update-networks.ts; the fifteen hand-placed networks in networks-curated.json are not here. Sources: `w3:` web3icons raw-svgs (MIT), `hl:` hyperlane-registry chains/<name>/logo.svg (MIT), `el:` ethereum-lists/chains _data/icons/<name>.json via IPFS (MIT; submitted by each chain's team), `site:` the network's own website, `copy:` another network's mark already in public/chains. Modes: `mono` — a white mark, turned near-black on a light tile; `white` — every colour in the SVG becomes white (near-black on a light tile); `asis` — the SVG as published; `raster-white` — a transparent raster turned into a white (or near-black) silhouette; `raster` — the raster as published, resized; `round` crops it to a rounded square, for icons that are a filled square of their own. Colours come from the marks themselves (the web3icons `background` variant, the dominant fill of the official mark, the solid field of a square icon) or from the brand's own site; a brand that is black and white gets a black tile, the way Robinhood and Plasma have one.",
+  "chains": {
+    "abcore": {
+      "bg": "#2055C9",
+      "mark": {
+        "src": "site:https://www.ab.org/icons/icon-512x512.png",
+        "mode": "raster"
+      }
+    },
+    "abstract": {
+      "bg": "#054729",
+      "mark": {
+        "src": "w3:networks/mono/abstract",
+        "mode": "mono"
+      }
+    },
+    "adichain": {
+      "bg": "linear-gradient(180deg, #FE7109, #003BFF)",
+      "mark": {
+        "src": "w3:tokens/mono/ADI",
+        "mode": "mono"
+      }
+    },
+    "ape": {
+      "bg": "#0054FA",
+      "mark": {
+        "src": "w3:networks/mono/apechain",
+        "mode": "mono"
+      }
+    },
+    "apexfusionnexus": {
+      "bg": "#0F1B1A",
+      "mark": {
+        "src": "el:apexfusion",
+        "mode": "raster"
+      }
+    },
+    "arc": {
+      "bg": "#1B3158",
+      "mark": {
+        "src": "hl:arc",
+        "mode": "white"
+      }
+    },
+    "astar": {
+      "bg": "linear-gradient(180deg, #0AE2FF, #0279C2)",
+      "mark": {
+        "src": "w3:networks/mono/astar",
+        "mode": "mono"
+      }
+    },
+    "b2": {
+      "bg": "#FFB852",
+      "dark": true,
+      "mark": {
+        "src": "el:bsquare",
+        "mode": "raster"
+      }
+    },
+    "beam": {
+      "bg": "#0B76FF",
+      "mark": {
+        "src": "w3:networks/mono/beam",
+        "mode": "mono"
+      }
+    },
+    "bera": {
+      "bg": "#472920",
+      "mark": {
+        "src": "w3:networks/branded/berachain",
+        "mode": "asis"
+      }
+    },
+    "bitlayer": {
+      "bg": "#000000",
+      "mark": {
+        "src": "hl:bitlayer",
+        "mode": "asis"
+      }
+    },
+    "blast": {
+      "bg": "#FCFC03",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/blast",
+        "mode": "mono"
+      }
+    },
+    "bob": {
+      "bg": "#F25D00",
+      "mark": {
+        "src": "w3:networks/mono/bob",
+        "mode": "mono"
+      }
+    },
+    "celo": {
+      "bg": "#FCFE52",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/celo",
+        "mode": "mono"
+      }
+    },
+    "chiliz": {
+      "bg": "#F60250",
+      "mark": {
+        "src": "w3:networks/mono/chiliz",
+        "mode": "mono"
+      }
+    },
+    "citrea": {
+      "bg": "#FD7F00",
+      "mark": {
+        "src": "w3:networks/mono/citrea",
+        "mode": "mono"
+      }
+    },
+    "codex": {
+      "bg": "#F8E6B6",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/codex",
+        "mode": "mono"
+      }
+    },
+    "conflux": {
+      "bg": "#37A1DB",
+      "mark": {
+        "src": "w3:networks/mono/conflux",
+        "mode": "mono"
+      }
+    },
+    "coredao": {
+      "bg": "#FF9211",
+      "mark": {
+        "src": "hl:coredao",
+        "mode": "white"
+      }
+    },
+    "creditcoin": {
+      "bg": "#4976FF",
+      "mark": {
+        "src": "el:creditcoin",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "cronosevm": {
+      "bg": "#051221",
+      "mark": {
+        "src": "w3:networks/mono/cronos",
+        "mode": "mono"
+      }
+    },
+    "cronoszkevm": {
+      "bg": "#051221",
+      "mark": {
+        "src": "w3:networks/mono/cronos-zkevm",
+        "mode": "mono"
+      }
+    },
+    "dexalot": {
+      "bg": "#E71771",
+      "mark": {
+        "src": "el:dexalot",
+        "mode": "raster-white"
+      }
+    },
+    "doma": {
+      "bg": "#4B76FA",
+      "mark": {
+        "src": "el:doma",
+        "mode": "raster-white"
+      }
+    },
+    "edge": {
+      "bg": "#000000",
+      "mark": {
+        "src": "site:https://pro.edgex.exchange/favicon.ico",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "etherlink": {
+      "bg": "#38FF9C",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/etherlink",
+        "mode": "mono"
+      }
+    },
+    "fantom": {
+      "bg": "#1969FF",
+      "mark": {
+        "src": "w3:networks/mono/fantom",
+        "mode": "mono"
+      }
+    },
+    "flare": {
+      "bg": "#E62058",
+      "mark": {
+        "src": "w3:networks/mono/flare",
+        "mode": "mono"
+      }
+    },
+    "flow": {
+      "bg": "#00EF8B",
+      "dark": true,
+      "mark": {
+        "src": "w3:tokens/mono/FLOW",
+        "mode": "mono"
+      }
+    },
+    "fraxtal": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/fraxtal",
+        "mode": "mono"
+      }
+    },
+    "fuse": {
+      "bg": "#B4F9B9",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/fuse",
+        "mode": "mono"
+      }
+    },
+    "gensyn": {
+      "bg": "#FFD4CF",
+      "dark": true,
+      "mark": {
+        "src": "el:gensyn",
+        "mode": "raster"
+      }
+    },
+    "gnosis": {
+      "bg": "#3E6957",
+      "mark": {
+        "src": "w3:networks/mono/gnosis",
+        "mode": "mono"
+      }
+    },
+    "goat": {
+      "bg": "#D39820",
+      "mark": {
+        "src": "el:goat",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "gravity": {
+      "bg": "#FFAC43",
+      "mark": {
+        "src": "w3:networks/mono/gravity",
+        "mode": "mono"
+      }
+    },
+    "gunz": {
+      "bg": "linear-gradient(180deg, #C2FCCD, #D3F1FB)",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/gunz",
+        "mode": "mono"
+      }
+    },
+    "hashkey": {
+      "bg": "#0072E5",
+      "mark": {
+        "src": "w3:networks/mono/hashkey",
+        "mode": "mono"
+      }
+    },
+    "hedera": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/hedera-hashgraph",
+        "mode": "mono"
+      }
+    },
+    "hemi": {
+      "bg": "#FF6C15",
+      "mark": {
+        "src": "hl:hemi",
+        "mode": "white"
+      }
+    },
+    "henesys": {
+      "bg": "#14122B",
+      "mark": {
+        "src": "el:nexpace",
+        "mode": "raster"
+      }
+    },
+    "horizen": {
+      "bg": "#FFCB17",
+      "dark": true,
+      "mark": {
+        "src": "el:horizen",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "humanity": {
+      "bg": "#EDFCEC",
+      "dark": true,
+      "mark": {
+        "src": "site:https://framerusercontent.com/images/OnB8d3XvxyfjOgnhhZySNKtwlM8.png",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "hydration": {
+      "bg": "#E53E76",
+      "mark": {
+        "src": "el:hydration",
+        "mode": "white"
+      }
+    },
+    "injectiveevm": {
+      "bg": "#4D3DFF",
+      "mark": {
+        "src": "w3:networks/mono/injective",
+        "mode": "mono"
+      }
+    },
+    "iota": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/iota-evm",
+        "mode": "mono"
+      }
+    },
+    "irys": {
+      "bg": "#51FFD6",
+      "dark": true,
+      "mark": {
+        "src": "el:irys",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "islander": {
+      "bg": "#F0F0E9",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/vana",
+        "mode": "mono"
+      }
+    },
+    "jovay": {
+      "bg": "#326CFF",
+      "mark": {
+        "src": "el:jovay",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "katana": {
+      "bg": "#0541B2",
+      "mark": {
+        "src": "w3:networks/branded/katana",
+        "mode": "asis"
+      }
+    },
+    "kava": {
+      "bg": "#FF433E",
+      "mark": {
+        "src": "w3:networks/mono/kava",
+        "mode": "mono"
+      }
+    },
+    "kite": {
+      "bg": "#1D1A16",
+      "mark": {
+        "src": "site:https://gokite.ai/favicon.svg",
+        "mode": "asis"
+      }
+    },
+    "klaytn": {
+      "bg": "#BFF009",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/kaia",
+        "mode": "mono"
+      }
+    },
+    "lens": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/lens",
+        "mode": "mono"
+      }
+    },
+    "lisk": {
+      "bg": "#0C152E",
+      "mark": {
+        "src": "w3:networks/mono/lisk",
+        "mode": "mono"
+      }
+    },
+    "lyra": {
+      "bg": "#25FAAF",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/lyra",
+        "mode": "mono"
+      }
+    },
+    "manta": {
+      "bg": "linear-gradient(180deg, #29CCB9, #0091FF, #FF66B7)",
+      "mark": {
+        "src": "w3:networks/mono/manta-pacific",
+        "mode": "mono"
+      }
+    },
+    "mantle": {
+      "bg": "#06110D",
+      "mark": {
+        "src": "w3:networks/mono/mantle",
+        "mode": "mono"
+      }
+    },
+    "megaeth": {
+      "bg": "#19191A",
+      "mark": {
+        "src": "w3:networks/mono/mega-eth",
+        "mode": "mono"
+      }
+    },
+    "memecore": {
+      "bg": "#CBBBFB",
+      "dark": true,
+      "mark": {
+        "src": "el:memecore",
+        "mode": "asis"
+      }
+    },
+    "merlin": {
+      "bg": "#6335FF",
+      "mark": {
+        "src": "hl:merlin",
+        "mode": "asis"
+      }
+    },
+    "metal": {
+      "bg": "#0E0E10",
+      "mark": {
+        "src": "hl:metal",
+        "mode": "asis"
+      }
+    },
+    "metis": {
+      "bg": "#00D8C1",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/metis-andromeda",
+        "mode": "mono"
+      }
+    },
+    "mezo": {
+      "bg": "#FF004D",
+      "mark": {
+        "src": "site:https://mezo.org/favicon.svg",
+        "mode": "white"
+      }
+    },
+    "moca": {
+      "bg": "#EF61B4",
+      "mark": {
+        "src": "hl:mocachain",
+        "mode": "white"
+      }
+    },
+    "mode": {
+      "bg": "#DFFE00",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/mode",
+        "mode": "mono"
+      }
+    },
+    "moonbeam": {
+      "bg": "#CB1F7A",
+      "mark": {
+        "src": "w3:networks/mono/moonbeam",
+        "mode": "mono"
+      }
+    },
+    "morph": {
+      "bg": "#14A800",
+      "mark": {
+        "src": "hl:morph",
+        "mode": "white"
+      }
+    },
+    "neox": {
+      "bg": "#00E599",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/neo-x",
+        "mode": "mono"
+      }
+    },
+    "nibiru": {
+      "bg": "linear-gradient(180deg, #F29AC4, #CDC6D7)",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/nibiru",
+        "mode": "mono"
+      }
+    },
+    "og": {
+      "bg": "#9200E1",
+      "mark": {
+        "src": "hl:zerogravity",
+        "mode": "asis"
+      }
+    },
+    "onemoney": {
+      "bg": "#073387",
+      "mark": {
+        "src": "el:1moneynetwork",
+        "mode": "asis"
+      }
+    },
+    "opbnb": {
+      "bg": "#F0B90B",
+      "dark": true,
+      "mark": {
+        "src": "copy:bsc",
+        "mode": "asis"
+      }
+    },
+    "orderly": {
+      "bg": "#5D00BA",
+      "mark": {
+        "src": "w3:networks/mono/orderly",
+        "mode": "mono"
+      }
+    },
+    "peaq": {
+      "bg": "#6666FE",
+      "mark": {
+        "src": "w3:networks/mono/peaq",
+        "mode": "mono"
+      }
+    },
+    "pharos": {
+      "bg": "#0007B9",
+      "mark": {
+        "src": "el:pharos",
+        "mode": "raster-white"
+      }
+    },
+    "plumephoenix": {
+      "bg": "#FF3D00",
+      "mark": {
+        "src": "w3:networks/mono/plume",
+        "mode": "mono"
+      }
+    },
+    "rayls": {
+      "bg": "#000000",
+      "mark": {
+        "src": "el:rayls",
+        "mode": "asis"
+      }
+    },
+    "redbelly": {
+      "bg": "#FF4848",
+      "mark": {
+        "src": "el:redbelly",
+        "mode": "white"
+      }
+    },
+    "reya": {
+      "bg": "#08F06A",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/reya",
+        "mode": "mono"
+      }
+    },
+    "rise": {
+      "bg": "#04DF83",
+      "dark": true,
+      "mark": {
+        "src": "site:https://risechain.com/icons/favi.png",
+        "mode": "raster",
+        "round": true
+      }
+    },
+    "ronin": {
+      "bg": "#004DE5",
+      "mark": {
+        "src": "w3:networks/mono/ronin",
+        "mode": "mono"
+      }
+    },
+    "rootstock": {
+      "bg": "#FF9103",
+      "mark": {
+        "src": "w3:networks/mono/rootstock",
+        "mode": "mono"
+      }
+    },
+    "sei": {
+      "bg": "#9E1F19",
+      "mark": {
+        "src": "w3:networks/mono/sei-network",
+        "mode": "mono"
+      }
+    },
+    "shibarium": {
+      "bg": "#F00500",
+      "mark": {
+        "src": "hl:shibarium",
+        "mode": "asis"
+      }
+    },
+    "somnia": {
+      "bg": "#0B0B14",
+      "mark": {
+        "src": "hl:somnia",
+        "mode": "asis"
+      }
+    },
+    "soneium": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/soneium",
+        "mode": "mono"
+      }
+    },
+    "sonic": {
+      "bg": "#141416",
+      "mark": {
+        "src": "w3:networks/mono/sonic",
+        "mode": "mono"
+      }
+    },
+    "stable": {
+      "bg": "#011F1E",
+      "mark": {
+        "src": "w3:networks/mono/stable",
+        "mode": "mono"
+      }
+    },
+    "story": {
+      "bg": "#000000",
+      "mark": {
+        "src": "hl:story",
+        "mode": "asis"
+      }
+    },
+    "subtensorevm": {
+      "bg": "#000000",
+      "mark": {
+        "src": "hl:subtensor",
+        "mode": "white"
+      }
+    },
+    "tac": {
+      "bg": "#91029B",
+      "mark": {
+        "src": "hl:tac",
+        "mode": "white"
+      }
+    },
+    "taiko": {
+      "bg": "#E81899",
+      "mark": {
+        "src": "w3:networks/mono/taiko",
+        "mode": "mono"
+      }
+    },
+    "telos": {
+      "bg": "linear-gradient(180deg, #00F2FE, #4FACFE, #C471F5)",
+      "mark": {
+        "src": "w3:networks/mono/telos",
+        "mode": "mono"
+      }
+    },
+    "tempo": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/tempo",
+        "mode": "mono"
+      }
+    },
+    "unichain": {
+      "bg": "#F50DB4",
+      "mark": {
+        "src": "w3:networks/mono/unichain",
+        "mode": "mono"
+      }
+    },
+    "wemix30": {
+      "bg": "#27EA84",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/wemix",
+        "mode": "mono"
+      }
+    },
+    "worldchain": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/world",
+        "mode": "mono"
+      }
+    },
+    "xdc": {
+      "bg": "#9FF3FF",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/mono/xdc",
+        "mode": "mono"
+      }
+    },
+    "xlayer": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/x-layer",
+        "mode": "mono"
+      }
+    },
+    "zircuit": {
+      "bg": "#092306",
+      "mark": {
+        "src": "w3:networks/branded/zircuit",
+        "mode": "asis"
+      }
+    },
+    "zksync": {
+      "bg": "#000000",
+      "mark": {
+        "src": "w3:networks/mono/zksync",
+        "mode": "mono"
+      }
+    },
+    "zora": {
+      "bg": "#F2CEFE",
+      "dark": true,
+      "mark": {
+        "src": "w3:networks/branded/zora",
+        "mode": "asis"
+      }
+    }
+  }
+}
