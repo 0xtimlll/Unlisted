@@ -63,18 +63,15 @@ describe('a v1 message that arrived', () => {
   }, 40_000)
 })
 
-describe('a message to a chain this app does not serve', () => {
-  it('is found and named, and no state is invented for it', async () => {
-    // JOE's newest Avalanche send at the time of writing went to Monad, v1 chain id 390 — one of the
-    // 113 chains with a v1 deployment that this registry does not carry. The honest answer is "found,
-    // cannot read the other side", not a diagnosis.
+describe('a message to Monad over v1', () => {
+  it('is found, and its destination is now a served chain', async () => {
+    // JOE's newest Avalanche send at the time of writing went to Monad, v1 chain id 390. When the
+    // test was written Monad was not in the registry and the answer was "found, cannot read the
+    // other side"; since the registry is generated (2026-10-15) Monad is served, so the message is
+    // read through to a report and nothing is left unserved.
     const { result } = await look(V1_UNSERVED)
-    expect(result.reports).toHaveLength(0)
-    expect(result.unservedDestinations).toHaveLength(1)
-    const m = result.unservedDestinations[0]!
-    expect(m.version).toBe('v1')
-    expect(m.dstChain).toBeUndefined()
-    if (m.version === 'v1') expect(m.dstV1ChainId).toBe(390)
+    expect(result.unservedDestinations).toHaveLength(0)
+    expect(result.reports).toHaveLength(1)
   }, 40_000)
 })
 

@@ -94,6 +94,20 @@ describe('finding the transaction', () => {
     expect(classifyRpcError(new Error('socket hang up'))).toBe('unavailable')
   })
 
+  it('a chain that never answers costs the budget, not the whole search, and is reported as a timeout', async () => {
+    const t0 = Date.now()
+    const r = await searchTx(HASH, {
+      chains: ['ethereum', 'monad', 'arbitrum'],
+      fetch: (c) => (c === 'monad' ? new Promise<null>(() => {}) : Promise.resolve(c === 'arbitrum' ? tx : null)),
+      budgetMs: 150,
+    })
+    expect(Date.now() - t0).toBeLessThan(1_000)
+    expect(r).toMatchObject({ status: 'found', chain: 'arbitrum' })
+    expect(r.failed).toEqual([{ chain: 'monad', reason: 'timeout' }])
+    const none = await searchTx(HASH, { chains: ['ethereum', 'monad'], fetch: (c) => (c === 'monad' ? new Promise<null>(() => {}) : Promise.resolve(null)), budgetMs: 150 })
+    expect(none).toMatchObject({ status: 'not_found', failed: [{ chain: 'monad', reason: 'timeout' }] })
+  })
+
   it('the answer does not depend on which provider answers first', async () => {
     const slowFirst = async (c: string) => {
       if (c === 'ethereum') await new Promise((r) => setTimeout(r, 20))

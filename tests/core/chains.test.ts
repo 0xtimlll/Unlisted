@@ -217,3 +217,21 @@ describe('RPC operators: a cross-check counts companies, not hostnames', () => {
     for (const c of evmChains()) expect(new Set(c.rpcs.map((r) => r.provider)).size, c.key).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('Multicall3 per chain', () => {
+  it('chains without it get no multicall3 contract in their viem chain, and batch deploylessly', async () => {
+    const { toViemChain, makeReadClient } = await import('@/core/client')
+    const without = evmChains().filter((c) => !c.multicall3)
+    expect(without.length).toBeGreaterThan(0)
+    for (const c of without) {
+      expect(toViemChain(c).contracts?.multicall3).toBeUndefined()
+      const client = makeReadClient(c) as unknown as { batch?: { multicall?: { deployless?: boolean } } }
+      expect(client.batch?.multicall?.deployless, c.key).toBe(true)
+    }
+    for (const key of ['ethereum', 'base', 'bsc', 'arbitrum'] as const) {
+      const c = evmByKey(key)
+      expect(c.multicall3).toBe(true)
+      expect(toViemChain(c).contracts?.multicall3?.address).toBe('0xcA11bde05977b3631167028862bE2a173976CA11')
+    }
+  })
+})

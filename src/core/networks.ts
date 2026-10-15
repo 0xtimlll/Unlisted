@@ -45,6 +45,8 @@ export type NetworkSpec = {
   readonly feeCeiling: string
   readonly tvlUsd: number
   readonly coingeckoPlatform: string | null
+  /** Multicall3 has code at its canonical address on this chain (read on chain). Without it reads batch deploylessly. */
+  readonly multicall3: boolean
   readonly lz: NetworkLz | null
   readonly wormhole: NetworkWormhole | null
   readonly ccip: NetworkCcip | null
@@ -113,6 +115,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -146,6 +149,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 3396261,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'abstract',
       eid: 30324,
@@ -194,6 +198,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000000',
     tvlUsd: 1338906,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: null,
     wormhole: null,
     ccip: {
@@ -227,6 +232,7 @@ export const NETWORKS = {
     feeCeiling: '800000000000000000000',
     tvlUsd: 2756510,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'ape',
       eid: 30312,
@@ -275,6 +281,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'apexfusionnexus',
       eid: 30384,
@@ -311,6 +318,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 1361426510,
     coingeckoPlatform: 'arbitrum-one',
+    multicall3: true,
     lz: {
       chainKey: 'arbitrum',
       eid: 30110,
@@ -364,6 +372,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 528081869,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'arc',
       eid: 30417,
@@ -417,6 +426,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000000000',
     tvlUsd: 1129632,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'astar',
       eid: 30210,
@@ -461,6 +471,7 @@ export const NETWORKS = {
     feeCeiling: '5000000000000000000',
     tvlUsd: 579909086,
     coingeckoPlatform: 'avalanche',
+    multicall3: true,
     lz: {
       chainKey: 'avalanche',
       eid: 30106,
@@ -514,6 +525,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -547,6 +559,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 6053551515,
     coingeckoPlatform: 'base',
+    multicall3: true,
     lz: {
       chainKey: 'base',
       eid: 30184,
@@ -600,6 +613,7 @@ export const NETWORKS = {
     feeCeiling: '40000000000000000000000',
     tvlUsd: 1251748,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'beam',
       eid: 30198,
@@ -636,6 +650,7 @@ export const NETWORKS = {
     feeCeiling: '500000000000000000000',
     tvlUsd: 34728100,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'bera',
       eid: 30362,
@@ -685,6 +700,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000',
     tvlUsd: 473318,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -718,6 +734,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 9511130,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'blast',
       eid: 30243,
@@ -754,6 +771,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 10103602,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'bob',
       eid: 30279,
@@ -802,6 +820,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000',
     tvlUsd: 5282068182,
     coingeckoPlatform: 'binance-smart-chain',
+    multicall3: true,
     lz: {
       chainKey: 'bsc',
       eid: 30102,
@@ -855,6 +874,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 13112678,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'celo',
       eid: 30125,
@@ -908,6 +928,7 @@ export const NETWORKS = {
     feeCeiling: '8000000000000000000000',
     tvlUsd: 1295829,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'chiliz',
       eid: 30409,
@@ -944,6 +965,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000',
     tvlUsd: 8947363,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'citrea',
       eid: 30403,
@@ -984,6 +1006,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'codex',
       eid: 30323,
@@ -1020,6 +1043,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'conflux',
       eid: 30212,
@@ -1056,6 +1080,7 @@ export const NETWORKS = {
     feeCeiling: '6000000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'coredao',
       eid: 30153,
@@ -1100,6 +1125,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: null,
     wormhole: {
       chainName: 'CreditCoin',
@@ -1138,6 +1164,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 137232019,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'cronosevm',
       eid: 30359,
@@ -1182,6 +1209,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 720299,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: null,
     wormhole: null,
     ccip: {
@@ -1215,6 +1243,7 @@ export const NETWORKS = {
     feeCeiling: '3000000000000000000000',
     tvlUsd: 1673502,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'dexalot',
       eid: 30118,
@@ -1251,6 +1280,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 673035,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'doma',
       eid: 30393,
@@ -1287,6 +1317,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -1320,6 +1351,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000',
     tvlUsd: 49399882881,
     coingeckoPlatform: 'ethereum',
+    multicall3: true,
     lz: {
       chainKey: 'ethereum',
       eid: 30101,
@@ -1373,6 +1405,7 @@ export const NETWORKS = {
     feeCeiling: '400000000000000000000',
     tvlUsd: 15901146,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'etherlink',
       eid: 30292,
@@ -1417,6 +1450,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 3540207,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'fantom',
       eid: 30112,
@@ -1453,6 +1487,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 182438968,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'flare',
       eid: 30295,
@@ -1489,6 +1524,7 @@ export const NETWORKS = {
     feeCeiling: '4000000000000000000000',
     tvlUsd: 10049054,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'flow',
       eid: 30336,
@@ -1525,6 +1561,7 @@ export const NETWORKS = {
     feeCeiling: '400000000000000000000',
     tvlUsd: 18793348,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'fraxtal',
       eid: 30255,
@@ -1573,6 +1610,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000000000',
     tvlUsd: 388497,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'fuse',
       eid: 30138,
@@ -1609,6 +1647,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'gensyn',
       eid: 30412,
@@ -1645,6 +1684,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 92620204,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -1682,6 +1722,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000',
     tvlUsd: 104210,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'goat',
       eid: 30361,
@@ -1718,6 +1759,7 @@ export const NETWORKS = {
     feeCeiling: '30000000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'gravity',
       eid: 30294,
@@ -1754,6 +1796,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'gunz',
       eid: 30371,
@@ -1790,6 +1833,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 1420,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'hashkey',
       eid: 30467,
@@ -1834,6 +1878,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 33151754,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'hedera',
       eid: 30316,
@@ -1878,6 +1923,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 1211323,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'hemi',
       eid: 30329,
@@ -1922,6 +1968,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: null,
     wormhole: null,
     ccip: {
@@ -1955,6 +2002,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'horizen',
       eid: 30399,
@@ -1991,6 +2039,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'humanity',
       eid: 30382,
@@ -2027,6 +2076,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 53556979,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: null,
     wormhole: {
       chainName: 'Hydration',
@@ -2057,6 +2107,7 @@ export const NETWORKS = {
     feeCeiling: '5000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: 'hyperevm',
+    multicall3: true,
     lz: {
       chainKey: 'hyperliquid',
       eid: 30367,
@@ -2110,6 +2161,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000000',
     tvlUsd: 12537227,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'injectiveevm',
       eid: 30394,
@@ -2146,6 +2198,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 200675247,
     coingeckoPlatform: 'ink',
+    multicall3: true,
     lz: {
       chainKey: 'ink',
       eid: 30339,
@@ -2199,6 +2252,7 @@ export const NETWORKS = {
     feeCeiling: '3000000000000000000000',
     tvlUsd: 328801,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'iota',
       eid: 30284,
@@ -2235,6 +2289,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'irys',
       eid: 30408,
@@ -2271,6 +2326,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 196185,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'islander',
       eid: 30330,
@@ -2307,6 +2363,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -2340,6 +2397,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 37295832,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'katana',
       eid: 30375,
@@ -2388,6 +2446,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 20568677,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'kava',
       eid: 30177,
@@ -2424,6 +2483,7 @@ export const NETWORKS = {
     feeCeiling: '900000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'kite',
       eid: 30406,
@@ -2460,6 +2520,7 @@ export const NETWORKS = {
     feeCeiling: '3000000000000000000000',
     tvlUsd: 8002750,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'klaytn',
       eid: 30150,
@@ -2509,6 +2570,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 66255,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'lens',
       eid: 30373,
@@ -2553,6 +2615,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 23289224,
     coingeckoPlatform: 'linea',
+    multicall3: true,
     lz: {
       chainKey: 'linea',
       eid: 30183,
@@ -2606,6 +2669,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 25980,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'lisk',
       eid: 30321,
@@ -2650,6 +2714,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'lyra',
       eid: 30311,
@@ -2686,6 +2751,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 3004466,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'manta',
       eid: 30217,
@@ -2722,6 +2788,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 95326372,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'mantle',
       eid: 30181,
@@ -2770,6 +2837,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 12489225,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'megaeth',
       eid: 30398,
@@ -2819,6 +2887,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'memecore',
       eid: 30466,
@@ -2855,6 +2924,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 6479938,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: null,
     wormhole: null,
     ccip: {
@@ -2888,6 +2958,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -2925,6 +2996,7 @@ export const NETWORKS = {
     feeCeiling: '30000000000000000000',
     tvlUsd: 2612368,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'metis',
       eid: 30151,
@@ -2973,6 +3045,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000',
     tvlUsd: 73230075,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: {
       chainName: 'Mezo',
@@ -3003,6 +3076,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'moca',
       eid: 30404,
@@ -3048,6 +3122,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 614697,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'mode',
       eid: 30260,
@@ -3096,6 +3171,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000000',
     tvlUsd: 1011036387,
     coingeckoPlatform: 'monad',
+    multicall3: true,
     lz: {
       chainKey: 'monad',
       eid: 30390,
@@ -3149,6 +3225,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: {
       chainName: 'Moonbeam',
@@ -3179,6 +3256,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 81724182,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'morph',
       eid: 30322,
@@ -3223,6 +3301,7 @@ export const NETWORKS = {
     feeCeiling: '80000000000000000000',
     tvlUsd: 4367,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'neox',
       eid: 30414,
@@ -3267,6 +3346,7 @@ export const NETWORKS = {
     feeCeiling: '300000000000000000000000',
     tvlUsd: 341076,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'nibiru',
       eid: 30369,
@@ -3303,6 +3383,7 @@ export const NETWORKS = {
     feeCeiling: '500000000000000000000',
     tvlUsd: 3779979,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'og',
       eid: 30388,
@@ -3356,6 +3437,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'onemoney',
       eid: 30461,
@@ -3392,6 +3474,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000',
     tvlUsd: 1070254,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -3425,6 +3508,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 436734290,
     coingeckoPlatform: 'optimistic-ethereum',
+    multicall3: true,
     lz: {
       chainKey: 'optimism',
       eid: 30111,
@@ -3478,6 +3562,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'orderly',
       eid: 30213,
@@ -3514,6 +3599,7 @@ export const NETWORKS = {
     feeCeiling: '3000000000000000000000',
     tvlUsd: 789560,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'peaq',
       eid: 30302,
@@ -3550,6 +3636,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 71448370,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'pharos',
       eid: 30407,
@@ -3586,6 +3673,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 560162174,
     coingeckoPlatform: 'plasma',
+    multicall3: true,
     lz: {
       chainKey: 'plasma',
       eid: 30383,
@@ -3634,6 +3722,7 @@ export const NETWORKS = {
     feeCeiling: '6000000000000000000000',
     tvlUsd: 2641241,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'plumephoenix',
       eid: 30370,
@@ -3683,6 +3772,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 672618708,
     coingeckoPlatform: 'polygon-pos',
+    multicall3: true,
     lz: {
       chainKey: 'polygon',
       eid: 30109,
@@ -3736,6 +3826,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 7114,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'rayls',
       eid: 30415,
@@ -3772,6 +3863,7 @@ export const NETWORKS = {
     feeCeiling: '60000000000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'redbelly',
       eid: 30402,
@@ -3808,6 +3900,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 9342484,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'reya',
       eid: 30313,
@@ -3844,6 +3937,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 33379564,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'rise',
       eid: 30401,
@@ -3880,6 +3974,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 1035284993,
     coingeckoPlatform: 'robinhood',
+    multicall3: true,
     lz: {
       chainKey: 'robinhood',
       eid: 30416,
@@ -3933,6 +4028,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 10907346,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -3966,6 +4062,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000',
     tvlUsd: 79468069,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'rootstock',
       eid: 30333,
@@ -4010,6 +4107,7 @@ export const NETWORKS = {
     feeCeiling: '20000000000000000',
     tvlUsd: 7708341,
     coingeckoPlatform: 'scroll',
+    multicall3: true,
     lz: {
       chainKey: 'scroll',
       eid: 30214,
@@ -4054,6 +4152,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 27682547,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'sei',
       eid: 30280,
@@ -4103,6 +4202,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 138728,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -4136,6 +4236,7 @@ export const NETWORKS = {
     feeCeiling: '1000000000',
     tvlUsd: 5919435638,
     coingeckoPlatform: 'solana',
+    multicall3: false,
     lz: {
       chainKey: 'solana',
       eid: 30168,
@@ -4171,6 +4272,7 @@ export const NETWORKS = {
     feeCeiling: '600000000000000000000',
     tvlUsd: 2869023,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'somnia',
       eid: 30380,
@@ -4211,6 +4313,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 4940786,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'soneium',
       eid: 30340,
@@ -4259,6 +4362,7 @@ export const NETWORKS = {
     feeCeiling: '2000000000000000000000',
     tvlUsd: 19326108,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'sonic',
       eid: 30332,
@@ -4303,6 +4407,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 29651218,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'stable',
       eid: 30396,
@@ -4351,6 +4456,7 @@ export const NETWORKS = {
     feeCeiling: '600000000000000000000',
     tvlUsd: 32181,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'story',
       eid: 30364,
@@ -4387,6 +4493,7 @@ export const NETWORKS = {
     feeCeiling: '400000000000000000',
     tvlUsd: 29700,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'subtensorevm',
       eid: 30374,
@@ -4435,6 +4542,7 @@ export const NETWORKS = {
     feeCeiling: '90000000000000000000000',
     tvlUsd: 354956,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'tac',
       eid: 30377,
@@ -4471,6 +4579,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 213825,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -4504,6 +4613,7 @@ export const NETWORKS = {
     feeCeiling: '6000000000000000000000',
     tvlUsd: 2773222,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'telos',
       eid: 30199,
@@ -4540,6 +4650,7 @@ export const NETWORKS = {
     feeCeiling: '200000000000000000000',
     tvlUsd: 106504454,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'tempo',
       eid: 30410,
@@ -4593,6 +4704,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 25896799,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'unichain',
       eid: 30320,
@@ -4646,6 +4758,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 2702155,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {
@@ -4679,6 +4792,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 39581397,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'worldchain',
       eid: 30319,
@@ -4732,6 +4846,7 @@ export const NETWORKS = {
     feeCeiling: '100000000000000000000',
     tvlUsd: 2167912,
     coingeckoPlatform: null,
+    multicall3: false,
     lz: {
       chainKey: 'xdc',
       eid: 30365,
@@ -4776,6 +4891,7 @@ export const NETWORKS = {
     feeCeiling: '900000000000000000',
     tvlUsd: 0,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'xlayer',
       eid: 30274,
@@ -4824,6 +4940,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 115897,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'zircuit',
       eid: 30303,
@@ -4868,6 +4985,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 14602160,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: {
       chainKey: 'zksync',
       eid: 30165,
@@ -4912,6 +5030,7 @@ export const NETWORKS = {
     feeCeiling: '50000000000000000',
     tvlUsd: 42827,
     coingeckoPlatform: null,
+    multicall3: true,
     lz: null,
     wormhole: null,
     ccip: {

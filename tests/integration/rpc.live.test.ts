@@ -8,7 +8,16 @@ import { CHAINS, isEvm } from '@/core/chains'
 
 const ORIGIN = 'https://oft-bridge-ui.pages.dev'
 
+/** A 429 says "busy", not "wrong": it is waited out and asked again, as the /rpc relay moves on and comes back. */
 async function probe(url: string, vm: 'evm' | 'svm') {
+  for (let attempt = 0; ; attempt++) {
+    const p = await probeOnce(url, vm)
+    if (p.status !== 429 || attempt === 3) return p
+    await new Promise((r) => setTimeout(r, 4_000 * (attempt + 1)))
+  }
+}
+
+async function probeOnce(url: string, vm: 'evm' | 'svm') {
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: ORIGIN },
@@ -33,7 +42,7 @@ describe('registry RPCs', () => {
           expect(p.solanaCore).toMatch(/^\d+\./)
           expect(p.acao === '*' || p.acao === ORIGIN).toBe(true)
         }
-      }, 30_000)
+      }, 90_000)
     }
   }
   it('every chain has at least one RPC', () => {

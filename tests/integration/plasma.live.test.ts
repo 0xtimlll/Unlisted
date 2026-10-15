@@ -85,9 +85,10 @@ describe('Plasma: the registry entry itself', () => {
     expect(byEid(30383)?.key).toBe('plasma')
   })
 
-  it('Wormhole numbers Plasma 58 but publishes no mainnet core bridge, so NTT is unavailable', () => {
-    expect(WORMHOLE_CHAINS.plasma?.wormholeChainId).toBe(58)
-    expect(WORMHOLE_CHAINS.plasma?.coreBridge).toBe('')
+  it('Wormhole publishes no mainnet core bridge for Plasma, so NTT is unavailable', () => {
+    // The SDK numbers Plasma 58 but lists its core bridge only for testnet; since the registry is
+    // generated (2026-10-15) a chain without a verified core bridge has no row at all.
+    expect(WORMHOLE_CHAINS.plasma).toBeUndefined()
   })
 })
 

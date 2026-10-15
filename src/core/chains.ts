@@ -85,6 +85,13 @@ export type EvmChainDef = ChainCommon & {
   endpointV2: `0x${string}`
   /** Fee rounding step (wei). `value` is rounded UP to a multiple of this so the wallet shows a clean number. */
   feeStepWei: bigint
+  /**
+   * Multicall3 is deployed at its canonical address here (read on chain by the generator). Where
+   * it is not — MemeCore, Beam, Citrea, Somnia, XDC and others — batched reads go out as a
+   * deployless multicall instead (core/client.ts); without that, every batched read would fail and
+   * a real OFT would read as "not an OFT".
+   */
+  multicall3: boolean
 }
 
 export type SvmChainDef = ChainCommon & {
@@ -142,6 +149,7 @@ function toChainDef(key: ChainKey, s: NetworkSpec): ChainDef {
     chainId: s.chainId,
     endpointV2: (s.lz?.endpointV2 ?? ZERO_ADDRESS) as `0x${string}`,
     feeStepWei: BigInt(s.feeStep),
+    multicall3: s.multicall3,
   }
 }
 

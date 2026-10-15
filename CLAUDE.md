@@ -104,7 +104,12 @@ Sepolia у LayerZero значится как mainnet и исключена по 
 прогона к прогону), `names` для сетей с неудачными именами в источниках, `exclude`. `ChainKey`
 выводится из файла; сеть без LayerZero получает `eid: 0` и нулевой `endpointV2` (`byEid(0)` не
 находит ничего; вкладки OFT и Rescue, поиск адаптера — только `lzChains()` / `lzEvmChains()`).
-`CHAINS` отсортирован по TVL. `ChainDef` — размеченное объединение по `vm` (`'evm' | 'svm'`). Всё,
+`CHAINS` отсортирован по TVL. **Multicall3 есть не везде** (на 18 сетях — MemeCore, Beam, Citrea,
+Somnia, XDC, Orderly и др. — по каноническому адресу кода нет): генератор пишет `multicall3: boolean`
+(обновить без полного прогона — `--brand-only --refresh-multicall`), `toViemChain` объявляет контракт
+только где он есть, а `makeReadClient` там включает `batch.multicall.deployless` — тот же пакет
+чтений уходит одним `eth_call` с байткодом Multicall3 внутри. Без этого на таких сетях любой OFT
+читался как «не OFT» (живая фикстура — `tests/integration/memecore.live.test.ts`). `ChainDef` — размеченное объединение по `vm` (`'evm' | 'svm'`). Всё,
 чему нужен `chainId` или wei, обязано сначала сузиться через `isEvm()`. У каждой сети есть
 `feeCeiling` — намеренно щедрый потолок комиссии в наименьшей единице (guard 21 не отказывает, а
 просит подтвердить сумму); у новых сетей это ~100 USD монеты по цене DefiLlama, округлённые вверх.

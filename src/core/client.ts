@@ -24,8 +24,19 @@ export function toViemChain(c: EvmChainDef): Chain {
     // `wallet_addEthereumChain`, and the wallet has to reach them on its own.
     rpcUrls: { default: { http: [...c.rpcUrls] } },
     blockExplorers: { default: explorerOf(c) },
-    contracts: { multicall3: { address: MULTICALL3 } },
+    // Only where the contract exists: a chain without it batches deploylessly (batchFor below).
+    ...(c.multicall3 ? { contracts: { multicall3: { address: MULTICALL3 } } } : {}),
   }
+}
+
+/**
+ * How reads are batched. Where Multicall3 is deployed, through it. Where it is not, the same batch
+ * goes out as a deployless multicall: one eth_call that carries Multicall3's bytecode itself, so the
+ * chain answers exactly as if the contract were there. Both `client.multicall` and the automatic
+ * batching of `readContract` follow this.
+ */
+function batchFor(c: EvmChainDef) {
+  return { multicall: c.multicall3 ? { wait: 16 } : { wait: 16, deployless: true } }
 }
 
 /**
@@ -61,7 +72,7 @@ export function makeReadClient(c: EvmChainDef, customRpc?: string): ReadClient {
   return createPublicClient({
     chain: toViemChain(c),
     transport: transportFor(urls, headers, viaProxy),
-    batch: { multicall: { wait: 16 } },
+    batch: batchFor(c),
   })
 }
 
@@ -70,6 +81,6 @@ export function makeReadClientFor(c: EvmChainDef, urls: readonly string[], heade
   return createPublicClient({
     chain: toViemChain(c),
     transport: transportFor(urls, headers, viaProxy),
-    batch: { multicall: { wait: 16 } },
+    batch: batchFor(c),
   })
 }

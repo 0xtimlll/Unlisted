@@ -8,6 +8,7 @@
  *   node scripts/update-networks.ts --check        fetch and verify again; fail if the committed file differs
  *   node scripts/update-networks.ts --skip-icons   do not download or recolour logos
  *   node scripts/update-networks.ts --brand-only   redraw only the tiles and marks (scripts/networks-brand.json) of the committed registry
+ *   … --brand-only --refresh-multicall               and re-read on chain whether Multicall3 is deployed on each chain
  *   node scripts/update-networks.ts --only=1,56    restrict the on-chain work to these chain ids (debugging)
  *
  * Run by hand. Never part of the build and never of the runtime: an app that took a chain id, an
@@ -59,6 +60,9 @@ const args = process.argv.slice(2)
 const CHECK = args.includes('--check')
 const SKIP_ICONS = args.includes('--skip-icons')
 const BRAND_ONLY = args.includes('--brand-only')
+/** With --brand-only: also re-read whether Multicall3 is deployed on each chain (a fact read on chain, nothing else). */
+const REFRESH_MULTICALL = args.includes('--refresh-multicall')
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11'
 const BRAND_TABLE = join(ROOT, 'scripts/networks-brand.json')
 const VERBOSE = args.includes('--verbose')
 const ONLY = new Set((args.find((a) => a.startsWith('--only='))?.slice(7) ?? '').split(',').filter(Boolean).map(Number))
@@ -107,6 +111,7 @@ type Network = {
   feeCeiling: string
   tvlUsd: number
   coingeckoPlatform: string | null
+  multicall3: boolean
   lz: Lz | null
   wormhole: Wormhole | null
   ccip: Ccip | null
@@ -504,7 +509,18 @@ async function brandOnly() {
   const rows: string[] = []
   const entries: [string, Network][] = []
   for (const [key, n0] of Object.entries(mod.NETWORKS)) {
-    const n: Network = JSON.parse(JSON.stringify(n0))
+    const parsed: Network = JSON.parse(JSON.stringify(n0))
+    // Rebuilt in the declared order, so a field added to the type lands in the same place on every run.
+    const n: Network = {
+      vm: parsed.vm, name: parsed.name, chainId: parsed.chainId, nativeSymbol: parsed.nativeSymbol, nativeDecimals: parsed.nativeDecimals,
+      rpcs: parsed.rpcs, explorerTxUrl: parsed.explorerTxUrl, explorerAddrUrl: parsed.explorerAddrUrl, srcConfirmationsHint: parsed.srcConfirmationsHint,
+      blockTimeSec: parsed.blockTimeSec, feeStep: parsed.feeStep, feeCeiling: parsed.feeCeiling, tvlUsd: parsed.tvlUsd, coingeckoPlatform: parsed.coingeckoPlatform,
+      multicall3: parsed.multicall3 ?? false, lz: parsed.lz, wormhole: parsed.wormhole, ccip: parsed.ccip, hyperlane: parsed.hyperlane, brand: parsed.brand,
+    }
+    if (REFRESH_MULTICALL && n.vm === 'evm') {
+      n.multicall3 = await codeAt(n.rpcs.map((r) => r.url), MULTICALL3).catch(() => false)
+      if (!n.multicall3) console.error(`${key}: no Multicall3 — reads batch deploylessly`)
+    }
     // Display names are curated data too, and are re-applied here; nothing verified on chain is.
     const named = n.chainId !== null ? curated.names[String(n.chainId)] : undefined
     if (named) n.name = named
@@ -657,6 +673,9 @@ async function main() {
         continue
       }
       const urls = rpcs.map((r) => r.url)
+      // Multicall3 at its canonical address. Absent on some chains (MemeCore, Beam, Citrea, …): the
+      // app then sends the same batch as a deployless call (src/core/client.ts), so record which.
+      const multicall3 = await codeAt(urls, MULTICALL3).catch(() => false)
       const fail = (what: string) => {
         discrepancies.push(`${name} (${chainId}): ${what}`)
         log.push(what)
@@ -801,6 +820,7 @@ async function main() {
         feeCeiling: cur?.feeCeiling ?? '',
         tvlUsd: Math.round(tvl?.tvl ?? 0),
         coingeckoPlatform: cur?.coingeckoPlatform ?? null,
+        multicall3,
         lz: lzOut,
         wormhole: whOut,
         ccip: ccipOut,
@@ -873,6 +893,7 @@ async function main() {
     feeCeiling: sol.feeCeiling,
     tvlUsd: Math.round(solTvl),
     coingeckoPlatform: sol.coingeckoPlatform ?? null,
+    multicall3: false,
     lz: { chainKey: 'solana', eid: 30168, endpointV2: null, v1: null },
     wormhole: { chainName: 'Solana', chainId: 1, coreBridge: wh.solana.coreBridge, tokenBridge: null },
     ccip: null,
@@ -995,6 +1016,8 @@ export type NetworkSpec = {
   readonly feeCeiling: string
   readonly tvlUsd: number
   readonly coingeckoPlatform: string | null
+  /** Multicall3 has code at its canonical address on this chain (read on chain). Without it reads batch deploylessly. */
+  readonly multicall3: boolean
   readonly lz: NetworkLz | null
   readonly wormhole: NetworkWormhole | null
   readonly ccip: NetworkCcip | null

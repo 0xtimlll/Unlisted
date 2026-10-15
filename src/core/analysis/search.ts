@@ -43,8 +43,15 @@ const isFailure = (r: { chain: ChainKey; tx: TxLike | null } | SearchFailure): r
  * `chains` is every chain worth looking at, in registry order. `selected` is tried alone first so
  * the common case costs one request and the other providers are left alone.
  */
-export async function searchTx(hash: string, opts: { selected?: ChainKey | undefined; chains: readonly ChainKey[]; fetch: TxFetcher }): Promise<SearchResult> {
+/**
+ * How long the fan-out waits for the slowest chain once the selected one has answered. A chain
+ * that has not answered by then is reported as `timeout` — "could not look", never "not there".
+ */
+export const SEARCH_BUDGET_MS = 8_000
+
+export async function searchTx(hash: string, opts: { selected?: ChainKey | undefined; chains: readonly ChainKey[]; fetch: TxFetcher; budgetMs?: number }): Promise<SearchResult> {
   const { selected, chains, fetch } = opts
+  const budget = opts.budgetMs ?? SEARCH_BUDGET_MS
   const searched: ChainKey[] = []
   const failed: SearchFailure[] = []
 
@@ -57,13 +64,28 @@ export async function searchTx(hash: string, opts: { selected?: ChainKey | undef
 
   const rest = chains.filter((c) => c !== selected)
   if (rest.length === 0) return { status: 'not_found', searched, failed }
-
-  const results = await Promise.all(rest.map((c) => attempt(fetch, c, hash)))
   searched.push(...rest)
-  // Registry order decides, so the answer does not depend on which provider replied first.
-  for (const r of results) {
+
+  // With a hundred-odd chains asked at once, neither the slowest provider nor a dead one may set
+  // the pace: a chain silent past the budget counts as `timeout`. Registry order still decides
+  // which chain's answer is taken, so the result never depends on which provider replied first —
+  // the answer is ready as soon as the first chain in order that has the transaction, and every
+  // chain before it, have spoken.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<'expired'>((resolve) => {
+    timer = setTimeout(() => resolve('expired'), budget)
+  })
+  const outcomes = rest.map((c) =>
+    Promise.race([attempt(fetch, c, hash), expired]).then((r): { chain: ChainKey; tx: TxLike | null } | SearchFailure => (r === 'expired' ? { chain: c, reason: 'timeout' } : r)),
+  )
+  for (const o of outcomes) {
+    const r = await o
     if (isFailure(r)) failed.push(r)
-    else if (r.tx) return { status: 'found', chain: r.chain, tx: r.tx, searched, failed }
+    else if (r.tx) {
+      clearTimeout(timer)
+      return { status: 'found', chain: r.chain, tx: r.tx, searched, failed }
+    }
   }
+  clearTimeout(timer)
   return { status: 'not_found', searched, failed }
 }
