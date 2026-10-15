@@ -3,7 +3,7 @@
  * values live ONLY there and are never editable from the UI.
  * No imports beyond networks.ts on purpose: scripts/gen-headers.mjs loads this file with plain Node.
  */
-import { NETWORKS, NETWORKS_GENERATED, type NetworkSpec } from './networks'
+import { NETWORKS, NETWORKS_GENERATED, type NetworkSpec } from './networks.ts'
 
 /** Every key networks.ts has. The union is derived, so a protocol table cannot name a chain that is not served. */
 export type ChainKey = keyof typeof NETWORKS

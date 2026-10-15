@@ -3,9 +3,10 @@
  * recent contract addresses, transfer hashes. Every read/write is guarded.
  */
 import { isAddress } from 'viem'
-import { CHAINS, type ChainKey } from '@/core/chains'
+import { byKey, CHAINS, type ChainKey } from '@/core/chains'
 import { isProtocolId, type ProtocolId } from '@/core/protocols'
 import { validateRpcUrl } from '@/core/rpcPolicy'
+import { DEFAULT_NETWORK_ORDER, isNetworkOrder, RECENT_MAX, type NetworkOrder } from './networkOrder'
 import { clearLastTab } from './tabs'
 
 const KEY = 'oft-bridge-ui:v1'
@@ -55,9 +56,13 @@ export type Stored = {
   customRpc: Partial<Record<ChainKey, string>>
   recentContracts: { chain: ChainKey; address: string }[]
   history: HistoryEntry[]
+  /** How the network picker orders its cards (ui/networkOrder.ts). */
+  networkOrder: NetworkOrder
+  /** The networks picked last in any picker, newest first, at most RECENT_MAX. */
+  recentChains: ChainKey[]
 }
 
-export const EMPTY: Stored = { theme: DEFAULT_THEME, customRpc: {}, recentContracts: [], history: [] }
+export const EMPTY: Stored = { theme: DEFAULT_THEME, customRpc: {}, recentContracts: [], history: [], networkOrder: DEFAULT_NETWORK_ORDER, recentChains: [] }
 
 const MAX_RECENT = 8
 const MAX_HISTORY = 20
@@ -75,16 +80,23 @@ function isKey(s: unknown): s is ChainKey {
 
 /** Parses untrusted JSON into a well-formed Stored; anything odd is dropped. */
 export function sanitize(raw: unknown): Stored {
-  const out: Stored = { ...EMPTY, customRpc: {}, recentContracts: [], history: [] }
+  const out: Stored = { ...EMPTY, customRpc: {}, recentContracts: [], history: [], recentChains: [] }
   if (!raw || typeof raw !== 'object') return out
   const r = raw as Record<string, unknown>
   // 'system' was a third theme once; anything but 'light' now means the default dark.
   out.theme = r['theme'] === 'light' ? 'light' : DEFAULT_THEME
+  out.networkOrder = isNetworkOrder(r['networkOrder']) ? r['networkOrder'] : DEFAULT_NETWORK_ORDER
+  if (Array.isArray(r['recentChains'])) {
+    for (const k of r['recentChains'] as unknown[]) {
+      if (isKey(k) && !out.recentChains.includes(k)) out.recentChains.push(k)
+      if (out.recentChains.length >= RECENT_MAX) break
+    }
+  }
   const rpc = r['customRpc']
   if (rpc && typeof rpc === 'object') {
     for (const [k, v] of Object.entries(rpc as Record<string, unknown>)) {
       if (isKey(k) && typeof v === 'string') {
-        const ok = validateRpcUrl(v)
+        const ok = validateRpcUrl(v, byKey(k).vm)
         if (ok.ok) out.customRpc[k] = ok.url
       }
     }

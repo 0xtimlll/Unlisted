@@ -25,7 +25,7 @@ export function useSvmProbe(enabled: boolean, store: string | null, customRpc: s
     queryKey: ['svmProbe', store, customRpc ?? ''],
     queryFn: async (): Promise<SvmProbe> => {
       const [{ SvmRpc }, { probeSvmOft }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/source')])
-      const r = await probeSvmOft(new SvmRpc(svmRpcUrls(customRpc)), store!)
+      const r = await probeSvmOft(SvmRpc.forReads(customRpc), store!)
       const flags: SuspiciousFlag[] = []
       if (r.info.paused) flags.push('svm_source_paused')
       if (r.info.defaultFeeBps > 0) flags.push('svm_fee')
@@ -45,7 +45,7 @@ export function useSvmDecode(enabled: boolean, signature: string | null, customR
     queryKey: ['svmDecode', signature, customRpc ?? ''],
     queryFn: async (): Promise<SvmDecodeResult> => {
       const [{ SvmRpc }, { decodeSvmTx }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/decode')])
-      return decodeSvmTx(new SvmRpc(svmRpcUrls(customRpc)), signature!)
+      return decodeSvmTx(SvmRpc.forReads(customRpc), signature!)
     },
     enabled: enabled && !!signature,
     staleTime: Infinity,
@@ -59,7 +59,7 @@ export function useSvmTokenBalance(info: SvmSourceInfo | undefined, wallet: stri
     queryKey: ['svmBalance', info?.tokenMint, info?.tokenProgram, wallet, customRpc ?? ''],
     queryFn: async (): Promise<bigint> => {
       const [{ SvmRpc }, { ataFor }, { decodeTokenAccount }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/recipient'), import('@/core/svm/layouts')])
-      const rpc = new SvmRpc(svmRpcUrls(customRpc))
+      const rpc = SvmRpc.forReads(customRpc)
       const acc = await rpc.getAccountInfo(ataFor(wallet!, info!.tokenMint, info!.tokenProgram))
       return acc ? decodeTokenAccount(acc.data).amount : 0n
     },
@@ -74,7 +74,7 @@ export function useSvmNativeBalance(wallet: string | undefined, customRpc: strin
     queryKey: ['svmNative', wallet, customRpc ?? ''],
     queryFn: async (): Promise<bigint> => {
       const { SvmRpc } = await import('@/core/svm/rpc')
-      return new SvmRpc(svmRpcUrls(customRpc)).getBalance(wallet!)
+      return SvmRpc.forReads(customRpc).getBalance(wallet!)
     },
     enabled: !!wallet,
     refetchInterval: 15_000,
@@ -205,7 +205,7 @@ export function useSvmSignatureStatus(signature: string | undefined, customRpc: 
     queryKey: ['svmSig', signature, customRpc ?? ''],
     queryFn: async (): Promise<SvmConfirmation> => {
       const { SvmRpc } = await import('@/core/svm/rpc')
-      const s = await new SvmRpc(svmRpcUrls(customRpc)).getSignatureStatus(signature!)
+      const s = await SvmRpc.forReads(customRpc).getSignatureStatus(signature!)
       if (!s) return 'pending'
       if (s.err !== null) return 'failed'
       return s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized' ? 'confirmed' : 'pending'

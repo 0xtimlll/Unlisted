@@ -153,8 +153,12 @@ describe('decodeTxQuorum', () => {
 
 
 describe('clientPair: the primary stays with one operator', () => {
-  type Fallback = { transport: { type: string; transports?: { value?: { url?: string } }[] } }
-  const urls = (c: unknown) => ((c as Fallback).transport.transports ?? []).map((t) => t.value?.url ?? '')
+  // One URL is a plain http transport; several are a fallback over http transports.
+  type Transport = { transport: { type: string; url?: string; transports?: { value?: { url?: string } }[] } }
+  const urls = (c: unknown) => {
+    const t = (c as Transport).transport
+    return t.type === 'http' ? [t.url ?? ''] : (t.transports ?? []).map((x) => x.value?.url ?? '')
+  }
 
   it('falls back only within the first URL’s operator; every other operator is a secondary', () => {
     const chain = evmByKey('ethereum')

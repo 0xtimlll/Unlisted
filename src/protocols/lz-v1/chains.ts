@@ -13,7 +13,7 @@
  */
 import { getAddress, type Address } from 'viem'
 import { byKey, evmChains, isEvm, type ChainDef, type ChainKey, type EvmChainDef } from '../../core/chains'
-import { NETWORKS, NETWORKS_GENERATED, NETWORKS_SOURCES } from '../../core/networks'
+import { NETWORKS, NETWORKS_GENERATED, NETWORKS_SOURCES } from '../../core/networks.ts'
 
 export type LzV1Chain = {
   key: ChainKey

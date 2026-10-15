@@ -3,8 +3,15 @@
  * Minimal static server for `out/` that applies `out/_headers` (Cloudflare format),
  * so the CSP can be tested locally exactly as it will ship. No dependencies.
  *   node scripts/serve.mjs [port]
+ *
+ * `/rpc/<chain>` is served by the same Pages Function the deployment runs (functions/rpc), called
+ * the way Cloudflare calls it — so the page's reads go through the proxy here too, and the whole
+ * thing can be walked in a browser before it is pushed. The site password middleware is not
+ * mounted: this server listens on loopback only.
  */
 import { createServer } from 'node:http'
+import { Readable } from 'node:stream'
+import { onRequest as rpcProxy } from '../functions/rpc/[chain].ts'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path'
 
@@ -41,6 +48,10 @@ const rules = parseHeaders()
 
 createServer((req, res) => {
   try {
+    if (req.url?.startsWith('/rpc/')) {
+      void proxy(req, res)
+      return
+    }
     serve(req, res)
   } catch {
     // A malformed path (`/%`) makes decodeURIComponent throw, and an uncaught throw in this
@@ -50,6 +61,27 @@ createServer((req, res) => {
     res.end()
   }
 }).listen(PORT, '127.0.0.1', () => console.log(`serving out/ with _headers at http://127.0.0.1:${PORT}`))
+
+/** Runs the Pages Function for /rpc/<chain> with a Fetch-shaped request, as Cloudflare would. */
+async function proxy(req, res) {
+  try {
+    const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
+    const chain = url.pathname.slice('/rpc/'.length).split('/')[0] ?? ''
+    const chunks = []
+    for await (const c of req) chunks.push(c)
+    const headers = new Headers()
+    for (const [k, v] of Object.entries(req.headers)) if (typeof v === 'string') headers.set(k, v)
+    const request = new Request(url, { method: req.method ?? 'GET', headers, body: chunks.length ? Buffer.concat(chunks) : undefined })
+    const response = await rpcProxy({ request, env: process.env, params: { chain } })
+    res.statusCode = response.status
+    response.headers.forEach((v, k) => res.setHeader(k, v))
+    if (response.body) Readable.fromWeb(response.body).pipe(res)
+    else res.end()
+  } catch (e) {
+    if (!res.headersSent) res.writeHead(500, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ error: String(e?.message ?? e) }))
+  }
+}
 
 function serve(req, res) {
   const url = new URL(req.url ?? '/', 'http://x')

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { allRpcHosts, byChainId, byEid, byKey, CHAINS, evmByKey, evmChains, hasLz, isChainKey, isEvm, isSvm, lzChains, lzEvmChains, providerOfHost, providerOfUrl, requireEvm, ZERO_ADDRESS } from '@/core/chains'
 import { NETWORKS_EXCLUDED } from '@/core/networks'
-import { cspConnectSources, isAllowedRpcHost, validateRpcUrl } from '@/core/rpcPolicy'
+import { cspConnectSources, isAllowedSolanaHost, validateRpcUrl } from '@/core/rpcPolicy'
 
 /** The chains that were in the registry before it was generated; their numbers must never move. */
 const ANCHORS: Record<string, [number, number]> = {
@@ -136,29 +136,39 @@ describe('chain registry', () => {
 })
 
 describe('validateRpcUrl', () => {
-  it('accepts https on registry hosts and known providers (the CSP allow-list)', () => {
+  it('accepts any public https host for an EVM chain — the /rpc function fetches it, the browser never does', () => {
     expect(validateRpcUrl('https://ethereum-rpc.publicnode.com')).toEqual({ ok: true, url: 'https://ethereum-rpc.publicnode.com/' })
-    expect(validateRpcUrl('  https://mainnet.helius-rpc.com/?api-key=x  ').ok).toBe(true)
-    expect(validateRpcUrl('https://eth-mainnet.g.alchemy.com/v2/key').ok).toBe(true)
+    expect(validateRpcUrl('  https://eth-mainnet.g.alchemy.com/v2/key  ')).toEqual({ ok: true, url: 'https://eth-mainnet.g.alchemy.com/v2/key' })
+    expect(validateRpcUrl('https://rpc.example.com/v1#x')).toEqual({ ok: true, url: 'https://rpc.example.com/v1' })
     expect(validateRpcUrl('https://my-node.solana-mainnet.quiknode.pro/abc/').ok).toBe(true)
   })
-  it('refuses hosts the CSP would block, with a dedicated reason', () => {
-    expect(validateRpcUrl('https://rpc.example.com/v1')).toEqual({ ok: false, reason: 'host_not_allowed' })
-    expect(validateRpcUrl('https://alchemy.com')).toEqual({ ok: false, reason: 'host_not_allowed' }) // apex is not *.alchemy.com
-    expect(validateRpcUrl('https://evil-alchemy.com')).toEqual({ ok: false, reason: 'host_not_allowed' })
+  it('for Solana the host must be one the CSP lets the page reach, because the send path talks to it directly', () => {
+    expect(validateRpcUrl('https://mainnet.helius-rpc.com/?api-key=x', 'svm').ok).toBe(true)
+    expect(validateRpcUrl('https://solana-rpc.publicnode.com', 'svm').ok).toBe(true)
+    expect(validateRpcUrl('https://rpc.example.com/v1', 'svm')).toEqual({ ok: false, reason: 'host_not_allowed' })
+    expect(validateRpcUrl('https://alchemy.com', 'svm')).toEqual({ ok: false, reason: 'host_not_allowed' }) // apex is not *.alchemy.com
+    expect(validateRpcUrl('https://evil-alchemy.com', 'svm')).toEqual({ ok: false, reason: 'host_not_allowed' })
   })
-  it('CSP sources and the validator come from one list', () => {
-    for (const src of cspConnectSources()) {
+  it('CSP sources are exactly the Solana hosts, and the validator agrees with them', () => {
+    const sources = cspConnectSources()
+    expect(sources.length).toBeGreaterThan(0)
+    for (const src of sources) {
       const host = src.replace('https://', '').replace('*.', 'x.')
-      expect(isAllowedRpcHost(host)).toBe(true)
+      expect(isAllowedSolanaHost(host)).toBe(true)
     }
-    for (const c of CHAINS) for (const u of c.rpcUrls) expect(validateRpcUrl(u).ok).toBe(true)
+    for (const c of CHAINS) for (const u of c.rpcUrls) expect(validateRpcUrl(u, c.vm).ok, `${c.key}: ${u}`).toBe(true)
+    // No EVM registry host is in the CSP: the page does not talk to them.
+    for (const c of evmChains()) for (const u of c.rpcUrls) expect(sources).not.toContain(new URL(u).origin)
   })
-  it('accepts http only for localhost', () => {
-    expect(validateRpcUrl('http://localhost:8545').ok).toBe(true)
-    expect(validateRpcUrl('http://127.0.0.1:8545').ok).toBe(true)
+  it('refuses http, private and local hosts, explicit ports — what the proxy would refuse too', () => {
+    expect(validateRpcUrl('http://localhost:8545')).toEqual({ ok: false, reason: 'insecure' })
     expect(validateRpcUrl('http://rpc.example.com')).toEqual({ ok: false, reason: 'insecure' })
-    expect(validateRpcUrl('http://192.168.1.1:8545')).toEqual({ ok: false, reason: 'insecure' })
+    expect(validateRpcUrl('https://localhost/rpc')).toEqual({ ok: false, reason: 'private_host' })
+    expect(validateRpcUrl('https://127.0.0.1/rpc')).toEqual({ ok: false, reason: 'private_host' })
+    expect(validateRpcUrl('https://192.168.1.1/rpc')).toEqual({ ok: false, reason: 'private_host' })
+    expect(validateRpcUrl('https://node.internal/rpc')).toEqual({ ok: false, reason: 'private_host' })
+    expect(validateRpcUrl('https://node/rpc')).toEqual({ ok: false, reason: 'private_host' })
+    expect(validateRpcUrl('https://rpc.example.com:8545/')).toEqual({ ok: false, reason: 'port' })
   })
   it('rejects other schemes, credentials and garbage', () => {
     expect(validateRpcUrl('')).toEqual({ ok: false, reason: 'empty' })

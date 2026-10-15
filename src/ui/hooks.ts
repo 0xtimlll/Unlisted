@@ -20,7 +20,6 @@ import type { SvmRecipientCheck } from '@/core/svm/recipient'
 import { fetchStatus, trackPollInterval, type TrackState } from '@/core/track'
 import type { OftInfo } from '@/core/types'
 import { checkPeerBack, type PeerBackResult } from '@/core/verify'
-import { svmRpcUrls } from '@/core/svm/urls'
 
 export function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value)
@@ -368,7 +367,7 @@ export function useSvmDestination(enabled: boolean, peer: Hex | undefined, srcEi
         import('@/core/svm/discover'),
         import('@/core/chains'),
       ])
-      const rpc = new SvmRpc(svmRpcUrls(customRpc))
+      const rpc = SvmRpc.forReads(customRpc)
       const views = await Promise.allSettled(rpc.urls.map((u) => discoverSvmOft(rpc.single(u), peer!, srcEid)))
       const firstIdx = views.findIndex((v) => v.status === 'fulfilled')
       const first = views[firstIdx]
@@ -403,7 +402,7 @@ export function useSvmRecipient(info: SvmOftInfo | undefined, recipientBase58: s
     queryKey: ['svmRecipient', info?.tokenMint, info?.tokenProgram, recipientBase58, customRpc ?? ''],
     queryFn: async (): Promise<SvmRecipientCheck> => {
       const [{ SvmRpc }, { checkSvmRecipient }] = await Promise.all([import('@/core/svm/rpc'), import('@/core/svm/recipient')])
-      const rpc = new SvmRpc(svmRpcUrls(customRpc))
+      const rpc = SvmRpc.forReads(customRpc)
       return checkSvmRecipient(rpc, recipientBase58!, info!.tokenMint, info!.tokenProgram)
     },
     enabled: !!info && !!recipientBase58,

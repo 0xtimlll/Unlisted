@@ -3,8 +3,9 @@
  * contract look legitimate (and "simulate" it successfully); two unrelated providers agreeing
  * is a much higher bar. Disagreement blocks; a second provider being down only warns.
  */
-import { providerOfUrl, type ChainKey, type EvmChainDef } from './chains'
-import { makeReadClient, type ReadClient } from './client'
+import type { ChainKey, EvmChainDef } from './chains'
+import { makeReadClientFor, type ReadClient } from './client'
+import { readTargets } from './rpcProxy'
 import { decodeTx, DecodeTxError, type TxPrefill } from './decodeTx'
 import { sameAddress } from './encoding'
 import { probeOft, ProbeError, type ProbeResult } from './probe'
@@ -24,27 +25,28 @@ export type Pair = {
 }
 
 /**
- * Primary = user's RPC if set, else registry[0]. Secondaries = every other registry RPC, each
- * bound to a single URL so their opinions stay separate. All are asked; any disagreement blocks.
+ * Primary = user's RPC if set, else the registry's first operator. Secondaries = every OTHER
+ * operator, each bound to its own URLs so their opinions stay separate. All are asked; any
+ * disagreement blocks.
  *
  * `crossChecked` is a different question from "did anyone else answer": it is only earned by an
  * answer from a DIFFERENT operator. Two endpoints of one company share whatever is wrong with that
  * company, so counting them twice would turn one opinion into a quorum by arithmetic alone.
+ *
+ * The primary falls back only within ITS OWN operator (core/rpcProxy.ts, readTargets). With every
+ * registry URL behind it, a primary whose first URL was down would quietly answer from a
+ * secondary's operator, and the "two operators agree" below would be one operator agreeing with
+ * itself. In the browser each target is the site's /rpc function pinned to that operator, and
+ * the function keeps the same rule on its side.
  */
 export function clientPair(chain: EvmChainDef, customRpc?: string): Pair {
-  const primaryUrl = customRpc ?? chain.rpcUrls[0]!
-  const primaryProvider = providerOfUrl(primaryUrl)
-  // The primary falls back only within ITS OWN operator. With every registry URL behind it, a
-  // primary whose first URL was down would quietly answer from a secondary's operator, and the
-  // "two operators agree" below would be one operator agreeing with itself.
-  const primaryUrls = customRpc ? [customRpc] : chain.rpcUrls.filter((u) => providerOfUrl(u) === primaryProvider)
+  const [primary, ...rest] = readTargets(chain, customRpc)
+  if (!primary) throw new Error(`${chain.name} has no RPC`)
   return {
-    primary: makeReadClient({ ...chain, rpcUrls: primaryUrls }),
-    primaryProvider,
+    primary: makeReadClientFor(chain, primary.urls, primary.headers),
+    primaryProvider: primary.provider,
     endpointV2: chain.endpointV2,
-    secondaries: chain.rpcUrls
-      .filter((u) => u !== primaryUrl)
-      .map((u) => ({ client: makeReadClientSingle(chain, u), provider: providerOfUrl(u) })),
+    secondaries: rest.map((t) => ({ client: makeReadClientFor(chain, t.urls, t.headers), provider: t.provider })),
   }
 }
 
@@ -60,11 +62,6 @@ export function canCrossCheck(pair: Pair): boolean {
  */
 export function independentSecondary(pair: Pair): ReadClient | undefined {
   return pair.secondaries.find((s) => s.provider !== pair.primaryProvider)?.client
-}
-
-/** A client bound to exactly one URL (no fallback), so the two opinions stay independent. */
-function makeReadClientSingle(chain: EvmChainDef, url: string): ReadClient {
-  return makeReadClient({ ...chain, rpcUrls: [url] })
 }
 
 export type Quorum<T> = T & { crossChecked: boolean }

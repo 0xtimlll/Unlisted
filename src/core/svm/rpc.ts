@@ -2,6 +2,8 @@
  * Minimal Solana JSON-RPC client over fetch: only the read/simulate methods this app needs.
  * URLs are tried in order (user's RPC first); nothing here can sign or submit a transaction.
  */
+import { svmReadRpc } from './urls'
+
 export type SvmAccount = {
   /** base58 program id that owns the account. */
   owner: string
@@ -47,6 +49,8 @@ export class SvmRpc {
     public readonly urls: readonly string[],
     fetchImpl?: FetchLike,
     private readonly timeoutMs = 15_000,
+    /** Sent with every call: the personal RPC for the site's /rpc function (core/rpcProxy.ts). */
+    private readonly headers: Record<string, string> = {},
   ) {
     if (urls.length === 0) throw new SvmRpcError('no RPC urls')
     // Browsers require `fetch` to be called with `this === window`; a method reference loses that
@@ -56,7 +60,13 @@ export class SvmRpc {
 
   /** A client bound to exactly ONE of this client's URLs (same fetch, same timeout): for quorum reads. */
   single(url: string): SvmRpc {
-    return new SvmRpc([url], this.fetchImpl, this.timeoutMs)
+    return new SvmRpc([url], this.fetchImpl, this.timeoutMs, this.headers)
+  }
+
+  /** The read-only client the hooks use: through /rpc/solana in the browser, the direct URLs in Node. */
+  static forReads(customRpc: string | undefined): SvmRpc {
+    const { urls, headers } = svmReadRpc(customRpc)
+    return new SvmRpc(urls, undefined, undefined, headers)
   }
 
   /** Calls `method` on each URL in turn; the first successful JSON-RPC answer wins. */
@@ -66,7 +76,7 @@ export class SvmRpc {
       try {
         const r = await this.fetchImpl(url, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...this.headers },
           body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
           signal: AbortSignal.timeout(this.timeoutMs),
         })

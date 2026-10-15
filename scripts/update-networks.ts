@@ -497,7 +497,12 @@ function dominantColour(svg: string): string | undefined {
   }
   let best: string | undefined
   let n = 0
-  for (const [k, v] of counts) if (v > n) ((best = k), (n = v))
+  for (const [k, v] of counts) {
+    if (v > n) {
+      best = k
+      n = v
+    }
+  }
   return best
 }
 
