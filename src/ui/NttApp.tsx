@@ -16,6 +16,7 @@ import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
 import { byChainId, byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
+import { nttServed } from '@/protocols/wormhole-ntt/chains'
 import { parseAnalysisInput, type AnalysisInput } from '@/core/analysis/input'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
 import type { ProtocolId } from '@/core/protocols'
@@ -538,7 +539,9 @@ export function NttApp({
 
         <FromToRow
           from={src}
-          fromOptions={evmChains().map((c) => c.key)}
+          fromOptions={evmChains()
+            .filter((c) => nttServed(c.key))
+            .map((c) => c.key)}
           onFrom={(k) => {
             setSrcKey(k)
             setTarget(null)

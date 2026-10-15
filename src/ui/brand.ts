@@ -1,37 +1,36 @@
 /**
- * How each network is drawn: the colour of its card and tile, and whether the name on the card
- * is dark or light. The logo itself is `public/chains/<key>.svg` (see ATTRIBUTION.md there).
- *
- * Colours are the networks' own brand colours; `dark` is set where the brand colour is light
- * enough that white text would not read on it.
+ * How each network is drawn: the colour of its card and tile, whether the name on the card is
+ * dark or light, and whether it has a mark at all. Read from the generated src/core/networks.ts:
+ * the hand-curated chains keep the colours chosen for them (scripts/networks-curated.json), the
+ * rest take the most-used colour of their web3icons branded mark, and a network with no mark is
+ * drawn as its initials on a neutral tile. The logo itself is `public/chains/<key>.svg` (see
+ * ATTRIBUTION.md there).
  */
-import type { ChainKey } from '@/core/chains'
+import { type ChainKey } from '@/core/chains'
+import { NETWORKS } from '@/core/networks'
 
 export type Brand = {
   /** A CSS background: a colour or a gradient. */
   bg: string
   /** The name on the card is drawn in near-black rather than white. */
   dark?: boolean
+  /** False when there is no mark in public/chains: the tile shows the network's initials instead. */
+  logo: boolean
 }
 
-export const BRAND: Record<ChainKey, Brand> = {
-  ethereum: { bg: 'linear-gradient(180deg, #88AAF1, #C9B3F5)' },
-  arbitrum: { bg: '#1C4ADD' },
-  optimism: { bg: '#FF0420' },
-  base: { bg: '#0000FF' },
-  bsc: { bg: '#FFE900', dark: true },
-  polygon: { bg: 'linear-gradient(180deg, #7F49F3, #693CC8)' },
-  avalanche: { bg: '#E84142' },
-  hyperevm: { bg: 'linear-gradient(180deg, #042C24, #031D1A)' },
-  linea: { bg: '#61DFFF', dark: true },
-  scroll: { bg: '#FFEEDA', dark: true },
-  robinhood: { bg: '#000000' },
-  // The purple inkonchain.com itself is set in (its most-used accent).
-  ink: { bg: '#7538F5' },
-  // Black is the brand: plasma.to's theme-color and primary button are #000000, and web3icons'
-  // branded mark is the same shape filled black.
-  plasma: { bg: '#000000' },
-  // Monad's purple, the fill of web3icons' branded mark; the white mono mark sits on it.
-  monad: { bg: '#836EF9' },
-  solana: { bg: 'linear-gradient(0deg, #1A1622, #121212)' },
+export const BRAND: Record<ChainKey, Brand> = Object.fromEntries(
+  (Object.keys(NETWORKS) as ChainKey[]).map((key) => {
+    const b = NETWORKS[key].brand
+    return [key, { bg: b.bg, ...(b.dark ? { dark: true } : {}), logo: b.logo }]
+  }),
+) as Record<ChainKey, Brand>
+
+/**
+ * The letters a network with no mark is drawn with: the first letter of its first two words
+ * ("Flow EVM" → "FE"), or the first two letters of a one-word name ("Mezo" → "ME").
+ */
+export function initialsOf(name: string): string {
+  const words = name.split(/[\s-]+/).filter(Boolean)
+  const s = words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : (words[0] ?? '?').slice(0, 2)
+  return s.toUpperCase()
 }

@@ -16,7 +16,7 @@
  */
 import { useCallback, useMemo, useState } from 'react'
 import { useAccount, useSwitchChain, useWriteContract } from 'wagmi'
-import { byKey, evmChains, isEvm, type ChainKey } from '@/core/chains'
+import { byKey, isEvm, lzEvmChains, type ChainKey } from '@/core/chains'
 import { isTxHash } from '@/core/decodeTx'
 import { makeReadClient } from '@/core/client'
 import { formatRevert } from '@/core/sim/revert'
@@ -71,7 +71,7 @@ export function RescueApp({ stored, srcKey, setSrcKey }: { stored: Stored; srcKe
   // Only chains whose endpoints, core bridges and routers this app knows: every state here is read
   // from the destination's own contracts, and there is nothing to read on a chain the registry does
   // not serve.
-  const chains = useMemo(() => evmChains(), [])
+  const chains = useMemo(() => lzEvmChains(), [])
   const srcDef = byKey(srcKey)
   const write = useWriteContract()
 

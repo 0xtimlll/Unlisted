@@ -1,0 +1,430 @@
+{
+  "$note": "Hand-curated inputs for scripts/update-networks.ts, keyed by EVM chain id (and \"solana\"). Everything else in src/core/networks.ts is fetched from the official sources and verified on chain. A chain listed here keeps its key, its display name, its RPC list (URLs and the operator behind each, in this order), its explorer, its fee step and ceiling, its confirmation hint and its brand; `logo: \"keep\"` means public/chains/<key>.svg is hand-placed (see ATTRIBUTION.md there) and is never overwritten. `exclude` names chains the sources list as mainnet but which must not be served, with the reason. `names` gives a display name to a chain the sources name awkwardly (a suffix, a lowercase key, a city instead of the network).",
+  "chains": {
+    "1": {
+      "$note": "Fee step 0.0001 ETH; ceiling 0.1 ETH (an order of magnitude above what Ethereum routes cost).",
+      "key": "ethereum",
+      "name": "Ethereum",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://ethereum-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        },
+        {
+          "url": "https://eth.drpc.org",
+          "provider": "drpc.org"
+        }
+      ],
+      "explorerTxUrl": "https://etherscan.io/tx/",
+      "explorerAddrUrl": "https://etherscan.io/address/",
+      "srcConfirmationsHint": 32,
+      "feeStep": "100000000000000",
+      "feeCeiling": "100000000000000000",
+      "brand": {
+        "bg": "linear-gradient(180deg, #88AAF1, #C9B3F5)"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "ethereum"
+    },
+    "10": {
+      "key": "optimism",
+      "name": "Optimism",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://mainnet.optimism.io",
+          "provider": "optimism.io"
+        },
+        {
+          "url": "https://optimism-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://optimistic.etherscan.io/tx/",
+      "explorerAddrUrl": "https://optimistic.etherscan.io/address/",
+      "srcConfirmationsHint": 20,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#FF0420"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "optimistic-ethereum"
+    },
+    "56": {
+      "key": "bsc",
+      "name": "BNB Chain",
+      "nativeSymbol": "BNB",
+      "rpcs": [
+        {
+          "url": "https://bsc-dataseed.bnbchain.org",
+          "provider": "bnbchain.org"
+        },
+        {
+          "url": "https://bsc-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://bscscan.com/tx/",
+      "explorerAddrUrl": "https://bscscan.com/address/",
+      "srcConfirmationsHint": 20,
+      "feeStep": "1000000000000000",
+      "feeCeiling": "200000000000000000",
+      "brand": {
+        "bg": "#FFE900",
+        "dark": true
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "binance-smart-chain"
+    },
+    "137": {
+      "key": "polygon",
+      "name": "Polygon",
+      "nativeSymbol": "POL",
+      "rpcs": [
+        {
+          "url": "https://polygon-bor-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        },
+        {
+          "url": "https://polygon.drpc.org",
+          "provider": "drpc.org"
+        }
+      ],
+      "explorerTxUrl": "https://polygonscan.com/tx/",
+      "explorerAddrUrl": "https://polygonscan.com/address/",
+      "srcConfirmationsHint": 512,
+      "feeStep": "10000000000000000",
+      "feeCeiling": "200000000000000000000",
+      "brand": {
+        "bg": "linear-gradient(180deg, #7F49F3, #693CC8)"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "polygon-pos"
+    },
+    "143": {
+      "$note": "rpc.monad.xyz serves eth_getLogs over 100 blocks at most, so log scans fall through to swiftnodes (2 000) and thirdweb (1 000). 4 confirmations at 0.3 s blocks; USDT0 quotes ~2.9 MON to Ethereum.",
+      "key": "monad",
+      "name": "Monad",
+      "nativeSymbol": "MON",
+      "rpcs": [
+        {
+          "url": "https://rpc.monad.xyz",
+          "provider": "monad.xyz"
+        },
+        {
+          "url": "https://rpc.swiftnodes.io/rpc/monad",
+          "provider": "swiftnodes.io"
+        },
+        {
+          "url": "https://143.rpc.thirdweb.com",
+          "provider": "thirdweb.com"
+        }
+      ],
+      "explorerTxUrl": "https://monadscan.com/tx/",
+      "explorerAddrUrl": "https://monadscan.com/address/",
+      "srcConfirmationsHint": 4,
+      "blockTimeSec": 0.3,
+      "feeStep": "10000000000000000",
+      "feeCeiling": "50000000000000000000",
+      "brand": {
+        "bg": "#836EF9"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "monad"
+    },
+    "999": {
+      "$note": "Three public operators; no Wormhole core bridge is verified here (NTT unavailable).",
+      "key": "hyperevm",
+      "name": "HyperEVM",
+      "nativeSymbol": "HYPE",
+      "rpcs": [
+        {
+          "url": "https://rpc.hyperliquid.xyz/evm",
+          "provider": "hyperliquid.xyz"
+        },
+        {
+          "url": "https://rpc.hypurrscan.io",
+          "provider": "hypurrscan.io"
+        },
+        {
+          "url": "https://hyperliquid-json-rpc.stakely.io",
+          "provider": "stakely.io"
+        }
+      ],
+      "explorerTxUrl": "https://hyperevmscan.io/tx/",
+      "explorerAddrUrl": "https://hyperevmscan.io/address/",
+      "srcConfirmationsHint": 20,
+      "feeStep": "10000000000000000",
+      "feeCeiling": "5000000000000000000",
+      "brand": {
+        "bg": "linear-gradient(180deg, #042C24, #031D1A)"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "hyperevm"
+    },
+    "4663": {
+      "$note": "The operator publishes one rate-limited RPC; drpc is the second opinion. 20 confirmations at ~0.1 s blocks (read from the ULN send config).",
+      "key": "robinhood",
+      "name": "Robinhood",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://rpc.mainnet.chain.robinhood.com",
+          "provider": "robinhood.com"
+        },
+        {
+          "url": "https://robinhood.drpc.org",
+          "provider": "drpc.org"
+        }
+      ],
+      "explorerTxUrl": "https://robinhoodchain.blockscout.com/tx/",
+      "explorerAddrUrl": "https://robinhoodchain.blockscout.com/address/",
+      "srcConfirmationsHint": 20,
+      "blockTimeSec": 0.1,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#000000"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "robinhood"
+    },
+    "8453": {
+      "key": "base",
+      "name": "Base",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://mainnet.base.org",
+          "provider": "base.org"
+        },
+        {
+          "url": "https://base-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://basescan.org/tx/",
+      "explorerAddrUrl": "https://basescan.org/address/",
+      "srcConfirmationsHint": 10,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#0000FF"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "base"
+    },
+    "9745": {
+      "$note": "rpc.plasma.to is the operator; swiftnodes and thirdweb are public endpoints of unrelated operators. 5 confirmations at 1 s blocks.",
+      "key": "plasma",
+      "name": "Plasma",
+      "nativeSymbol": "XPL",
+      "rpcs": [
+        {
+          "url": "https://rpc.plasma.to",
+          "provider": "plasma.to"
+        },
+        {
+          "url": "https://rpc.swiftnodes.io/rpc/plasma",
+          "provider": "swiftnodes.io"
+        },
+        {
+          "url": "https://9745.rpc.thirdweb.com",
+          "provider": "thirdweb.com"
+        }
+      ],
+      "explorerTxUrl": "https://plasmascan.to/tx/",
+      "explorerAddrUrl": "https://plasmascan.to/address/",
+      "srcConfirmationsHint": 5,
+      "blockTimeSec": 1,
+      "feeStep": "10000000000000000",
+      "feeCeiling": "100000000000000000000",
+      "brand": {
+        "bg": "#000000"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "plasma"
+    },
+    "42161": {
+      "key": "arbitrum",
+      "name": "Arbitrum",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://arb1.arbitrum.io/rpc",
+          "provider": "arbitrum.io"
+        },
+        {
+          "url": "https://arbitrum-one-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://arbiscan.io/tx/",
+      "explorerAddrUrl": "https://arbiscan.io/address/",
+      "srcConfirmationsHint": 20,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#1C4ADD"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "arbitrum-one"
+    },
+    "43114": {
+      "key": "avalanche",
+      "name": "Avalanche",
+      "nativeSymbol": "AVAX",
+      "rpcs": [
+        {
+          "url": "https://api.avax.network/ext/bc/C/rpc",
+          "provider": "avax.network"
+        },
+        {
+          "url": "https://avalanche-c-chain-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://snowtrace.io/tx/",
+      "explorerAddrUrl": "https://snowtrace.io/address/",
+      "srcConfirmationsHint": 12,
+      "feeStep": "1000000000000000",
+      "feeCeiling": "5000000000000000000",
+      "brand": {
+        "bg": "#E84142"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "avalanche"
+    },
+    "57073": {
+      "$note": "Ink names the operators behind its two endpoints (Gelato, QuickNode), so they are two opinions, not one host twice. 20 confirmations at 1 s blocks.",
+      "key": "ink",
+      "name": "Ink",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://rpc-gel.inkonchain.com",
+          "provider": "gelato.network"
+        },
+        {
+          "url": "https://rpc-qnd.inkonchain.com",
+          "provider": "quicknode.com"
+        },
+        {
+          "url": "https://ink.drpc.org",
+          "provider": "drpc.org"
+        }
+      ],
+      "explorerTxUrl": "https://explorer.inkonchain.com/tx/",
+      "explorerAddrUrl": "https://explorer.inkonchain.com/address/",
+      "srcConfirmationsHint": 20,
+      "blockTimeSec": 1,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#7538F5"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "ink"
+    },
+    "59144": {
+      "key": "linea",
+      "name": "Linea",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://rpc.linea.build",
+          "provider": "linea.build"
+        },
+        {
+          "url": "https://linea-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://lineascan.build/tx/",
+      "explorerAddrUrl": "https://lineascan.build/address/",
+      "srcConfirmationsHint": 20,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#61DFFF",
+        "dark": true
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "linea"
+    },
+    "534352": {
+      "key": "scroll",
+      "name": "Scroll",
+      "nativeSymbol": "ETH",
+      "rpcs": [
+        {
+          "url": "https://rpc.scroll.io",
+          "provider": "scroll.io"
+        },
+        {
+          "url": "https://scroll-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://scrollscan.com/tx/",
+      "explorerAddrUrl": "https://scrollscan.com/address/",
+      "srcConfirmationsHint": 20,
+      "feeStep": "10000000000000",
+      "feeCeiling": "20000000000000000",
+      "brand": {
+        "bg": "#FFEEDA",
+        "dark": true
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "scroll"
+    },
+    "solana": {
+      "$note": "Both public endpoints are publicnode (one operator); the UI recommends a personal RPC. Fee step 10 000 lamports, ceiling 1 SOL.",
+      "key": "solana",
+      "name": "Solana",
+      "nativeSymbol": "SOL",
+      "rpcs": [
+        {
+          "url": "https://solana-rpc.publicnode.com",
+          "provider": "publicnode.com"
+        },
+        {
+          "url": "https://solana.publicnode.com",
+          "provider": "publicnode.com"
+        }
+      ],
+      "explorerTxUrl": "https://solscan.io/tx/",
+      "explorerAddrUrl": "https://solscan.io/account/",
+      "srcConfirmationsHint": 1,
+      "feeStep": "10000",
+      "feeCeiling": "1000000000",
+      "brand": {
+        "bg": "linear-gradient(0deg, #1A1622, #121212)"
+      },
+      "logo": "keep",
+      "coingeckoPlatform": "solana"
+    }
+  },
+  "names": {
+    "324": "zkSync Era",
+    "8217": "Kaia",
+    "1514": "Story",
+    "747474": "Katana",
+    "4217": "Tempo",
+    "6900": "Nibiru",
+    "747": "Flow EVM",
+    "1440000": "XRPL EVM",
+    "16661": "0G",
+    "9069": "Apex Fusion Nexus",
+    "904": "Ault",
+    "43419": "GUNZ",
+    "21211": "1Money",
+    "784": "PXA Chain",
+    "177": "HashKey Chain"
+  },
+  "exclude": {
+    "11155111": "Sepolia — a testnet that LayerZero metadata lists under stage mainnet"
+  }
+}

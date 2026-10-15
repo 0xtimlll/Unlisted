@@ -86,15 +86,16 @@ export class SvmRpc {
     return toAccount(r.value)
   }
 
-  /** Chunked: some public providers refuse more than 10 keys per call. */
+  /**
+   * Chunked: some public providers refuse more than 10 keys per call. The chunks go out together —
+   * with a PeerConfig per served chain there are ten of them, and waiting for each in turn would
+   * make the Solana probe ten round trips long.
+   */
   async getMultipleAccounts(pubkeys: string[]): Promise<(SvmAccount | null)[]> {
-    const out: (SvmAccount | null)[] = []
-    for (let i = 0; i < pubkeys.length; i += MAX_KEYS_PER_CALL) {
-      const chunk = pubkeys.slice(i, i + MAX_KEYS_PER_CALL)
-      const r = await this.call<{ value: RawAccount[] }>('getMultipleAccounts', [chunk, { encoding: 'base64', commitment: 'confirmed' }])
-      out.push(...r.value.map(toAccount))
-    }
-    return out
+    const chunks: string[][] = []
+    for (let i = 0; i < pubkeys.length; i += MAX_KEYS_PER_CALL) chunks.push(pubkeys.slice(i, i + MAX_KEYS_PER_CALL))
+    const results = await Promise.all(chunks.map((chunk) => this.call<{ value: RawAccount[] }>('getMultipleAccounts', [chunk, { encoding: 'base64', commitment: 'confirmed' }])))
+    return results.flatMap((r) => r.value.map(toAccount))
   }
 
   async getVersion(): Promise<string> {

@@ -281,8 +281,8 @@ describe('a Solana signature, in the same shape as everything else', () => {
   })
 
   it('records a destination outside our registry without inventing a name', () => {
-    const r = analyzeSvmPrefill({ ...prefill, dstEid: 30324 }, {})
-    expect(r.vars['destination']).toBe('30324')
+    const r = analyzeSvmPrefill({ ...prefill, dstEid: 39999 }, {})
+    expect(r.vars['destination']).toBe('39999')
     expect(r.target?.dstChain).toBeUndefined()
   })
 

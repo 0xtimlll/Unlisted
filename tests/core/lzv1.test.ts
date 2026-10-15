@@ -77,14 +77,15 @@ function plan(wire: V1Wire, over: Partial<V1SendPlan> = {}): V1SendPlan {
 const WIRES: V1Wire[] = ['bytes', 'bytes32', 'bytes32_fee']
 
 describe('the committed v1 chain table', () => {
-  it('covers every EVM chain in the registry, with a uint16 id and a checksummed endpoint', () => {
+  it('covers every registry chain LayerZero v1 serves, with a uint16 id and a checksummed endpoint', () => {
     for (const c of evmChains()) {
       const v1 = lzV1(c.key)
-      expect(v1, c.key).toBeDefined()
-      expect(v1!.v1ChainId).toBeGreaterThan(0)
-      expect(v1!.v1ChainId).toBeLessThanOrEqual(0xffff)
-      expect(v1!.endpoint).toBe(getAddress(v1!.endpoint))
+      if (!v1) continue // Wormhole- or CCIP-only chains have no v1 row, and must not be invented one
+      expect(v1.v1ChainId).toBeGreaterThan(0)
+      expect(v1.v1ChainId).toBeLessThanOrEqual(0xffff)
+      expect(v1.endpoint).toBe(getAddress(v1.endpoint))
     }
+    for (const key of ['ethereum', 'arbitrum', 'optimism', 'base', 'bsc', 'polygon', 'avalanche', 'hyperevm', 'linea', 'scroll', 'ink', 'plasma', 'monad'] as const) expect(lzV1(key), key).toBeDefined()
   })
 
   it('agrees with LayerZero on the ids that have been public for years', () => {

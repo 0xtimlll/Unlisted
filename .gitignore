@@ -22,3 +22,6 @@ next-env.d.ts
 
 # wrangler pages dev scratch
 /.wrangler/
+
+# scripts/update-networks.ts --check leaves the fresh output here for diffing
+/.networks.check.ts

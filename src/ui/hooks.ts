@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { encodeFunctionData, type Address, type Hash, type Hex } from 'viem'
 import { useBalance, usePublicClient, useReadContract } from 'wagmi'
 import { erc20Abi, oftAbi } from '@/core/abi'
-import { byEid, evmByKey, evmChains, isEvm, type ChainKey, type EvmChainDef } from '@/core/chains'
+import { byEid, evmByKey, isEvm, lzEvmChains, type ChainKey, type EvmChainDef } from '@/core/chains'
 import { makeReadClient, type ReadClient } from '@/core/client'
 import { findAdapterForToken } from '@/core/adapterSearch'
 import { selfCheck, type SelfCheckResult, type SimulationResult } from '@/core/guards'
@@ -424,7 +424,7 @@ export function useAdapterSearch(src: EvmChainDef | undefined, token: Address | 
     queryFn: () => {
       const srcPair = clientPair(src!, customRpc[src!.key])
       return findAdapterForToken(
-        { token: token!, srcChain: src!.key, srcEid: src!.eid, chains: evmChains().map((c) => c.key) },
+        { token: token!, srcChain: src!.key, srcEid: src!.eid, chains: lzEvmChains().map((c) => c.key) },
         {
           readPeer: (chain, address, eid) =>
             makeReadClient(evmByKey(chain), customRpc[chain]).readContract({ address, abi: oftAbi, functionName: 'peers', args: [eid] }),

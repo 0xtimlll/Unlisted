@@ -8,7 +8,7 @@ import { assessIndicator } from '@/core/indicator'
 import { useApproveFlow } from './useApproveFlow'
 import { useLinkSync } from './useLink'
 import { AmountError, formatAmount, parseAmount } from '@/core/amounts'
-import { byChainId, byEid, byKey, CHAINS, evmChains, isEvm, type ChainKey } from '@/core/chains'
+import { byChainId, byEid, byKey, isEvm, lzChains, lzEvmChains, type ChainKey } from '@/core/chains'
 import type { AnalysisInput } from '@/core/analysis/input'
 import { analyzeSvmPrefill } from '@/core/analysis/svm'
 import type { AnalysisAction, AnalysisTarget } from '@/core/analysis/result'
@@ -280,7 +280,7 @@ export function BridgeApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapterSearch.data])
   const adapterApplied = !!adapterHint && probeTarget?.toLowerCase() === adapterHint.adapter.toLowerCase()
-  const otherChains = evmChains().length - 1
+  const otherChains = lzEvmChains().length - 1
   const adapterNote: string = adapterSearch.isFetching
     ? fmt(d.step1.adapterSearching, { chain: src.name, n: otherChains })
     : adapterApplied
@@ -837,7 +837,7 @@ export function BridgeApp({
 
         <FromToRow
           from={src}
-          fromOptions={CHAINS.map((c) => c.key)}
+          fromOptions={lzChains().map((c) => c.key)}
           onFrom={onSrcChange}
           to={dstChain}
           toOptions={routeKeys}

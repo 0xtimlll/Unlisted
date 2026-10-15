@@ -42,9 +42,11 @@ describe('Hyperlane configuration', () => {
       expect(cfg, key).toBeDefined()
       expect(cfg!.mailbox, key).toMatch(/^0x[0-9a-fA-F]{40}$/)
       expect(cfg!.domain, key).toBeGreaterThan(0)
-      expect(cfg!.registryName, key).toMatch(/^[a-z]+$/)
+      expect(cfg!.registryName, key).toMatch(/^[a-z0-9]+$/)
     }
-    expect(Object.keys(HYPERLANE_CHAINS)).toHaveLength(14)
+    // The hand-verified anchors stay; the registry adds the rest (and drops a chain it marks deprecated — Scroll, 2026-10-15).
+    for (const key of ['ethereum', 'arbitrum', 'optimism', 'base', 'bsc', 'polygon', 'avalanche', 'hyperevm', 'linea', 'robinhood', 'ink', 'plasma', 'monad'] as const) expect(HYPERLANE_CHAINS[key], key).toBeDefined()
+    expect(Object.keys(HYPERLANE_CHAINS).length).toBeGreaterThanOrEqual(13)
   })
 
   it('domains round-trip to chains and are unique', () => {

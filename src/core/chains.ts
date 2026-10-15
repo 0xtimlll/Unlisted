@@ -1,24 +1,17 @@
 /**
- * Chain registry (§4). `eid` values live ONLY here and are never editable from the UI.
- * No imports on purpose: scripts/gen-headers.mjs loads this file with plain Node.
+ * Chain registry (§4), built from the generated src/core/networks.ts and nothing else. `eid`
+ * values live ONLY there and are never editable from the UI.
+ * No imports beyond networks.ts on purpose: scripts/gen-headers.mjs loads this file with plain Node.
  */
+import { NETWORKS, NETWORKS_GENERATED, type NetworkSpec } from './networks'
 
-export type ChainKey =
-  | 'ethereum'
-  | 'arbitrum'
-  | 'optimism'
-  | 'base'
-  | 'bsc'
-  | 'polygon'
-  | 'avalanche'
-  | 'hyperevm'
-  | 'linea'
-  | 'scroll'
-  | 'robinhood'
-  | 'ink'
-  | 'plasma'
-  | 'monad'
-  | 'solana'
+/** Every key networks.ts has. The union is derived, so a protocol table cannot name a chain that is not served. */
+export type ChainKey = keyof typeof NETWORKS
+
+/** `NETWORKS` as the generated literal; this widens it to the declared shape once, for everything below. */
+const SPECS: Readonly<Record<ChainKey, NetworkSpec>> = NETWORKS
+
+export const NETWORKS_DATE: string = NETWORKS_GENERATED
 
 /**
  * One RPC endpoint and the operator behind it. `provider` is the operator's domain, so it matches
@@ -29,9 +22,13 @@ export type RpcEndpoint = { url: string; provider: string }
 type ChainCommon = {
   key: ChainKey
   name: string
-  /** LayerZero V2 endpoint id. */
+  /**
+   * LayerZero V2 endpoint id. 0 on a chain LayerZero does not serve (Wormhole- or CCIP-only):
+   * no route can name eid 0, byEid(0) answers nothing, and the OFT tabs list only lzChains().
+   */
   eid: number
   nativeSymbol: string
+  nativeDecimals: number
   /**
    * Public RPCs, tried in order. A user-supplied RPC (settings) goes first.
    *
@@ -66,6 +63,8 @@ type ChainCommon = {
    * the user to confirm the number they are about to pay (guard 21).
    */
   feeCeiling: bigint
+  /** DefiLlama's TVL on the day networks.ts was generated, in USD. Orders the network picker; decides nothing else. */
+  tvlUsd: number
 }
 
 export type EvmChainDef = ChainCommon & {
@@ -79,8 +78,9 @@ export type EvmChainDef = ChainCommon & {
    * names a fake endpoint gets to answer the questions about itself. probeOft() compares the two
    * and refuses a mismatch, the way lz-v1/detect.ts has always done with Endpoint V1.
    *
-   * Every address here was read back on chain: `eid()` on each one returns this chain's `eid`
-   * (selector 0x416ecebf, from `toFunctionSelector('function eid() view returns (uint32)')`).
+   * Every address here was read back on chain by scripts/update-networks.ts: `eid()` on each one
+   * returns this chain's `eid`. On a chain LayerZero does not serve it is the zero address, which
+   * no OFT's `endpoint()` can equal — so the probe refuses every contract there, as it should.
    */
   endpointV2: `0x${string}`
   /** Fee rounding step (wei). `value` is rounded UP to a multiple of this so the wallet shows a clean number. */
@@ -96,30 +96,7 @@ export type SvmChainDef = ChainCommon & {
 /** Discriminated by `vm`. Everything that needs a chainId or wei must narrow with isEvm() first. */
 export type ChainDef = EvmChainDef | SvmChainDef
 
-/**
- * An optional build-time RPC, from a NEXT_PUBLIC_ variable. Robinhood Chain's public endpoint is
- * the only one its operator publishes and it is rate-limited, so a deployment can put its own node
- * in front of it without editing this file:
- *
- *   NEXT_PUBLIC_RPC_ROBINHOOD=https://my-node.example
- *
- * Next inlines this literal `process.env['NEXT_PUBLIC_...']` access at build time, and
- * scripts/gen-headers.mjs reads the same variable with plain Node — so whatever is set here also
- * lands in the CSP's connect-src and in validateRpcUrl's allow-list, and can never become a host
- * the browser silently blocks. A value that is not an https URL is dropped rather than shipped:
- * one broken entry here would take the whole chain's reads down.
- */
-function envRpc(value: string | undefined): readonly RpcEndpoint[] {
-  if (!value) return []
-  try {
-    const u = new URL(value.trim())
-    // Its operator is whatever host was configured — never one of the registry's, so it always
-    // counts as an independent opinion against them.
-    return u.protocol === 'https:' ? [{ url: u.toString(), provider: providerOfHost(u.hostname) }] : []
-  } catch {
-    return []
-  }
-}
+export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
 /** The operator a hostname belongs to: its registrable domain, near enough for this purpose. */
 export function providerOfHost(hostname: string): string {
@@ -132,7 +109,8 @@ export function providerOfHost(hostname: string): string {
  * (a user's own RPC) falls back to the host's registrable domain.
  */
 export function providerOfUrl(url: string): string {
-  for (const c of CHAINS) for (const r of c.rpcs) if (r.url === url) return r.provider
+  const declared = PROVIDER_OF_URL.get(url)
+  if (declared) return declared
   try {
     return providerOfHost(new URL(url).hostname)
   } catch {
@@ -140,297 +118,50 @@ export function providerOfUrl(url: string): string {
   }
 }
 
-/** The registry as written: every field except `rpcUrls`, which is derived from `rpcs` below. */
-type ChainSpec = (Omit<EvmChainDef, 'rpcUrls'> | Omit<SvmChainDef, 'rpcUrls'>) & { rpcs: readonly RpcEndpoint[] }
-
-const CHAIN_SPECS: readonly ChainSpec[] = [
-  {
+function toChainDef(key: ChainKey, s: NetworkSpec): ChainDef {
+  const common: ChainCommon = {
+    key,
+    name: s.name,
+    eid: s.lz?.eid ?? 0,
+    nativeSymbol: s.nativeSymbol,
+    nativeDecimals: s.nativeDecimals,
+    rpcs: s.rpcs.map((r) => ({ url: r.url, provider: r.provider })),
+    rpcUrls: s.rpcs.map((r) => r.url),
+    explorerTxUrl: s.explorerTxUrl,
+    explorerAddrUrl: s.explorerAddrUrl,
+    srcConfirmationsHint: s.srcConfirmationsHint,
+    ...(s.blockTimeSec !== null ? { blockTimeSec: s.blockTimeSec } : {}),
+    feeCeiling: BigInt(s.feeCeiling),
+    tvlUsd: s.tvlUsd,
+  }
+  if (s.vm === 'svm') return { ...common, vm: 'svm', feeStepLamports: BigInt(s.feeStep) }
+  if (s.chainId === null) throw new Error(`networks.ts: ${key} is evm without a chainId`)
+  return {
+    ...common,
     vm: 'evm',
-    key: 'ethereum',
-    name: 'Ethereum',
-    chainId: 1,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30101,
-    nativeSymbol: 'ETH',
-    rpcs: [{ url: 'https://ethereum-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://eth.drpc.org', provider: 'drpc.org' }],
-    explorerTxUrl: 'https://etherscan.io/tx/',
-    explorerAddrUrl: 'https://etherscan.io/address/',
-    feeStepWei: 10n ** 14n, // 0.0001 ETH
-    srcConfirmationsHint: 32,
-    feeCeiling: 10n ** 17n, // 0.1 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'arbitrum',
-    name: 'Arbitrum',
-    chainId: 42161,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30110,
-    nativeSymbol: 'ETH',
-    rpcs: [{ url: 'https://arb1.arbitrum.io/rpc', provider: 'arbitrum.io' }, { url: 'https://arbitrum-one-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://arbiscan.io/tx/',
-    explorerAddrUrl: 'https://arbiscan.io/address/',
-    feeStepWei: 10n ** 13n,
-    srcConfirmationsHint: 20,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'optimism',
-    name: 'Optimism',
-    chainId: 10,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30111,
-    nativeSymbol: 'ETH',
-    rpcs: [{ url: 'https://mainnet.optimism.io', provider: 'optimism.io' }, { url: 'https://optimism-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://optimistic.etherscan.io/tx/',
-    explorerAddrUrl: 'https://optimistic.etherscan.io/address/',
-    feeStepWei: 10n ** 13n,
-    srcConfirmationsHint: 20,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'base',
-    name: 'Base',
-    chainId: 8453,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30184,
-    nativeSymbol: 'ETH',
-    rpcs: [{ url: 'https://mainnet.base.org', provider: 'base.org' }, { url: 'https://base-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://basescan.org/tx/',
-    explorerAddrUrl: 'https://basescan.org/address/',
-    feeStepWei: 10n ** 13n,
-    srcConfirmationsHint: 10,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'bsc',
-    name: 'BNB Chain',
-    chainId: 56,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30102,
-    nativeSymbol: 'BNB',
-    rpcs: [{ url: 'https://bsc-dataseed.bnbchain.org', provider: 'bnbchain.org' }, { url: 'https://bsc-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://bscscan.com/tx/',
-    explorerAddrUrl: 'https://bscscan.com/address/',
-    feeStepWei: 10n ** 15n, // 0.001 BNB
-    srcConfirmationsHint: 20,
-    feeCeiling: 2n * 10n ** 17n, // 0.2 BNB
-  },
-  {
-    vm: 'evm',
-    key: 'polygon',
-    name: 'Polygon',
-    chainId: 137,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30109,
-    nativeSymbol: 'POL',
-    rpcs: [{ url: 'https://polygon-bor-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://polygon.drpc.org', provider: 'drpc.org' }],
-    explorerTxUrl: 'https://polygonscan.com/tx/',
-    explorerAddrUrl: 'https://polygonscan.com/address/',
-    feeStepWei: 10n ** 16n, // 0.01 POL
-    srcConfirmationsHint: 512,
-    feeCeiling: 2n * 10n ** 20n, // 200 POL
-  },
-  {
-    vm: 'evm',
-    key: 'avalanche',
-    name: 'Avalanche',
-    chainId: 43114,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30106,
-    nativeSymbol: 'AVAX',
-    rpcs: [{ url: 'https://api.avax.network/ext/bc/C/rpc', provider: 'avax.network' }, { url: 'https://avalanche-c-chain-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://snowtrace.io/tx/',
-    explorerAddrUrl: 'https://snowtrace.io/address/',
-    feeStepWei: 10n ** 15n,
-    srcConfirmationsHint: 12,
-    feeCeiling: 5n * 10n ** 18n, // 5 AVAX
-  },
-  {
-    vm: 'evm',
-    key: 'hyperevm',
-    name: 'HyperEVM',
-    chainId: 999,
-    endpointV2: '0x3A73033C0b1407574C76BdBAc67f126f6b4a9AA9',
-    eid: 30367,
-    nativeSymbol: 'HYPE',
-    rpcs: [{ url: 'https://rpc.hyperliquid.xyz/evm', provider: 'hyperliquid.xyz' }, { url: 'https://rpc.hypurrscan.io', provider: 'hypurrscan.io' }, { url: 'https://hyperliquid-json-rpc.stakely.io', provider: 'stakely.io' }],
-    explorerTxUrl: 'https://hyperevmscan.io/tx/',
-    explorerAddrUrl: 'https://hyperevmscan.io/address/',
-    feeStepWei: 10n ** 16n, // 0.01 HYPE
-    srcConfirmationsHint: 20,
-    feeCeiling: 5n * 10n ** 18n, // 5 HYPE
-  },
-  {
-    vm: 'evm',
-    key: 'linea',
-    name: 'Linea',
-    chainId: 59144,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30183,
-    nativeSymbol: 'ETH',
-    rpcs: [{ url: 'https://rpc.linea.build', provider: 'linea.build' }, { url: 'https://linea-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://lineascan.build/tx/',
-    explorerAddrUrl: 'https://lineascan.build/address/',
-    feeStepWei: 10n ** 13n,
-    srcConfirmationsHint: 20,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'scroll',
-    name: 'Scroll',
-    chainId: 534352,
-    endpointV2: '0x1a44076050125825900e736c501f859c50fE728c',
-    eid: 30214,
-    nativeSymbol: 'ETH',
-    rpcs: [{ url: 'https://rpc.scroll.io', provider: 'scroll.io' }, { url: 'https://scroll-rpc.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://scrollscan.com/tx/',
-    explorerAddrUrl: 'https://scrollscan.com/address/',
-    feeStepWei: 10n ** 13n,
-    srcConfirmationsHint: 20,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'robinhood',
-    // "Robinhood Chain" in its own documentation; the pill shows the short form.
-    name: 'Robinhood',
-    chainId: 4663,
-    endpointV2: '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B',
-    eid: 30416,
-    nativeSymbol: 'ETH',
-    // The operator publishes one RPC and rate-limits it; drpc serves the chain as a second opinion,
-    // which the quorum checks need (one provider must never be the only one asked about a spender).
-    rpcs: [...envRpc(process.env['NEXT_PUBLIC_RPC_ROBINHOOD']), { url: 'https://rpc.mainnet.chain.robinhood.com', provider: 'robinhood.com' }, { url: 'https://robinhood.drpc.org', provider: 'drpc.org' }],
-    explorerTxUrl: 'https://robinhoodchain.blockscout.com/tx/',
-    explorerAddrUrl: 'https://robinhoodchain.blockscout.com/address/',
-    feeStepWei: 10n ** 13n,
-    // Read from the chain, not assumed: the ULN send config for live routes off this chain asks for
-    // 20 confirmations, and a block is ~0.101s, so the wait is seconds rather than minutes.
-    srcConfirmationsHint: 20,
-    blockTimeSec: 0.1,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'ink',
-    name: 'Ink',
-    chainId: 57073,
-    // From LayerZero's metadata (chainKey "ink"), read back on chain: eid() on this address answers
-    // 30339 on all three RPCs below.
-    endpointV2: '0xca29f3A6f966Cb2fc0dE625F8f325c0C46dbE958',
-    eid: 30339,
-    nativeSymbol: 'ETH',
-    // Ink's own documentation (docs.inkonchain.com/general/network-information) names the operator
-    // behind each of its two public endpoints — Gelato and QuickNode — so they are two opinions,
-    // not one host twice; drpc is a third. All three answer eth_chainId 57073, carry Multicall3,
-    // support eth_simulateV1 and allow browser origins.
-    rpcs: [
-      { url: 'https://rpc-gel.inkonchain.com', provider: 'gelato.network' },
-      { url: 'https://rpc-qnd.inkonchain.com', provider: 'quicknode.com' },
-      { url: 'https://ink.drpc.org', provider: 'drpc.org' },
-    ],
-    explorerTxUrl: 'https://explorer.inkonchain.com/tx/',
-    explorerAddrUrl: 'https://explorer.inkonchain.com/address/',
-    feeStepWei: 10n ** 13n,
-    // Read from the chain: the default ULN send config for Ink → Ethereum / Arbitrum / Base asks
-    // for 20 confirmations, and Ink produces a block every second (measured over 20 blocks).
-    srcConfirmationsHint: 20,
-    blockTimeSec: 1,
-    feeCeiling: 2n * 10n ** 16n, // 0.02 ETH
-  },
-  {
-    vm: 'evm',
-    key: 'plasma',
-    name: 'Plasma',
-    chainId: 9745,
-    // From LayerZero's metadata (chainKey "plasma"), read back on chain: eid() on this address
-    // answers 30383 on every RPC below. The same address LayerZero uses on Robinhood Chain.
-    endpointV2: '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B',
-    eid: 30383,
-    nativeSymbol: 'XPL',
-    // The operator publishes one RPC (rpc.plasma.to, named in the Hyperlane registry's chain
-    // metadata and on chainlist); the other two are public endpoints of unrelated operators that
-    // answer eth_call, eth_getLogs and eth_simulateV1 for chain 9745 and allow browser origins —
-    // each rate-limits its keyless tier, so a deployment can put its own node in front with
-    // NEXT_PUBLIC_RPC_PLASMA, exactly as for Robinhood Chain.
-    rpcs: [
-      ...envRpc(process.env['NEXT_PUBLIC_RPC_PLASMA']),
-      { url: 'https://rpc.plasma.to', provider: 'plasma.to' },
-      { url: 'https://rpc.swiftnodes.io/rpc/plasma', provider: 'swiftnodes.io' },
-      { url: 'https://9745.rpc.thirdweb.com', provider: 'thirdweb.com' },
-    ],
-    // Routescan (EIP-3091 paths), the explorer the Hyperlane registry and chainlist both name.
-    explorerTxUrl: 'https://plasmascan.to/tx/',
-    explorerAddrUrl: 'https://plasmascan.to/address/',
-    feeStepWei: 10n ** 16n, // 0.01 XPL
-    // Read from the chain: the default ULN send config for Plasma → Ethereum / Arbitrum / Base asks
-    // for 5 confirmations, and a block is produced every second (measured over 50 blocks).
-    srcConfirmationsHint: 5,
-    blockTimeSec: 1,
-    feeCeiling: 100n * 10n ** 18n, // 100 XPL
-  },
-  {
-    vm: 'evm',
-    key: 'monad',
-    name: 'Monad',
-    chainId: 143,
-    // From LayerZero's metadata (chainKey "monad"), read back on chain: eid() on this address
-    // answers 30390 on every RPC below. The same address LayerZero uses on Robinhood and Plasma.
-    endpointV2: '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B',
-    eid: 30390,
-    nativeSymbol: 'MON',
-    // The operator's public RPC first (rpc.monad.xyz: eth_call, eth_simulateV1, CORS — but it
-    // serves eth_getLogs over 100 blocks at most, so log scans fall through to the next two).
-    // swiftnodes serves 2 000-block ranges and thirdweb 1 000; both answer eth_call and
-    // eth_simulateV1 for chain 143 and allow browser origins, and both rate-limit their keyless
-    // tier — a deployment can put its own node in front with NEXT_PUBLIC_RPC_MONAD.
-    rpcs: [
-      ...envRpc(process.env['NEXT_PUBLIC_RPC_MONAD']),
-      { url: 'https://rpc.monad.xyz', provider: 'monad.xyz' },
-      { url: 'https://rpc.swiftnodes.io/rpc/monad', provider: 'swiftnodes.io' },
-      { url: 'https://143.rpc.thirdweb.com', provider: 'thirdweb.com' },
-    ],
-    // MonadScan (Etherscan family), the explorer the Hyperlane registry names first; EIP-3091 paths.
-    explorerTxUrl: 'https://monadscan.com/tx/',
-    explorerAddrUrl: 'https://monadscan.com/address/',
-    feeStepWei: 10n ** 16n, // 0.01 MON
-    // Read from the chain: the default ULN send config for Monad → Ethereum / Arbitrum / Base asks
-    // for 4 confirmations, and a block is produced every 300 ms (measured over 100 blocks).
-    srcConfirmationsHint: 4,
-    blockTimeSec: 0.3,
-    // USDT0's quoteSend from Monad is ~2.9 MON to Ethereum and ~1.6 MON to Arbitrum (2026-10-15).
-    feeCeiling: 50n * 10n ** 18n, // 50 MON
-  },
-  {
-    vm: 'svm',
-    key: 'solana',
-    name: 'Solana',
-    eid: 30168,
-    nativeSymbol: 'SOL',
-    // Public Solana RPCs that accept browser origins without a key are rare: api.mainnet-beta
-    // rejects requests carrying an Origin header, drpc/ankr/helius need keys. Both entries below
-    // are publicnode, i.e. one provider — the UI recommends a personal RPC for Solana.
-    rpcs: [{ url: 'https://solana-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://solana.publicnode.com', provider: 'publicnode.com' }],
-    explorerTxUrl: 'https://solscan.io/tx/',
-    explorerAddrUrl: 'https://solscan.io/account/',
-    feeStepLamports: 10_000n,
-    srcConfirmationsHint: 1,
-    feeCeiling: 10n ** 9n, // 1 SOL
-  },
-]
+    chainId: s.chainId,
+    endpointV2: (s.lz?.endpointV2 ?? ZERO_ADDRESS) as `0x${string}`,
+    feeStepWei: BigInt(s.feeStep),
+  }
+}
 
 /**
- * `rpcUrls` is filled in from `rpcs` here and nowhere else, so the two can never disagree: there is
- * exactly one place a URL is written down, and it is the one that also names its operator.
+ * The registry, most popular first: DefiLlama TVL descending, then by name. That is the default
+ * order of the network picker and the order a cross-chain search asks chains in.
  */
-export const CHAINS: readonly ChainDef[] = CHAIN_SPECS.map((c) => ({ ...c, rpcUrls: c.rpcs.map((r) => r.url) }) as ChainDef)
+export const CHAINS: readonly ChainDef[] = (Object.keys(SPECS) as ChainKey[])
+  .map((key) => toChainDef(key, SPECS[key]))
+  .sort((a, b) => b.tvlUsd - a.tvlUsd || a.name.localeCompare(b.name))
 
-export const ALL_EIDS: readonly number[] = CHAINS.map((c) => c.eid)
+const PROVIDER_OF_URL = new Map<string, string>()
+for (const c of CHAINS) for (const r of c.rpcs) PROVIDER_OF_URL.set(r.url, r.provider)
+
+const BY_KEY = new Map<ChainKey, ChainDef>(CHAINS.map((c) => [c.key, c]))
+const BY_EID = new Map<number, ChainDef>(CHAINS.filter((c) => c.eid > 0).map((c) => [c.eid, c]))
+const BY_CHAIN_ID = new Map<number, EvmChainDef>(CHAINS.filter(isEvm).map((c) => [c.chainId, c]))
+
+/** Every LayerZero V2 eid served, in registry order. Chains without LayerZero have none. */
+export const ALL_EIDS: readonly number[] = CHAINS.filter((c) => c.eid > 0).map((c) => c.eid)
 
 export function isEvm(c: ChainDef): c is EvmChainDef {
   return c.vm === 'evm'
@@ -444,6 +175,21 @@ export function evmChains(): readonly EvmChainDef[] {
   return CHAINS.filter(isEvm)
 }
 
+/** True when LayerZero V2 serves this chain — the OFT tabs, the adapter search and Rescue work on these only. */
+export function hasLz(c: ChainDef): boolean {
+  return c.eid > 0
+}
+
+/** The chains LayerZero V2 serves (EVM and Solana), in registry order. */
+export function lzChains(): readonly ChainDef[] {
+  return CHAINS.filter(hasLz)
+}
+
+/** The EVM chains LayerZero V2 serves. */
+export function lzEvmChains(): readonly EvmChainDef[] {
+  return evmChains().filter(hasLz)
+}
+
 /** For code that only works on EVM (wagmi, viem, wei math). Throws instead of casting. */
 export function requireEvm(c: ChainDef): EvmChainDef {
   if (!isEvm(c)) throw new Error(`${c.name} is not an EVM chain`)
@@ -451,18 +197,23 @@ export function requireEvm(c: ChainDef): EvmChainDef {
 }
 
 export function byEid(eid: number): ChainDef | undefined {
-  return CHAINS.find((c) => c.eid === eid)
+  return BY_EID.get(eid)
 }
 
 /** EVM chain ids only — an svm chain has no chainId, so it can never match. */
 export function byChainId(chainId: number): EvmChainDef | undefined {
-  return evmChains().find((c) => c.chainId === chainId)
+  return BY_CHAIN_ID.get(chainId)
 }
 
 export function byKey(key: ChainKey): ChainDef {
-  const c = CHAINS.find((x) => x.key === key)
+  const c = BY_KEY.get(key)
   if (!c) throw new Error(`unknown chain key: ${key}`)
   return c
+}
+
+/** True for a string that names a chain in the registry; the type guard storage and links need. */
+export function isChainKey(s: unknown): s is ChainKey {
+  return typeof s === 'string' && BY_KEY.has(s as ChainKey)
 }
 
 /** byKey + requireEvm, for EVM-only call sites. */
@@ -470,7 +221,7 @@ export function evmByKey(key: ChainKey): EvmChainDef {
   return requireEvm(byKey(key))
 }
 
-/** Every RPC the app may talk to — feeds the CSP `connect-src` list (§7). */
+/** Every public RPC origin in the registry, sorted. The wallet is handed these for `wallet_addEthereumChain`; the page itself reads through /rpc. */
 export function allRpcHosts(): string[] {
   const hosts = new Set<string>()
   for (const c of CHAINS) for (const u of c.rpcUrls) hosts.add(new URL(u).origin)

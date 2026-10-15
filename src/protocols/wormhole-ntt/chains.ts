@@ -1,16 +1,20 @@
 /**
- * Wormhole's own numbering and its canonical contracts, per chain in our registry.
+ * Wormhole's own numbering and its canonical contracts, per chain in our registry — read from the
+ * generated src/core/networks.ts.
  *
- * Sources (quoted per value below):
+ * Sources (scripts/update-networks.ts):
  *   chain ids      wormhole-foundation/wormhole-sdk-ts, core/base/src/constants/chains.ts
  *   core bridge    wormhole-foundation/wormhole-sdk-ts, core/base/src/constants/contracts/core.ts
  *   token bridge   wormhole-foundation/wormhole-sdk-ts, core/base/src/constants/contracts/tokenBridge.ts
  *
- * A chain missing from this table is a chain Wormhole does not serve (Scroll), and NTT is simply
- * unavailable there. The token bridge address is what lets us tell Portal apart from NTT: both
- * publish through the same core bridge, so only the publisher's identity separates them.
+ * Every core bridge below was read back on chain before it was written: it answers `chainId()`
+ * with the Wormhole number next to it, and the token bridge answers the same. A chain the SDK
+ * lists without a mainnet core bridge, or whose bridge did not confirm its number, has no entry,
+ * and NTT is simply unavailable there. The token bridge address is what lets us tell Portal apart
+ * from NTT: both publish through the same core bridge, so only the publisher's identity separates them.
  */
 import type { ChainKey } from '../../core/chains.ts'
+import { NETWORKS } from '../../core/networks.ts'
 
 /**
  * Wormhole's explorer API: the official NTT token list and delivery status come from here.
@@ -22,98 +26,28 @@ export const WORMHOLESCAN_API = 'https://api.wormholescan.io'
 export type WormholeChainConfig = {
   /** Wormhole chain id (uint16) — NOT an EVM chain id and NOT a LayerZero eid. */
   wormholeChainId: number
+  /** The SDK's own name for the chain ("Bsc", "Seievm"), so a row can be traced back to the source. */
+  chainName: string
   /** Core bridge (publishes LogMessagePublished). */
   coreBridge: string
   /** Token Bridge, a.k.a. Portal. Transfers through it are not NTT and we do not bridge them. */
   tokenBridge?: string
 }
 
-export const WORMHOLE_CHAINS: Partial<Record<ChainKey, WormholeChainConfig>> = {
-  ethereum: {
-    wormholeChainId: 2,
-    coreBridge: '0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B',
-    tokenBridge: '0x3ee18B2214AFF97000D974cf647E7C347E8fa585',
-  },
-  bsc: {
-    wormholeChainId: 4,
-    coreBridge: '0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B',
-    tokenBridge: '0xB6F6D86a8f9879A9c87f643768d9efc38c1Da6E7',
-  },
-  polygon: {
-    wormholeChainId: 5,
-    coreBridge: '0x7A4B5a56256163F07b2C80A7cA55aBE66c4ec4d7',
-    tokenBridge: '0x5a58505a96D1dbf8dF91cB21B54419FC36e93fdE',
-  },
-  avalanche: {
-    wormholeChainId: 6,
-    coreBridge: '0x54a8e5f9c4CbA08F9943965859F6c34eAF03E26c',
-    tokenBridge: '0x0e082F06FF657D94310cB8cE8B0D9a04541d8052',
-  },
-  arbitrum: {
-    wormholeChainId: 23,
-    coreBridge: '0xa5f208e072434bC67592E4C49C1B991BA79BCA46',
-    tokenBridge: '0x0b2402144Bb366A632D14B83F244D2e0e21bD39c',
-  },
-  optimism: {
-    wormholeChainId: 24,
-    coreBridge: '0xEe91C335eab126dF5fDB3797EA9d6aD93aeC9722',
-    tokenBridge: '0x1D68124e65faFC907325e3EDbF8c4d84499DAa8b',
-  },
-  base: {
-    wormholeChainId: 30,
-    coreBridge: '0xbebdb6C8ddC678FfA9f8748f85C815C556Dd8ac6',
-    tokenBridge: '0x8d2de8d2f73F1F4cAB472AC9A881C9b123C79627',
-  },
-  linea: {
-    // No Token Bridge deployment is listed for Linea in the mainnet table above, so Portal
-    // transfers cannot originate here and no address is claimed.
-    wormholeChainId: 38,
-    coreBridge: '0x0C56aebD76E6D9e4a1Ec5e94F4162B4CBbf77b32',
-  },
-  hyperevm: {
-    // Listed as [47, "HyperEVM"] in chains.ts; no core/token bridge address is published in the
-    // mainnet tables we read, so only the numbering is recorded.
-    wormholeChainId: 47,
-    coreBridge: '',
-  },
-  solana: {
-    wormholeChainId: 1,
-    coreBridge: 'worm2ZoG2kUd4vFXhvjh93UUH596ayRfgQ2MgjNMTth',
-  },
-  robinhood: {
-    // Confirmed on chain rather than taken on trust: this core bridge answers chainId() with 72,
-    // it carries the same guardian set index as Ethereum's, and Wormholescan holds VAAs signed for
-    // emitter chain 72 — so the guardians observe this network, they do not merely have an address
-    // on it. No Token Bridge is published for Robinhood, so Portal cannot originate here at all.
-    wormholeChainId: 72,
-    coreBridge: '0x141fBa8AD5D61bdaB45A047cF60b5Ad9784987FB',
-  },
-  ink: {
-    // [46, "Ink"] in chains.ts; both addresses from the Mainnet tables. Confirmed on chain: the core
-    // bridge answers chainId() with 46 and carries the same guardian set index as Ethereum's, the
-    // token bridge answers chainId() 46 and wormhole() with this core bridge, and Wormholescan
-    // holds VAAs signed for emitter chain 46.
-    wormholeChainId: 46,
-    coreBridge: '0xCa1D5a146B03f6303baF59e5AD5615ae0b9d146D',
-    tokenBridge: '0x3Ff72741fd67D6AD0668d93B41a09248F4700560',
-  },
-  plasma: {
-    // Listed as [58, "Plasma"] in chains.ts; the only core bridge published for it sits in the
-    // TESTNET table (core.ts), so no mainnet address is claimed and NTT is unavailable here —
-    // the same situation as HyperEVM. Only the numbering is recorded.
-    wormholeChainId: 58,
-    coreBridge: '',
-  },
-  monad: {
-    // [48, "Monad"] in chains.ts; both addresses from the Mainnet tables. Confirmed on chain: the
-    // core bridge answers chainId() with 48 and carries the same guardian set index as Ethereum's
-    // (7), and the token bridge answers chainId() 48 and wormhole() with this core bridge.
-    wormholeChainId: 48,
-    coreBridge: '0x194B123c5E96B9b2E49763619985790Dc241CAC0',
-    tokenBridge: '0x0B2719cdA2F10595369e6673ceA3Ee2EDFa13BA7',
-  },
-  // scroll: Wormhole does not list a chain id for Scroll.
+function build(): Partial<Record<ChainKey, WormholeChainConfig>> {
+  const out: Partial<Record<ChainKey, WormholeChainConfig>> = {}
+  for (const key of Object.keys(NETWORKS) as ChainKey[]) {
+    const w = NETWORKS[key].wormhole
+    if (!w) continue
+    out[key] = { wormholeChainId: w.chainId, chainName: w.chainName, coreBridge: w.coreBridge, ...(w.tokenBridge ? { tokenBridge: w.tokenBridge } : {}) }
+  }
+  return out
 }
+
+export const WORMHOLE_CHAINS: Partial<Record<ChainKey, WormholeChainConfig>> = build()
+
+const KEY_OF_ID = new Map<number, ChainKey>()
+for (const [key, cfg] of Object.entries(WORMHOLE_CHAINS)) if (cfg) KEY_OF_ID.set(cfg.wormholeChainId, key as ChainKey)
 
 export function wormholeChainId(key: ChainKey): number | undefined {
   return WORMHOLE_CHAINS[key]?.wormholeChainId
@@ -121,10 +55,7 @@ export function wormholeChainId(key: ChainKey): number | undefined {
 
 /** Our chain key for a Wormhole chain id, or undefined when it is a chain we do not serve. */
 export function chainOfWormholeId(id: number): ChainKey | undefined {
-  for (const [key, cfg] of Object.entries(WORMHOLE_CHAINS)) {
-    if (cfg?.wormholeChainId === id) return key as ChainKey
-  }
-  return undefined
+  return KEY_OF_ID.get(id)
 }
 
 /** Is this address the canonical Portal token bridge on that chain? */
@@ -139,40 +70,20 @@ export function isCoreBridge(key: ChainKey, address: string): boolean {
 }
 
 /**
- * Can NTT reach this chain at all: Wormhole numbers it AND has a core bridge there. A chain with an
- * id but no core bridge (HyperEVM, Plasma) cannot receive a message, so it is never a destination.
+ * Can NTT reach this chain at all: Wormhole numbers it AND has a core bridge there that confirmed
+ * its number on chain. Anything else is never a destination.
  */
 export function nttServed(key: ChainKey): boolean {
   return !!WORMHOLE_CHAINS[key]?.coreBridge
 }
 
 /**
- * CoinGecko asset-platform ids, which is how the list keys its `platforms` map. A wrong entry here
- * can only ever fail to find a token (the address must still match exactly), never match the wrong
- * one — so this mapping cannot turn into an approval for something else.
- *
- * It lives here rather than in tokenList.ts because scripts/update-ntt-hubs.ts needs it and runs
- * under Node's type stripping, which cannot parse tokenList.ts (it uses a constructor parameter
- * property). tokenList.ts re-exports it, so every existing importer is unaffected.
+ * CoinGecko asset-platform ids, which is how the Wormholescan NTT token list keys its `platforms`
+ * map. A wrong entry here can only ever fail to find a token (the address must still match
+ * exactly), never match the wrong one — so this mapping cannot turn into an approval for something
+ * else. Known for the hand-curated chains (scripts/networks-curated.json); a chain without one is
+ * simply not looked up in the list, which since 2026-10-15 is a search hint and not the gate.
  */
-export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
-  ethereum: 'ethereum',
-  bsc: 'binance-smart-chain',
-  polygon: 'polygon-pos',
-  avalanche: 'avalanche',
-  arbitrum: 'arbitrum-one',
-  optimism: 'optimistic-ethereum',
-  base: 'base',
-  linea: 'linea',
-  scroll: 'scroll',
-  hyperevm: 'hyperevm',
-  robinhood: 'robinhood',
-  // The key Wormholescan's NTT token list uses for Ink (it lists USDC.s, ezETH and others there).
-  ink: 'ink',
-  // CoinGecko's platform id, as the Hyperlane registry names it (gasCurrencyCoinGeckoId: plasma).
-  // A wrong key can only fail to find a token, never match the wrong one.
-  plasma: 'plasma',
-  // Both the Hyperlane registry (gasCurrencyCoinGeckoId) and LayerZero's metadata (cgId) say so.
-  monad: 'monad',
-  solana: 'solana',
-}
+export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = Object.fromEntries(
+  (Object.keys(NETWORKS) as ChainKey[]).flatMap((key) => (NETWORKS[key].coingeckoPlatform ? [[key, NETWORKS[key].coingeckoPlatform]] : [])),
+) as Partial<Record<ChainKey, string>>
