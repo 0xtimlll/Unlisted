@@ -95,9 +95,13 @@ export const LIMITS = {
   hedgeAfterMs: 400,
   maxBodyBytes: 128 * 1024,
   maxBatch: 20,
-  /** Token bucket per client: a cross-chain search is ~120 requests in one burst. */
-  bucketCapacity: 600,
-  bucketRefillPerSec: 15,
+  /**
+   * Token bucket per client. One analysis is a burst of ~300 requests (a search across every
+   * chain, two probes, eight route checks with their log scans); the bucket holds several of
+   * those and refills faster than a person can paste addresses.
+   */
+  bucketCapacity: 2_000,
+  bucketRefillPerSec: 40,
   customVerifyTtlMs: 10 * 60_000,
 } as const
 
