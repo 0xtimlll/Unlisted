@@ -104,6 +104,14 @@ export const WORMHOLE_CHAINS: Partial<Record<ChainKey, WormholeChainConfig>> = {
     wormholeChainId: 58,
     coreBridge: '',
   },
+  monad: {
+    // [48, "Monad"] in chains.ts; both addresses from the Mainnet tables. Confirmed on chain: the
+    // core bridge answers chainId() with 48 and carries the same guardian set index as Ethereum's
+    // (7), and the token bridge answers chainId() 48 and wormhole() with this core bridge.
+    wormholeChainId: 48,
+    coreBridge: '0x194B123c5E96B9b2E49763619985790Dc241CAC0',
+    tokenBridge: '0x0B2719cdA2F10595369e6673ceA3Ee2EDFa13BA7',
+  },
   // scroll: Wormhole does not list a chain id for Scroll.
 }
 
@@ -156,5 +164,7 @@ export const COINGECKO_PLATFORM: Partial<Record<ChainKey, string>> = {
   // CoinGecko's platform id, as the Hyperlane registry names it (gasCurrencyCoinGeckoId: plasma).
   // A wrong key can only fail to find a token, never match the wrong one.
   plasma: 'plasma',
+  // Both the Hyperlane registry (gasCurrencyCoinGeckoId) and LayerZero's metadata (cgId) say so.
+  monad: 'monad',
   solana: 'solana',
 }

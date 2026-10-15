@@ -48,6 +48,7 @@ export const HYPERLANE_CHAINS: Partial<Record<ChainKey, HyperlaneChainConfig>> =
   ink: { domain: 57073, registryName: 'ink', mailbox: '0x7f50C5776722630a0024fAE05fDe8b47571D7B39' },
   // The same mailbox address as HyperEVM's (one deployer, one salt); each answers its own domain.
   plasma: { domain: 9745, registryName: 'plasma', mailbox: '0x3a464f746D23Ab22155710f44dB16dcA53e0775E' },
+  monad: { domain: 143, registryName: 'monad', mailbox: '0x3a464f746D23Ab22155710f44dB16dcA53e0775E' },
   // solana: Hyperlane serves Solana (sealevel), but this app only bridges EVM to EVM over Hyperlane.
 }
 

@@ -153,6 +153,17 @@ export const CCIP_CHAINS: Partial<Record<ChainKey, CcipChainConfig>> = {
     tokenAdminRegistry: '0xc23071a8AE83671f37bdA1DaDBC745a9780f632A',
     tokenAdminRegistryVersion: '1.5.0',
   },
+  monad: {
+    selector: 8481857512324358265n,
+    registryName: 'monad-mainnet',
+    directoryKey: 'monad-mainnet',
+    // Both answer typeAndVersion() with these versions on chain; the router reports Ethereum and
+    // Arbitrum as supported and Ethereum's router reports Monad back.
+    router: '0x33566fE5976AAa420F3d5C64996641Fc3858CaDB',
+    routerVersion: '1.2.0',
+    tokenAdminRegistry: '0x11ACd984DD680363117B310f6ebdf78fD6c0195f',
+    tokenAdminRegistryVersion: '1.5.0',
+  },
   // solana: CCIP serves Solana, but this app only bridges EVM to EVM over CCIP.
 }
 

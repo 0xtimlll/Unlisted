@@ -2379,6 +2379,40 @@
         ]
       }
     },
+    "monad": {
+      "tokens": {
+        "0x06232bc2a4388695a2c5a6c8e1f67743b9e6cc51": [
+          {
+            "router": "0x6642D0E1d28C337305A99d91E528D6B155beCbe1",
+            "standard": "EvmHypXERC20",
+            "symbol": "EZETHSTAGE",
+            "route": "EZETHSTAGE/renzo-stage"
+          }
+        ],
+        "0x2416092f143378750bb29b79ed961ab195cceea5": [
+          {
+            "router": "0x7A911b0bD4F067FB8DAFF734A78E7A72865100d8",
+            "standard": "EvmHypXERC20",
+            "symbol": "ezETH",
+            "route": "EZETH/renzo-prod"
+          }
+        ],
+        "0x754704bc059f8c67012fed69bc8a327a5aafb603": [
+          {
+            "router": "0xC2e074F6AeC27c39FA9423E2D5752C31a7b0a75E",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDC",
+            "route": "USDC/eclipsemainnet"
+          },
+          {
+            "router": "0x1b681aaccc77B5aeE34675eac5cE3dDeAbc0b4c9",
+            "standard": "EvmHypCollateral",
+            "symbol": "USDCSTAGE",
+            "route": "USDCSTAGE/eclipsemainnet"
+          }
+        ]
+      }
+    },
     "optimism": {
       "tokens": {
         "0x0290b74980c051eb46b84b1236645444e77da0e9": [
@@ -2830,7 +2864,22 @@
       }
     },
     "robinhood": {
-      "tokens": {}
+      "tokens": {
+        "0x5fc5360d0400a0fd4f2af552add042d716f1d168": [
+          {
+            "router": "0x0179d2f23E86ac42Cc83d0E3BfE73e835f75e3E9",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDG",
+            "route": "CROSS/moonpay"
+          },
+          {
+            "router": "0x0179d2f23E86ac42Cc83d0E3BfE73e835f75e3E9",
+            "standard": "EvmHypCrossCollateralRouter",
+            "symbol": "USDG",
+            "route": "USDG/moonpay"
+          }
+        ]
+      }
     },
     "scroll": {
       "tokens": {

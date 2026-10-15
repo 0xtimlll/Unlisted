@@ -44,7 +44,7 @@ describe('Hyperlane configuration', () => {
       expect(cfg!.domain, key).toBeGreaterThan(0)
       expect(cfg!.registryName, key).toMatch(/^[a-z]+$/)
     }
-    expect(Object.keys(HYPERLANE_CHAINS)).toHaveLength(13)
+    expect(Object.keys(HYPERLANE_CHAINS)).toHaveLength(14)
   })
 
   it('domains round-trip to chains and are unique', () => {

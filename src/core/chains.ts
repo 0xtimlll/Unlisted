@@ -17,6 +17,7 @@ export type ChainKey =
   | 'robinhood'
   | 'ink'
   | 'plasma'
+  | 'monad'
   | 'solana'
 
 /**
@@ -372,6 +373,38 @@ const CHAIN_SPECS: readonly ChainSpec[] = [
     srcConfirmationsHint: 5,
     blockTimeSec: 1,
     feeCeiling: 100n * 10n ** 18n, // 100 XPL
+  },
+  {
+    vm: 'evm',
+    key: 'monad',
+    name: 'Monad',
+    chainId: 143,
+    // From LayerZero's metadata (chainKey "monad"), read back on chain: eid() on this address
+    // answers 30390 on every RPC below. The same address LayerZero uses on Robinhood and Plasma.
+    endpointV2: '0x6F475642a6e85809B1c36Fa62763669b1b48DD5B',
+    eid: 30390,
+    nativeSymbol: 'MON',
+    // The operator's public RPC first (rpc.monad.xyz: eth_call, eth_simulateV1, CORS — but it
+    // serves eth_getLogs over 100 blocks at most, so log scans fall through to the next two).
+    // swiftnodes serves 2 000-block ranges and thirdweb 1 000; both answer eth_call and
+    // eth_simulateV1 for chain 143 and allow browser origins, and both rate-limit their keyless
+    // tier — a deployment can put its own node in front with NEXT_PUBLIC_RPC_MONAD.
+    rpcs: [
+      ...envRpc(process.env['NEXT_PUBLIC_RPC_MONAD']),
+      { url: 'https://rpc.monad.xyz', provider: 'monad.xyz' },
+      { url: 'https://rpc.swiftnodes.io/rpc/monad', provider: 'swiftnodes.io' },
+      { url: 'https://143.rpc.thirdweb.com', provider: 'thirdweb.com' },
+    ],
+    // MonadScan (Etherscan family), the explorer the Hyperlane registry names first; EIP-3091 paths.
+    explorerTxUrl: 'https://monadscan.com/tx/',
+    explorerAddrUrl: 'https://monadscan.com/address/',
+    feeStepWei: 10n ** 16n, // 0.01 MON
+    // Read from the chain: the default ULN send config for Monad → Ethereum / Arbitrum / Base asks
+    // for 4 confirmations, and a block is produced every 300 ms (measured over 100 blocks).
+    srcConfirmationsHint: 4,
+    blockTimeSec: 0.3,
+    // USDT0's quoteSend from Monad is ~2.9 MON to Ethereum and ~1.6 MON to Arbitrum (2026-10-15).
+    feeCeiling: 50n * 10n ** 18n, // 50 MON
   },
   {
     vm: 'svm',

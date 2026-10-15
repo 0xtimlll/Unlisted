@@ -149,6 +149,29 @@ own timestamp — `windowDays` in `lz-risk/probe.ts` already does this).
 
 ---
 
+## Monad's official RPC serves `eth_getLogs` over 100 blocks at most
+
+**Where** [`src/core/chains.ts`](../src/core/chains.ts) (the `monad` entry),
+[`src/protocols/lz-risk/probe.ts`](../src/protocols/lz-risk/probe.ts) (`scanNewest`, spans 50 000 / 10 000 / 2 000),
+[`src/protocols/hyperlane/discover.ts`](../src/protocols/hyperlane/discover.ts) (`countDispatches`, the same spans).
+
+**What** `rpc.monad.xyz` answers `eth_getLogs` only for ranges of 100 blocks (30 seconds at
+Monad's 300 ms block time); the two fallbacks serve 2 000 (swiftnodes) and 1 000 (thirdweb). The
+log scans try their three spans and give up, so with the official RPC as primary the route checks
+that read history — check 7 and `recent_changes` in `lz-risk`, the dispatch count behind a
+Hyperlane route's standing — come back "not checked" on Monad, and the indicator is yellow with
+that reason. Nothing is wrong about the route; the provider simply will not say.
+
+**Why it was left alone** A 100-block span would make the result meaningless rather than absent,
+and reading further back means tens of paged calls on the verdict's critical path. The operator's
+RPC stays primary because it is the one the chain's own documentation names.
+
+**To close it** Page backwards in the spans the fallback providers serve (the same change the
+Hyperlane dispatch-count entry above asks for), or let the user's own RPC take over: a node set
+through `NEXT_PUBLIC_RPC_MONAD` or in Settings becomes the primary and usually serves wide ranges.
+
+---
+
 ## The v1 form still switches to a custom recipient with a checkbox
 
 **Where** [`src/ui/BridgeV1.tsx`](../src/ui/BridgeV1.tsx), the "I am sending to an address that is

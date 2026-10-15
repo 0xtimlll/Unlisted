@@ -31,5 +31,7 @@ export const BRAND: Record<ChainKey, Brand> = {
   // Black is the brand: plasma.to's theme-color and primary button are #000000, and web3icons'
   // branded mark is the same shape filled black.
   plasma: { bg: '#000000' },
+  // Monad's purple, the fill of web3icons' branded mark; the white mono mark sits on it.
+  monad: { bg: '#836EF9' },
   solana: { bg: 'linear-gradient(0deg, #1A1622, #121212)' },
 }
