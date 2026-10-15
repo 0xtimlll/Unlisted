@@ -235,6 +235,16 @@ select.bare {
 }
 
 /* Scrollbars inside dialogs and lists: thin and quiet. */
+/*
+ * A network card in the picker's grid. With a hundred-odd cards, laying out the ones below the
+ * fold before they are scrolled to is what makes a picker open slowly; this skips it, keeping a
+ * placeholder of the card's size so the scrollbar is right from the start.
+ */
+.card-lazy {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 232px auto 286px;
+}
+
 .scroll-quiet {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line) transparent;

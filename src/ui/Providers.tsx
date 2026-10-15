@@ -9,6 +9,7 @@ import { byKey, isEvm, type ChainKey } from '@/core/chains'
 import type { AnalysisTarget } from '@/core/analysis/result'
 import { tabOfPath, tabOfProtocol, tabPath, type ProtocolId, type TabSlug } from '@/core/protocols'
 import { AddressBookProvider } from './addressBookContext'
+import { NetworkPrefsProvider } from './networkPrefs'
 import { AppShell } from './AppShell'
 import { BridgeApp } from './BridgeApp'
 import { CcipApp } from './CcipApp'
@@ -147,6 +148,7 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
         <RainbowKitProvider theme={rkTheme} modalSize="compact" locale="en-US">
           <SvmWalletHost enabled={svmEnabled}>
            <AddressBookProvider>
+           <NetworkPrefsProvider stored={stored} setStored={setStored}>
             <AppShell
               tab={tab}
               onTab={goTab}
@@ -184,6 +186,7 @@ export default function Providers({ tab: initialTab }: { tab: TabSlug }) {
                 <RescueApp stored={stored} srcKey={evmSrcKey} setSrcKey={setSrcKey} />
               )}
             </AppShell>
+           </NetworkPrefsProvider>
            </AddressBookProvider>
           </SvmWalletHost>
         </RainbowKitProvider>
