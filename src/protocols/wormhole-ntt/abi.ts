@@ -52,9 +52,13 @@ export const nttManagerAbi = parseAbi([
   'function getCurrentInboundCapacity(uint16 chainId_) view returns (uint256)',
   'function getTransceivers() view returns (address[])',
   'function quoteDeliveryPrice(uint16 recipientChain, bytes transceiverInstructions) view returns (uint256[], uint256)',
+  // evm/src/libraries/RateLimiter.sol: `uint64 public immutable rateLimitDuration` — how long a
+  // queued transfer waits before completeOutboundQueuedTransfer() may release it.
+  'function rateLimitDuration() view returns (uint64)',
 
-  // The only state-changing call this protocol module may make. shouldQueue is always false:
-  // a transfer over the rate limit must revert, never sit in a queue the user cannot see.
+  // The only state-changing call this protocol module may make. shouldQueue is true exactly when
+  // the amount exceeds the outbound capacity read in the same plan (plan.ts): the manager then
+  // queues the transfer instead of reverting, and the screen says so before the click.
   'function transfer(uint256 amount, uint16 recipientChain, bytes32 recipient, bytes32 refundAddress, bool shouldQueue, bytes transceiverInstructions) payable returns (uint64)',
 ])
 
@@ -66,14 +70,18 @@ export const nttManagerAbi = parseAbi([
  *   wormhole, isWormholeRelayingEnabled,
  *   isSpecialRelayingEnabled, getWormholePeer
  *                                            evm/src/Transceiver/WormholeTransceiver/
- *                                            WormholeTransceiverState.sol (v1.1.0+evm — the shape
- *                                            deployed on mainnet; newer builds may drop the
- *                                            relaying getters, which we treat as "cannot confirm")
+ *                                            WormholeTransceiverState.sol (v1.x — the relaying
+ *                                            getters exist only there; the 2.x transceiver has no
+ *                                            relayer at all, see verify.ts)
+ *   WORMHOLE_TRANSCEIVER_VERSION             evm/src/Transceiver/WormholeTransceiver/
+ *                                            WormholeTransceiver.sol (`string public constant`,
+ *                                            "2.0.1" on main; "1.1.0" / "1.3.1" / "2.0.0" live)
  */
 export const wormholeTransceiverAbi = parseAbi([
   'struct WormholeTransceiverInstruction { bool shouldSkipRelayerSend; }',
 
   'function getTransceiverType() view returns (string)',
+  'function WORMHOLE_TRANSCEIVER_VERSION() view returns (string)',
   'function getNttManagerToken() view returns (address)',
   'function wormhole() view returns (address)',
   'function getWormholePeer(uint16 chainId_) view returns (bytes32)',
@@ -116,12 +124,15 @@ export const WH_TRANSCEIVER_PAYLOAD_PREFIX: Hex = '0x9945ff10'
 /**
  * The token-side anchor (§the manager must be named by the TOKEN, not only name the token).
  * `minter()` is what the reference NTT token exposes; AccessControl tokens answer
- * `hasRole(MINTER_ROLE, manager)` instead, with the role read from the token itself.
+ * `hasRole(MINTER_ROLE, manager)` instead, with the role read from the token itself; OpenZeppelin
+ * 2.x MinterRole tokens (`contracts/access/roles/MinterRole.sol`) answer `isMinter(account)` — a
+ * question, not a lookup, so it can confirm a candidate but never find one.
  */
 export const nttTokenAnchorAbi = parseAbi([
   'function minter() view returns (address)',
   'function MINTER_ROLE() view returns (bytes32)',
   'function hasRole(bytes32 role, address account) view returns (bool)',
+  'function isMinter(address account) view returns (bool)',
 ])
 
 const topic0 = (abi: readonly unknown[], eventName: string): Hex => {

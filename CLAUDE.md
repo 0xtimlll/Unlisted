@@ -221,6 +221,32 @@ ERC-20-форм), guard 11 запрещает approve. Standing в `lz-risk`: н
 `token_unreadable` (названный токен не ERC-20, адрес в detail). Фикстура — XPL на Plasma
 `0x405FBc90…26b0` → BNB Chain.
 
+**NTT: поиск менеджера, направления, очередь и v2 (2026-10-15).** Разбор по Atlantis на Monad
+(`0xc65ed58e…e94a`): в каталоге Wormholescan токен значится только на Monad, поэтому меню To
+(строилось из `listedChains`) было пустым, а менеджер не находился, потому что токен не отвечает
+`minter()` — у него OpenZeppelin `isMinter(address)`. Гипотеза «locking-хаб» не подтвердилась: оба
+менеджера burn-and-mint. Что изменилось: (1) третья форма якоря токена — `isMinter(manager)`
+(`verify.tokenAnchor`, kind `isMinter`); (2) поиск без `minter()`: кандидаты из индекса операций
+Wormholescan (`wormhole-ntt/managerIndex.ts`: `operations?appId=NATIVE_TOKEN_TRANSFER&sourceChain=<id>`,
+3 страницы по 100, пары `tokenAddress` → `sourceNttManager`) — только «кого спросить»; кандидат
+засчитывается после `token()` == токен on-chain, при нескольких — сперва тот, за кого ручается токен,
+затем держащий больше supply; потом, как раньше, обход от destination через каталог; ничего не
+нашлось — экран просит вставить адрес менеджера, и To открыт в любом случае; (3) направления —
+только из самого менеджера: `readNttPeers` читает `getPeer(id)` по всем нашим EVM-сетям с core
+bridge (один multicall), ненулевые EVM-пиры и есть меню To; пока не прочитано или прочитано не
+полностью — все сети, решает гейт. Менеджер, введённый руками (`via: 'given'`), — жёлтый флаг
+`ntt_manager_manual`. Превышение outbound-лимита — больше не блок: план ставит
+`shouldQueue = amount > capacity` (`plan.shouldQueueFor`), guard 6 даёт жёлтую `outbound_will_queue`
+с окном из `rateLimitDuration()`, guard 11 держит инвариант «queue только над лимитом», self-check
+сверяет флаг с планом; релиз — `completeOutboundQueuedTransfer(sequence)` после окна, который мы не
+отправляем (Status такую отправку не видит — сообщения ещё нет). **Сам Atlantis остаётся отказом,
+`executor_required`:** менеджеры NTT 2.0.0, трансивер 2.0.0 без relayer-геттеров и без relayer вовсе
+(`quoteDeliveryPrice` = 0; «delivered … through external relayers/executors that call receiveMessage
+directly»); доставку делает Wormhole Executor по отдельному оплаченному `requestExecution` с
+подписанной off-chain квотой (на Monad обёртка `0xc3F3…793e`, Executor `0xC04dE634…3f65`). Наш plain
+`transfer` сжёг бы токены и оставил сообщение без доставки, поэтому гейт отвергает 2.x-трансивер своим
+кодом; поддержка Executor — отдельная задача, см. `docs/TODO.md`.
+
 **Solana как источник.** Программа, которую вызывает `send`, — та, что владеет OFT Store, то есть
 факт с цепочки, а не из списка; поэтому store обязан называть endpoint-программу LayerZero
 (`PROGRAM.lzEndpointV2`, иначе `foreign_endpoint`, как `foreign_endpoint` у EVM-probe), а dry run

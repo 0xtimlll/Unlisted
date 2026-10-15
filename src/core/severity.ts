@@ -77,10 +77,11 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'oft_fee_exceeds_amount',
   // The NTT manager reverts on dust rather than rounding it away.
   'amount_has_dust',
-  // The SOURCE contract's own rate limit: the NTT manager (shouldQueue is always false) and the
-  // CCIP token pool both revert the send itself. The inbound limit is the destination's and acts
-  // after the send has gone through (NTT queues, CCIP fails the delivery for a manual retry), so
-  // `over_inbound_capacity` stays a note.
+  // The SOURCE contract's own rate limit, where the send itself reverts: the CCIP token pool, and
+  // an NTT plan that did not ask to queue. (Since 2026-10-15 an NTT plan over the limit asks the
+  // manager to queue instead, and that is the note `outbound_will_queue`.) The inbound limit is the
+  // destination's and acts after the send has gone through (NTT queues, CCIP fails the delivery
+  // for a manual retry), so `over_inbound_capacity` stays a note.
   'over_outbound_capacity',
 
   // ── the recipient cannot be encoded for the destination ──────────────────────
@@ -101,7 +102,8 @@ const BLOCKING: ReadonlySet<string> = new Set([
   'slippage_too_high',
   // v1 standards with no minimum in `sendFrom`: a slippage setting would be one nothing enforces.
   'slippage_unsupported',
-  // NTT: the plan is always built with shouldQueue=false, so a plan that says otherwise is not ours.
+  // NTT: shouldQueue is true exactly when the amount is over the capacity the plan read, so a plan
+  // that asks to queue an amount that fits is not ours.
   'queueing_enabled',
   // OFTCore._checkAdapterParams requires them empty; anything else reverts.
   'adapter_params_forbidden',

@@ -290,26 +290,44 @@ and a check that cannot be completed counts as a refusal.
 2. Peers point at each other in both directions, the destination side read on its own RPC.
 3. A Wormhole transceiver that reports the Wormhole type, points at this network's official core
    bridge **from this repository's config**, and has automatic relaying enabled — a route that
-   would need a manual redeem is refused.
+   would need a manual redeem is refused. An **NTT v2** transceiver (`WORMHOLE_TRANSCEIVER_VERSION`
+   2.x) has no relayer at all: it only publishes, and delivery is arranged by the Wormhole Executor
+   through a separate quoted and paid request that this app does not build yet. Such a route is
+   refused with its own reason ("executor required") rather than sent into a queue nobody serves.
 
 And one thing decides the colour rather than the verdict: **does the token on the source chain
-vouch for the manager** — `minter()`, or `hasRole(MINTER_ROLE, manager)` with the role read from
-the token? That is the only fact the manager's deployer cannot write. With it the chip is green;
-without it — a locking hub mints nothing, and so does a fake — the chip is red with one line,
-"nothing on the source chain vouches for this bridge contract", and the decision is yours. The
-destination token naming the destination manager is shown as context only: we reached that token
-through the manager's own `getPeer()`.
+vouch for the manager** — `minter()`, `hasRole(MINTER_ROLE, manager)` with the role read from the
+token, or OpenZeppelin's `isMinter(manager)`? That is the only fact the manager's deployer cannot
+write. With it the chip is green; without it — a locking hub mints nothing, and so does a fake —
+the chip is red with one line, "nothing on the source chain vouches for this bridge contract", and
+the decision is yours. The destination token naming the destination manager is shown as context
+only: we reached that token through the manager's own `getPeer()`.
 
-[Wormhole's token list](https://api.wormholescan.io/api/v1/native-token-transfer/token-list) only
-helps find a manager from a token address; it never changes a verdict, and a token missing from it
-is verified on the same on-chain evidence. Wormholescan's decoded transfers are shown as context but
-are never evidence: `sourceNttManager` is written by the manager itself, so a single self-made
-transfer would launder a fake.
+Finding the manager from a token address is a search, and the search has three hints, none of
+which is evidence. The token's own `minter()` comes first. A token without one — a MinterRole token,
+or a locking hub's — is looked up in [Wormholescan's decoded transfers](https://api.wormholescan.io/api/v1/operations?appId=NATIVE_TOKEN_TRANSFER&sourceChain=2&pageSize=100)
+for this chain: every transfer names its `sourceNttManager`, which the manager wrote itself, so each
+candidate is asked `token()` on chain and only one that names the token counts (the one the token
+vouches for first, then the one holding most of the supply). With a destination chosen, the
+destination token's own manager is asked for its peer here. When nothing finds it, you paste the
+manager's address, the chip gets a yellow nuance saying so, and the gate runs unchanged.
+[Wormhole's token list](https://api.wormholescan.io/api/v1/native-token-transfer/token-list) is
+only context now: a token missing from it is verified on the same on-chain evidence.
+
+Where the token can go is read from the manager, never from a catalogue: `getPeer()` for every
+network this app serves, in one batched call, and the destination picker offers exactly the networks
+with a peer. Until that read completes — or if part of it fails — every network is offered and the
+gate says which has a route.
 
 Two more things the contracts decide, not us: an approve is needed in **both** modes, because the
 manager pulls with `transferFrom` before it burns or locks; and the amount is rounded **down** to
-the precision the route carries, because the manager reverts on dust instead of trimming.
-`shouldQueue` is always false — over a rate limit the transfer must revert, not sit in a queue.
+the precision the route carries, because the manager reverts on dust instead of trimming. Over the
+manager's outbound rate limit the plan sets `shouldQueue`: the manager takes the tokens and queues
+the transfer for its rate-limit window (read from `rateLimitDuration()`), after which anyone can
+release it with `completeOutboundQueuedTransfer(sequence)`, paying the delivery fee then. The chip
+says so in yellow before you click, with the window; this app does not submit the release call, and
+Status / Rescue cannot follow a transfer that has not been published yet. Under the limit the flag
+changes nothing, and a plan that asks to queue an amount that fits is refused as malformed.
 
 ## Chainlink CCIP
 

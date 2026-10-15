@@ -3,8 +3,14 @@
  *
  * Two decisions are made here and nowhere else:
  *
- *  - `shouldQueue` is always FALSE. Over the rate limit, the transfer must revert so the user sees
- *    it, never sit in a queue they did not ask for and cannot watch.
+ *  - `shouldQueue` is true EXACTLY when the amount exceeds the outbound capacity read in this same
+ *    plan. Under the limit the flag changes nothing (the manager only looks at it when the amount is
+ *    rate-limited); over it the manager takes the tokens and queues the transfer for its rate-limit
+ *    window instead of reverting, and the screen says so before the click (guard 6, a yellow note —
+ *    owner's decision 2026-10-15: the tool informs, the person decides). A plan that asks to queue
+ *    an amount that fits is not ours (guard 11). After the window anyone can release the transfer
+ *    with completeOutboundQueuedTransfer(sequence) on the manager, paying the delivery fee then;
+ *    this module does not submit that call.
  *  - `transceiverInstructions` is `0x00` — "zero instructions", exactly what
  *    TransceiverStructs.encodeTransceiverInstructions([]) produces. Every registered transceiver
  *    then gets an empty instruction, and WormholeTransceiver.parseWormholeTransceiverInstruction
@@ -25,11 +31,11 @@ import type { VerifiedNttManager } from './verify'
 /** `encodeTransceiverInstructions([])`: one length byte, zero instructions. */
 export const NO_TRANSCEIVER_INSTRUCTIONS: Hex = '0x00'
 
-/** Over the rate limit the transfer must revert, not queue. */
-export const SHOULD_QUEUE = false
-
 /** The same buffer discipline as the OFT path: the manager refunds the excess to the sender. */
 export const DEFAULT_FEE_BUFFER_BPS = 2000 // +20%
+
+/** The one rule for the flag, so the plan, the guards and the self-check cannot disagree. */
+export const shouldQueueFor = (amount: bigint, outboundCapacity: bigint): boolean => amount > outboundCapacity
 
 export type NttPlan = {
   protocol: 'wormhole-ntt'
@@ -55,6 +61,7 @@ export type NttPlan = {
   /** bytes32 of the sender: where the manager refunds the excess fee. */
   refundAddress: Hex
   transceiverInstructions: Hex
+  /** `shouldQueueFor(amount, outboundCapacity)` — see the header. */
   shouldQueue: boolean
   /** quoteDeliveryPrice total, before the buffer. */
   fee: bigint
@@ -63,6 +70,8 @@ export type NttPlan = {
   /** Rate limits at quote time. */
   outboundCapacity: bigint
   inboundCapacity: bigint | undefined
+  /** The manager's rate-limit window in seconds — how long a queued transfer waits. Absent when unreadable. */
+  rateLimitDuration: bigint | undefined
 }
 
 export class NttPlanError extends Error {
@@ -125,6 +134,14 @@ export async function buildNttPlan(p: BuildNttPlanInput): Promise<NttPlan> {
     inboundCapacity = undefined // reported as "unknown" (a pending note in guards, never a pass)
   }
 
+  // Only needed to SAY how long a queued transfer would wait; the flag does not depend on it.
+  let rateLimitDuration: bigint | undefined
+  try {
+    rateLimitDuration = await p.srcClient.readContract({ ...base, functionName: 'rateLimitDuration' })
+  } catch {
+    rateLimitDuration = undefined
+  }
+
   const src = requireEvm(byKey(v.chain))
   const bufferBps = p.feeBufferBps ?? DEFAULT_FEE_BUFFER_BPS
   return {
@@ -145,11 +162,12 @@ export async function buildNttPlan(p: BuildNttPlanInput): Promise<NttPlan> {
     recipientDisplay: p.recipient.display,
     refundAddress: addressToBytes32(p.sender),
     transceiverInstructions: NO_TRANSCEIVER_INSTRUCTIONS,
-    shouldQueue: SHOULD_QUEUE,
+    shouldQueue: shouldQueueFor(amount.amount, outboundCapacity),
     fee,
     value: ceilToStep(applyBps(fee, 10000 + bufferBps), src.feeStepWei),
     outboundCapacity,
     inboundCapacity,
+    rateLimitDuration,
   }
 }
 
@@ -177,7 +195,8 @@ export type NttSelfCheck = { ok: true } | { ok: false; mismatches: string[] }
 
 /**
  * §6.14 for NTT: decode the calldata that is about to be signed and compare every field with the
- * plan on screen. The two that matter most are `shouldQueue` (must be false) and the recipient.
+ * plan on screen. The two that matter most are `shouldQueue` — it must be the plan's own answer,
+ * which is true only over the capacity the plan read — and the recipient.
  */
 export function nttSelfCheck(plan: NttPlan, calldata: Hex): NttSelfCheck {
   const mismatches: string[] = []
@@ -192,7 +211,8 @@ export function nttSelfCheck(plan: NttPlan, calldata: Hex): NttSelfCheck {
   if (got[1] !== want[1]) mismatches.push('recipientChain')
   if (got[2].toLowerCase() !== want[2].toLowerCase()) mismatches.push('recipient')
   if (got[3].toLowerCase() !== want[3].toLowerCase()) mismatches.push('refundAddress')
-  if (got[4] !== false) mismatches.push('shouldQueue must be false')
+  if (got[4] !== want[4]) mismatches.push('shouldQueue')
+  if (got[4] !== shouldQueueFor(plan.amount, plan.outboundCapacity)) mismatches.push('shouldQueue does not follow the capacity')
   if (got[5].toLowerCase() !== want[5].toLowerCase()) mismatches.push('transceiverInstructions')
   if (isZeroBytes32(got[2])) mismatches.push('recipient is zero')
   return mismatches.length === 0 ? { ok: true } : { ok: false, mismatches }

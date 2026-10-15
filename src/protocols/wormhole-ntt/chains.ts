@@ -139,6 +139,14 @@ export function isCoreBridge(key: ChainKey, address: string): boolean {
 }
 
 /**
+ * Can NTT reach this chain at all: Wormhole numbers it AND has a core bridge there. A chain with an
+ * id but no core bridge (HyperEVM, Plasma) cannot receive a message, so it is never a destination.
+ */
+export function nttServed(key: ChainKey): boolean {
+  return !!WORMHOLE_CHAINS[key]?.coreBridge
+}
+
+/**
  * CoinGecko asset-platform ids, which is how the list keys its `platforms` map. A wrong entry here
  * can only ever fail to find a token (the address must still match exactly), never match the wrong
  * one — so this mapping cannot turn into an approval for something else.

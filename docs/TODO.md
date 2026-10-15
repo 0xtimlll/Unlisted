@@ -88,6 +88,47 @@ NTT indicator the way `lz-risk/adapters.ts` does, and add one green and one red 
 
 ---
 
+## NTT v2 routes are refused: delivery needs the Wormhole Executor
+
+**Where** [`src/protocols/wormhole-ntt/verify.ts`](../src/protocols/wormhole-ntt/verify.ts) (`executor_required`),
+[`src/protocols/wormhole-ntt/abi.ts`](../src/protocols/wormhole-ntt/abi.ts) (`WORMHOLE_TRANSCEIVER_VERSION`).
+
+**What** NTT 2.x (`NTT_MANAGER_VERSION` "2.0.0" live on Monad and BNB Chain, "2.0.1" on main)
+dropped the standard relayer from `WormholeTransceiver`: `isWormholeRelayingEnabled` /
+`isSpecialRelayingEnabled` are gone, `quoteDeliveryPrice` answers the core bridge's message fee
+(zero), and the contract's own header says messages are "delivered manually via the core layer or
+through external relayers/executors that call receiveMessage directly". In practice the Wormhole
+Executor delivers: the sender's transaction also calls `requestExecution(dstChain, dstAddr,
+refundAddr, signedQuote, requestBytes, relayInstructions)` on the Executor contract, paying a price
+quoted and SIGNED by an off-chain API, and a relayer then calls `receiveMessage(vaa)` on the far
+transceiver. A real Atlantis send on Monad (`0x49972f3a…8146`, 2026-10-15) went through a wrapper
+(`0xc3F3dDa5…793e`: `transferFrom` user → wrapper → manager, then `manager.transfer`, then
+`executor.requestExecution` on `0xC04dE634…3f65`, which emitted `RequestForExecution`); the BNB
+Chain delivery (`0xd36dd0b8…6114`) came from an EOA through a small helper (`0x0e4eaf9c…e175`) into
+`receiveMessage` on the spoke's transceiver.
+
+This app builds a plain `manager.transfer(...)`. On a 2.x route that would burn or lock the tokens
+and publish a message nobody delivers — the recipient would have to fetch the VAA and call
+`receiveMessage` by hand. So the gate refuses a transceiver that answers no relaying getter and a
+version other than 1.x, with its own reason, and the screen says what the route is.
+
+**Why it was left alone** Supporting it is a new send path, not a fix: a signed quote from an
+external API inside the calldata (CLAUDE.md rule 1 allows an API to narrow a search, and a quote is
+a price, not a verdict — but the payee and the contract it goes to must be committed addresses
+verified on chain, and Wormhole publishes the Executor addresses only in its SDK and docs); a second
+write primitive (`requestExecution`, or `transfer` on an `NttManagerWithExecutor` whose code is not
+in the `native-token-transfers` main tree); for the wrapper shape, an approve whose spender is the
+wrapper rather than the verified manager, which the whitelist and guard 10 forbid today; and the
+Status tab learning the Executor's request/relay states.
+
+**To close it** Decide the shape first (two transactions from the EOA — `transfer`, then
+`requestExecution` referencing the published sequence — keeps the approve on the manager and needs
+no wrapper), commit the Executor contract per chain with an on-chain check, read the quote from the
+Executor API as data and show the price, scope the new write to `wormhole-ntt/`, and add the
+Atlantis route (`tests/integration/ntt.live.test.ts`) as the live fixture that must then verify.
+
+---
+
 ## The red line for an address-book twin does not name the entry
 
 **Where** [`src/core/indicator.ts`](../src/core/indicator.ts) (the `headline`),

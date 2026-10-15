@@ -230,9 +230,9 @@ for (const file of walk(SRC)) {
       'chainId', 'getMode', 'getThreshold', 'getPeer', 'tokenDecimals',
       'getCurrentOutboundCapacity', 'getCurrentInboundCapacity', 'getTransceivers', 'quoteDeliveryPrice',
       'getTransceiverType', 'getNttManagerToken', 'wormhole', 'getWormholePeer',
-      'isWormholeRelayingEnabled', 'isSpecialRelayingEnabled', 'encodeWormholeTransceiverInstruction',
+      'isWormholeRelayingEnabled', 'isSpecialRelayingEnabled', 'encodeWormholeTransceiverInstruction', 'WORMHOLE_TRANSCEIVER_VERSION',
       // The token-side anchor that lets an NttManager become an approve spender at all.
-      'minter', 'MINTER_ROLE', 'hasRole',
+      'minter', 'MINTER_ROLE', 'hasRole', 'isMinter',
       // Chainlink CCIP (task 6). All view — see src/protocols/ccip/abi.ts for sources.
       'getFee', 'isChainSupported', 'getPool', 'getTokenConfig',
       'getToken', 'getTokenDecimals', 'getRouter', 'isSupportedChain', 'getSupportedChains',

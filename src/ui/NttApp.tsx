@@ -41,7 +41,7 @@ import { reverseNtt } from '@/core/reverse'
 import { Cta, type CtaState } from './components/Review'
 import { isUserRejection, shortError, useAllowance, useNativeBalance, useTokenBalance } from './hooks'
 import { useAnalysis } from './useAnalysis'
-import { nttDestinations, useNttCheck, useNttDiscovery, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
+import { nttDestinations, useNttCheck, useNttDiscovery, useNttManagerIndex, useNttPeers, useNttPlan, useNttTokenList, useNttVerification } from './nttHooks'
 import { pushHistory, type HistoryEntry, type SetStored, type Stored } from './storage'
 
 import { PREVIEW_ADDRESS, PREVIEW_RECIPIENT, previewAmountRaw, previewCaption } from './preview'
@@ -184,19 +184,16 @@ export function NttApp({
   }
 
   const tokenList = useNttTokenList()
-  const discovery = useNttDiscovery(srcKey, dstChain, target, tokenList.data?.tokens, stored.customRpc)
+  // Wormholescan's transfer index for this chain: candidate managers for a token that names none.
+  const managerIndex = useNttManagerIndex(srcKey, target !== null)
+  const discovery = useNttDiscovery(srcKey, dstChain, target, tokenList.data?.tokens, managerIndex.data?.index, stored.customRpc)
   const manager = discovery.data?.kind === 'manager' ? discovery.data.manager : undefined
 
-  const listedToken = useMemo(() => {
-    const t = discovery.data?.kind === 'manager' ? discovery.data.token : discovery.data?.kind === 'token_without_minter' ? discovery.data.token : undefined
-    if (!t || !tokenList.data) return undefined
-    return tokenList.data.tokens.find((x) => Object.values(x.platforms).some((a) => a.toLowerCase() === t.toLowerCase()))
-  }, [discovery.data, tokenList.data])
-
-  const destinations = useMemo(
-    () => nttDestinations(listedToken, evmChains().map((c) => c.key), srcKey),
-    [listedToken, srcKey],
-  )
+  // The destinations come from the manager itself — getPeer() for every chain we serve — never from
+  // the token list. Until they are read, or when not all could be, every chain is offered and the
+  // gate decides; with no manager found yet, every chain is offered so the user can still choose.
+  const peers = useNttPeers(srcKey, manager, stored.customRpc)
+  const destinations = useMemo(() => nttDestinations(peers.data, evmChains().map((c) => c.key), srcKey), [peers.data, srcKey])
 
   const verification = useNttVerification(srcKey, dstChain, manager, tokenList.data?.tokens, stored.customRpc)
   const verified = verification.data?.ok ? verification.data.verified : undefined
@@ -291,7 +288,12 @@ export function NttApp({
     held: impossible !== undefined,
     preview: verified && (isPreview || (impossible !== undefined && planData)) ? previewCaption(d, isPreview ? 'probe' : 'held', verified.tokenDecimals, verified.tokenSymbol) : undefined,
     label: nttLabel,
-    flags: verification.data?.ok && verification.data.crossChecked === false ? ['not_cross_checked'] : [],
+    flags: [
+      ...(verification.data?.ok && verification.data.crossChecked === false ? ['not_cross_checked'] : []),
+      // Typed in rather than found from the token or a hint: nothing on the screen led to this
+      // contract, so the indicator says so in yellow (owner's rule, 2026-10-15). The checks are the same.
+      ...(discovery.data?.kind === 'manager' && discovery.data.via === 'given' ? ['ntt_manager_manual'] : []),
+    ],
     flagLabel: (f) => (d.card as Record<string, string>)[`flag_${f}`] ?? f,
     riskCovered: false,
     riskPending: false,
@@ -468,7 +470,7 @@ export function NttApp({
   ) : planData && verified ? (
     isPreview ? undefined : <span className="tnum">{fmt(d.ui.receives, { amount: formatAmount(planData.received, planData.dst.tokenDecimals, { maxFraction: 6 }), symbol: verified.tokenSymbol })}</span>
   ) : undefined
-  const analysing = discovery.isFetching || tokenList.isLoading || analysis.isFetching
+  const analysing = discovery.isFetching || tokenList.isLoading || managerIndex.isLoading || analysis.isFetching
 
   const left = sent ? (
     <Shell>
@@ -523,11 +525,13 @@ export function NttApp({
           ) : null}
         </div>
         {tokenList.data?.unavailable ? <Alert kind="warn">{d.ntt.listUnavailable}</Alert> : null}
+        {/* The index matters only when the token itself led nowhere; said then, not on every search. */}
+        {managerIndex.data?.unavailable && discovery.data && discovery.data.kind !== 'manager' ? <Alert kind="warn">{d.ntt.indexUnavailable}</Alert> : null}
         {discovery.data?.kind === 'unknown' ? <Alert kind="error">{discovery.data.reason === 'not_listed' ? d.ntt.notListed : d.ntt.unreadable}</Alert> : null}
         {discovery.data?.kind === 'token_without_minter' ? <Alert kind="warn">{dstChain ? d.ntt.noMinter : d.ntt.pickDestinationFirst}</Alert> : null}
         {discovery.data?.kind === 'manager' ? (
           <p className="px-1 text-xs text-muted">
-            {discovery.data.via === 'minter' ? d.ntt.foundViaMinter : discovery.data.via === 'peer' ? d.ntt.foundViaPeer : d.ntt.foundGiven}{' '}
+            {discovery.data.via === 'minter' ? d.ntt.foundViaMinter : discovery.data.via === 'peer' ? d.ntt.foundViaPeer : discovery.data.via === 'index' ? d.ntt.foundViaIndex : d.ntt.foundGiven}{' '}
             <AddressView value={discovery.data.manager} href={src.explorerAddrUrl + discovery.data.manager} short />
           </p>
         ) : null}
@@ -543,10 +547,11 @@ export function NttApp({
           to={dstChain ? byKey(dstChain) : undefined}
           toOptions={destinations}
           onTo={(k) => setDstChain(k)}
-          toDisabled={destinations.length === 0}
           reverse={{ enabled: reverseEnabled, title: reverseTitle, onClick: onReverse }}
         />
-        {destinations.length === 0 && listedToken ? <p className="px-1 text-xs text-muted">{d.ntt.noDestinations}</p> : null}
+        {/* Said only about a manager that was read in full: a partial read offers every chain instead. */}
+        {manager && peers.data?.complete && peers.data.chains.length === 0 ? <p className="px-1 text-xs text-muted">{d.ntt.noDestinations}</p> : null}
+        {manager && peers.data && !peers.data.complete ? <p className="px-1 text-xs text-muted">{d.ntt.peersPartial}</p> : null}
 
         <AmountPanel
           value={amountInput}

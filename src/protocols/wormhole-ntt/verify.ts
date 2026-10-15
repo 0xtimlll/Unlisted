@@ -8,9 +8,10 @@
  *   1. The manager agrees about its own identity: token(), chainId() for this chain, getMode(),
  *      tokenDecimals() — all readable, and the chain id is the one we are actually on.
  *   2. A token-side anchor ON THE SOURCE SIDE: the token this manager names must name it back —
- *      minter() == manager, or hasRole(MINTER_ROLE, manager) for AccessControl tokens, with the
- *      role read from the token itself. This is the only fact in the whole gate the manager's
- *      deployer cannot write, so it is the only one that can establish trust (CLAUDE.md rule 2).
+ *      minter() == manager, hasRole(MINTER_ROLE, manager) for AccessControl tokens with the role
+ *      read from the token itself, or isMinter(manager) for OpenZeppelin MinterRole tokens. This
+ *      is the only fact in the whole gate the manager's deployer cannot write, so it is the only
+ *      one that can establish trust (CLAUDE.md rule 2).
  *      A locking hub has no minter, so the token cannot establish it. What can is money: the share
  *      of the token's supply the manager holds (`balanceOf(manager) / totalSupply()`, both read from
  *      the token). A real hub holds what circulates on its spokes; a fake manager for a real token
@@ -22,6 +23,8 @@
  *   4. A Wormhole transceiver: it reports the Wormhole type and points at the core bridge whose
  *      address is in OUR committed config, and it has automatic relaying enabled for the
  *      destination. That committed address is the anchor the whole chain of evidence hangs from.
+ *      A 2.x transceiver has no relayer (the Wormhole Executor delivers, on a separate paid
+ *      request this tab does not make) and is refused as `executor_required`.
  *
  * Wormholescan's token list is NOT part of this. It is a search hint — it helps find a manager
  * from a token address — and it can never make a verdict better: a token missing from it is
@@ -29,9 +32,10 @@
  * check 1, which put an external API in the path of an approve; CLAUDE.md rule 1 says the opposite,
  * and the committed core-bridge address is the anchor that rule asks for.
  *
- * Wormholescan's decoded operations are deliberately NOT evidence here: `sourceNttManager` is
- * written by the manager itself, so one self-made transfer would launder a fake. They are shown as
- * context in the details and never feed a decision.
+ * Wormholescan's decoded operations are deliberately NOT evidence here either: `sourceNttManager`
+ * is written by the manager itself, so one self-made transfer would launder a fake. Since
+ * 2026-10-15 they are a second search hint (managerIndex.ts) — they say which contracts to ask
+ * `token()`, and nothing in this file reads them.
  *
  * Neither is the DESTINATION-side anchor, and that one was a real hole rather than a precaution.
  * It used to substitute for the source anchor, but the only way to reach the destination is
@@ -62,15 +66,21 @@ export type NttRejectionCode =
   | 'no_wormhole_transceiver'
   | 'transceiver_wrong_core_bridge'
   | 'manual_delivery_only'
+  /**
+   * An NTT v2 route: the transceiver has no relayer, and delivery is arranged by the Wormhole
+   * Executor in a call this tab does not build (see the end of verifyUnguarded).
+   */
+  | 'executor_required'
   | 'unverifiable'
 
 /**
- * What established this manager: the token on the SOURCE chain naming it as minter, or granting it
- * the minter role. That is the only fact an attacker cannot author. A destination-side anchor is
- * reported separately as `alsoOnDestination` and is never a reason on its own.
+ * What established this manager: the token on the SOURCE chain naming it as minter, granting it
+ * the minter role, or answering `isMinter(manager)`. That is the only fact an attacker cannot
+ * author. A destination-side anchor is reported separately as `alsoOnDestination` and is never a
+ * reason on its own.
  */
 export type AnchorSide = 'source'
-export type AnchorKind = 'minter' | 'role'
+export type AnchorKind = 'minter' | 'role' | 'isMinter'
 
 /**
  * The share of the token's supply a manager with no token-side anchor must hold to be given an
@@ -277,13 +287,28 @@ async function verifyUnguarded(p: VerifyInput): Promise<NttVerification> {
     return fail('no_wormhole_transceiver', sawWormholeType ? 'core bridge unreadable' : `${transceivers.length} transceiver(s)`)
   }
 
-  // Automatic delivery only. A transfer that would need a manual redeem is refused, and a build
-  // that does not expose these getters counts as "cannot confirm" — which is also a refusal.
+  // Automatic delivery only. A v1.x transceiver says whether Wormhole's standard relayer (or a
+  // special relayer) carries the message to this destination; a route that would need a manual
+  // redeem is refused.
+  //
+  // A 2.x transceiver (WORMHOLE_TRANSCEIVER_VERSION "2.0.0" live, "2.0.1" on main) has no relayer
+  // at all: it only publishes through the core bridge, and its own header says messages are
+  // "delivered manually via the core layer or through external relayers/executors that call
+  // receiveMessage directly". In practice that is the Wormhole Executor, which has to be asked for
+  // a signed quote off chain and paid in a separate `requestExecution` call — NTT's
+  // NttManagerWithExecutor does the transfer and that request in one transaction. This tab builds a
+  // plain `transfer`, so on such a route the tokens would be burned or locked and the message would
+  // sit unredeemed. Refused with its own code, so the screen can say exactly that; a transceiver
+  // that answers neither the getters nor a version is "cannot confirm", also a refusal.
   const [viaRelayer, viaSpecial] = await Promise.all([
     read(() => p.srcClient.readContract({ address: wormholeTransceiver!, abi: wormholeTransceiverAbi, functionName: 'isWormholeRelayingEnabled', args: [dstWh] })),
     read(() => p.srcClient.readContract({ address: wormholeTransceiver!, abi: wormholeTransceiverAbi, functionName: 'isSpecialRelayingEnabled', args: [dstWh] })),
   ])
-  if (viaRelayer === undefined && viaSpecial === undefined) return fail('unverifiable', 'relaying getters unavailable')
+  if (viaRelayer === undefined && viaSpecial === undefined) {
+    const version = await read(() => p.srcClient.readContract({ address: wormholeTransceiver!, abi: wormholeTransceiverAbi, functionName: 'WORMHOLE_TRANSCEIVER_VERSION' }))
+    if (version !== undefined && !/^1\./.test(version)) return fail('executor_required', sanitizeLabel(version))
+    return fail('unverifiable', 'relaying getters unavailable')
+  }
   if (viaRelayer !== true && viaSpecial !== true) return fail('manual_delivery_only', p.dstChain)
 
   // The symbol shown next to an amount comes from the token contract, like every other fact here.
@@ -312,17 +337,28 @@ async function verifyUnguarded(p: VerifyInput): Promise<NttVerification> {
 
 /**
  * Does this token name the manager as its minter? `minter()` first (the reference NTT token), then
- * AccessControl, with MINTER_ROLE read from the token so no role hash is assumed here.
+ * AccessControl, with MINTER_ROLE read from the token so no role hash is assumed here, then
+ * OpenZeppelin's MinterRole `isMinter(manager)` (what the Monad-era deployments use). Each is a
+ * fact about the token; a provider that does not answer throws (`UnreadableError`), never "no".
+ *
+ * Exported for discover.ts, which uses it to rank candidate managers; the verdict is made here.
  */
-async function tokenAnchors(client: ReadClient, token: Address, manager: Address): Promise<AnchorKind | undefined> {
+export async function tokenAnchor(client: ReadClient, token: Address, manager: Address): Promise<AnchorKind | undefined> {
   const minter = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'minter' }), 'token.minter()')
   if (minter && isAddressEqual(getAddress(minter), manager)) return 'minter'
 
   const role = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'MINTER_ROLE' }), 'token.MINTER_ROLE()')
-  if (!role) return undefined
-  const has = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'hasRole', args: [role, manager] }), 'token.hasRole()')
-  return has === true ? 'role' : undefined
+  if (role) {
+    const has = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'hasRole', args: [role, manager] }), 'token.hasRole()')
+    if (has === true) return 'role'
+  }
+
+  const is = await read(() => client.readContract({ address: token, abi: nttTokenAnchorAbi, functionName: 'isMinter', args: [manager] }), 'token.isMinter()')
+  return is === true ? 'isMinter' : undefined
 }
+
+/** The name the rest of this file uses. */
+const tokenAnchors = tokenAnchor
 
 // ------------------------------------------------------------------ quorum ----
 

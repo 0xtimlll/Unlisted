@@ -16,7 +16,7 @@ import { isAddressEqual, type Address } from 'viem'
 import { aboveFeeCeiling } from '../../core/chains'
 import { addressToBytes32, isBytes32, isZeroBytes32, sameAddress } from '../../core/encoding'
 import { receivedAmount } from './amounts'
-import type { NttPlan } from './plan'
+import { shouldQueueFor, type NttPlan } from './plan'
 import { NTT_MIN_LOCKED_BPS, type NttVerification } from './verify'
 
 export type NttGuardCode =
@@ -36,6 +36,7 @@ export type NttGuardCode =
   | 'balance_unknown'
   | 'insufficient_balance'
   | 'over_outbound_capacity'
+  | 'outbound_will_queue'
   | 'inbound_capacity_unknown'
   | 'over_inbound_capacity'
   | 'fee_mismatch'
@@ -182,11 +183,18 @@ export function n5Amount(i: NttGuardInput): NttGuardResult {
 }
 
 // 6. rate limits, both directions — the inbound one read on the destination's own RPC.
-//    Outbound is the manager's own revert (`shouldQueue` is false), so it holds the button;
-//    inbound acts on the destination after the send (the transfer queues there) — a note.
+//    Over the outbound limit the plan asks the manager to QUEUE (plan.ts): the tokens leave now and
+//    the message goes out after the rate-limit window, once someone releases it — a note, in yellow,
+//    with the window in the detail. A plan over the limit that did not ask to queue would simply
+//    revert (NotEnoughCapacity), so that one still holds the button. The inbound limit acts on the
+//    destination after the send (the transfer queues there) — a note.
 export function n6RateLimits(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(6, 'plan_missing')
-  if (i.plan.amount > i.plan.outboundCapacity) return fail(6, 'over_outbound_capacity', i.plan.outboundCapacity.toString())
+  if (i.plan.amount > i.plan.outboundCapacity) {
+    if (!i.plan.shouldQueue) return fail(6, 'over_outbound_capacity', i.plan.outboundCapacity.toString())
+    const window = i.plan.rateLimitDuration === undefined ? 'window unknown' : `${Number(i.plan.rateLimitDuration) / 3600} h window`
+    return fail(6, 'outbound_will_queue', `capacity ${i.plan.outboundCapacity}, ${window}`)
+  }
   if (i.plan.inboundCapacity === undefined) return fail(6, 'inbound_capacity_unknown')
   // Inbound capacity is denominated in the DESTINATION token, like the amount that arrives.
   const arriving = receivedAmount(i.plan.amount, i.plan.trim, i.plan.dst.tokenDecimals)
@@ -239,10 +247,11 @@ export function n10Spender(i: NttGuardInput): NttGuardResult {
   return ok(10)
 }
 
-// 11. queueing is off: over the limit must revert, not queue
+// 11. the queue flag follows the capacity: a plan that asks to queue an amount that fits is not
+//     ours (an assembly invariant); one over the limit that does not ask is guard 6's block.
 export function n11NoQueue(i: NttGuardInput): NttGuardResult {
   if (!i.plan) return fail(11, 'plan_missing')
-  return i.plan.shouldQueue ? fail(11, 'queueing_enabled') : ok(11)
+  return i.plan.shouldQueue && !shouldQueueFor(i.plan.amount, i.plan.outboundCapacity) ? fail(11, 'queueing_enabled') : ok(11)
 }
 
 // 12. the simulation passed

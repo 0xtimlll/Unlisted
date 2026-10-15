@@ -6,12 +6,13 @@ import { byKey, evmByKey, requireEvm, type ChainKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
 import { clientPair, independentSecondary } from '@/core/quorum'
 import type { Recipient } from '@/core/recipient'
-import { wormholeChainId } from '@/protocols/wormhole-ntt/chains'
-import { discoverNtt, type NttDiscovery } from '@/protocols/wormhole-ntt/discover'
+import { nttServed, wormholeChainId } from '@/protocols/wormhole-ntt/chains'
+import { discoverNtt, readNttPeers, type NttDiscovery, type NttPeers } from '@/protocols/wormhole-ntt/discover'
+import { fetchNttManagerIndex, type NttManagerIndex } from '@/protocols/wormhole-ntt/managerIndex'
 import { buildNttPlan, type NttPlan } from '@/protocols/wormhole-ntt/plan'
 import { previewNttTransfer, type NttPreview } from '@/protocols/wormhole-ntt/preview'
 import { fetchNttStatus } from '@/protocols/wormhole-ntt/track'
-import { fetchNttTokenList, listedChains, type NttToken } from '@/protocols/wormhole-ntt/tokenList'
+import { fetchNttTokenList, type NttToken } from '@/protocols/wormhole-ntt/tokenList'
 import { verifyNttManagerQuorum, type NttVerification, type NttVerificationQuorum } from '@/protocols/wormhole-ntt/verify'
 
 const clientFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) => makeReadClient(evmByKey(chain), customRpc[chain])
@@ -49,27 +50,65 @@ export function useNttTokenList() {
 }
 
 /**
- * What the pasted address is. The destination is passed in when it is known: a locking hub has no
- * minter of its own and can only be reached from the burning side.
+ * Wormholescan's transfer index for this source chain (managerIndex.ts): which managers have sent
+ * which tokens. A search hint for tokens that name no minter, cached per chain. Like the token
+ * list it resolves rather than rejects — an outage must not stall the search, which has an
+ * on-chain path and a manual one.
+ */
+export function useNttManagerIndex(chain: ChainKey, wanted: boolean) {
+  const id = wormholeChainId(chain)
+  return useQuery({
+    queryKey: ['nttManagerIndex', chain],
+    enabled: wanted, // three requests per chain: only once there is an address to look up
+    queryFn: async (): Promise<{ index: NttManagerIndex; unavailable: boolean }> => {
+      if (id === undefined) return { index: new Map(), unavailable: false }
+      try {
+        return { index: await fetchNttManagerIndex(id), unavailable: false }
+      } catch {
+        return { index: new Map(), unavailable: true }
+      }
+    },
+    staleTime: 10 * 60_000,
+    retry: 1,
+  })
+}
+
+/**
+ * What the pasted address is. The index supplies candidate managers for a token that names no
+ * minter; the destination is passed in when it is known, because a locking hub can also be reached
+ * from the burning side.
  */
 export function useNttDiscovery(
   chain: ChainKey,
   dstChain: ChainKey | undefined,
   address: string | null,
   tokenList: readonly NttToken[] | undefined,
+  index: NttManagerIndex | undefined,
   customRpc: Partial<Record<ChainKey, string>>,
 ) {
+  const candidates = address && index ? (index.get(address.toLowerCase()) ?? []) : []
   return useQuery({
-    queryKey: ['nttDiscover', chain, dstChain ?? '', address?.toLowerCase(), !!tokenList],
+    queryKey: ['nttDiscover', chain, dstChain ?? '', address?.toLowerCase(), !!tokenList, candidates.join(',').toLowerCase()],
     queryFn: (): Promise<NttDiscovery> => {
       const srcWormholeChainId = wormholeChainId(chain)
       const dst =
         dstChain && srcWormholeChainId !== undefined
           ? { chain: dstChain, client: clientFor(dstChain, customRpc), srcWormholeChainId }
           : undefined
-      return discoverNtt(clientFor(chain, customRpc), chain, address!, tokenList!, dst)
+      return discoverNtt(clientFor(chain, customRpc), chain, address!, tokenList!, dst, candidates)
     },
-    enabled: !!address && !!tokenList,
+    enabled: !!address && !!tokenList && !!index,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+/** Where this manager names a peer: `getPeer()` for every chain we serve, read from the manager. */
+export function useNttPeers(chain: ChainKey, manager: Address | undefined, customRpc: Partial<Record<ChainKey, string>>) {
+  return useQuery({
+    queryKey: ['nttPeers', chain, manager],
+    queryFn: (): Promise<NttPeers> => readNttPeers(clientFor(chain, customRpc), manager!, chain),
+    enabled: !!manager,
     staleTime: 60_000,
     retry: false,
   })
@@ -160,16 +199,15 @@ export function useNttTrack(txHash: string | undefined) {
 }
 
 /**
- * Destinations worth offering.
- *
- * With a catalogue entry this is the chains it lists the token on — a short, accurate menu. Without
- * one (the token is unlisted, or Wormholescan is down) it is every EVM chain we serve, and the
- * verification gate decides which of them actually has a peer. That is slower for the user but it
- * is the same answer: the list narrows the search, it never decides what is bridgeable.
+ * Destinations worth offering: the chains the manager itself names a peer on (readNttPeers). Until
+ * those are read — or when not all of them could be — it is every EVM chain Wormhole serves, and
+ * the verification gate decides which of them actually has a route. The token list has no say
+ * here: it used to decide this menu, and a token it lists on one chain only had an empty one, with
+ * the destination button dead (2026-10-15).
  */
-export function nttDestinations(token: NttToken | undefined, chains: readonly ChainKey[], from: ChainKey): ChainKey[] {
-  const candidates = token ? listedChains(token, chains) : chains
-  return candidates.filter((c) => c !== from && byKey(c).vm === 'evm')
+export function nttDestinations(peers: NttPeers | undefined, chains: readonly ChainKey[], from: ChainKey): ChainKey[] {
+  if (peers?.complete) return peers.chains.filter((c) => c !== from)
+  return chains.filter((c) => c !== from && byKey(c).vm === 'evm' && nttServed(c))
 }
 
 export { requireEvm }

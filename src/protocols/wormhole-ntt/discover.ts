@@ -1,31 +1,50 @@
 /**
- * §Task 5: finding the NttManager.
+ * §Task 5: finding the NttManager, and where it can send.
  *
- * The official token list has no manager addresses, so the manager is discovered from the TOKEN
- * itself: an NTT token in burning mode names its manager as `minter()`. That is the same fact the
- * gate later treats as the anchor, which is the point — the manager is only ever reached through
- * something the token says, never through something a manager claims about itself.
+ * Wormhole's token list has no manager addresses, so the manager is discovered from the TOKEN
+ * itself where it can be: an NTT token in burning mode usually names its manager as `minter()`.
+ * That is the same fact the gate later treats as the anchor, which is the point — the manager is
+ * reached through something the token says, never through something a manager claims about itself.
  *
- * The list is only ever a HINT here — it narrows the search and supplies the destination
- * suggestions. A token it does not mention is still followed on chain, because `minter()` is a
- * fact about the token and the list is a fact about an API. Everything found either way goes
- * through the same gate in verify.ts, which does not consult the list at all.
+ * Not every token has such a getter. OpenZeppelin MinterRole tokens answer only `isMinter(address)`
+ * — a question, not a lookup — and a locking hub's token names nothing at all, because nothing is
+ * minted there. For those the search needs CANDIDATES, contracts to ask, and two hints supply them:
  *
- * A locking hub's token has no minter — by design, since nothing is minted there. For those the
- * search goes the other way round: the token on the DESTINATION chain names its own (burning)
- * manager, and that manager's peer for this chain is the hub. Both ends of that walk are still
- * token-side facts, and whatever comes out of it goes through the full gate anyway.
+ *  - Wormholescan's decoded NTT operations for this source chain (managerIndex.ts): every transfer
+ *    names its `sourceNttManager`. The field is written by the manager itself, so it narrows the
+ *    search and proves nothing — a candidate counts only after it answers `token()` with this token
+ *    ON CHAIN, and the gate in verify.ts decides the rest (CLAUDE.md rule 1: an external API may
+ *    narrow a search, never raise trust);
+ *  - the token list, once a destination is chosen: the token on the DESTINATION chain names its own
+ *    (burning) manager, and that manager's peer for this chain is the hub. Both ends of that walk
+ *    are token-side facts.
+ *
+ * A manager no hint reaches is typed in by hand — the screen says so — and goes through exactly the
+ * same gate as one that was found. Whatever found it, the destinations come from the manager's own
+ * `getPeer()` for every chain we serve (readNttPeers), never from a catalogue.
  */
 import { getAddress, isAddressEqual, type Address } from 'viem'
-import type { ChainKey } from '../../core/chains'
+import { evmChains, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
-import { nttManagerAbi, nttTokenAnchorAbi } from './abi'
+import { erc20Abi } from '../../core/abi'
 import { isZeroBytes32, peerToAddress } from '../../core/encoding'
+import { nttManagerAbi, nttTokenAnchorAbi } from './abi'
+import { nttServed, wormholeChainId } from './chains'
 import { COINGECKO_PLATFORM, findListedToken, type NttToken } from './tokenList'
+import { tokenAnchor } from './verify'
 
 export type NttDiscovery =
-  | { kind: 'manager'; manager: Address; token: Address; via: 'minter' | 'given' | 'peer' }
-  /** The address is a listed NTT token, but no manager could be reached from either side. */
+  | {
+      kind: 'manager'
+      manager: Address
+      token: Address
+      /**
+       * How it was reached: the token's own `minter()`; typed in (`given`); the destination token's
+       * manager naming it as peer; or Wormholescan's transfer index, confirmed by `token()` on chain.
+       */
+      via: 'minter' | 'given' | 'peer' | 'index'
+    }
+  /** A listed NTT token, but no hint reached a manager for it: the screen asks for the address. */
   | { kind: 'token_without_minter'; token: Address }
   /** Not an NTT token on this chain, and not a manager for one either. */
   | { kind: 'unknown'; reason: 'not_listed' | 'unreadable' }
@@ -38,9 +57,14 @@ const read = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
   }
 }
 
+/** How many index candidates are asked `token()` for one search. The index is newest-first. */
+export const MAX_MANAGER_CANDIDATES = 8
+
 /**
  * Works out what the pasted address is. An address that answers `token()` is treated as a manager;
- * otherwise it is looked up in the official token list and its `minter()` is followed.
+ * otherwise it is a token, and its manager is looked for from the token's `minter()`, then among
+ * `candidates` (Wormholescan's index for this chain, see managerIndex.ts), then — with a
+ * destination — from the destination token's own manager.
  */
 export async function discoverNtt(
   client: ReadClient,
@@ -53,6 +77,8 @@ export async function discoverNtt(
    * this chain is stored under.
    */
   dst?: { chain: ChainKey; client: ReadClient; srcWormholeChainId: number } | undefined,
+  /** Managers Wormholescan has seen sending this token from this chain. A hint; each is checked. */
+  candidates?: readonly Address[] | undefined,
 ): Promise<NttDiscovery> {
   let addr: Address
   try {
@@ -80,19 +106,56 @@ export async function discoverNtt(
     if (back && isAddressEqual(getAddress(back), token)) return { kind: 'manager', manager, token, via: 'minter' }
   }
 
-  // No minter here: this is most likely a locking hub. Walk in from the destination side. That
-  // walk needs the catalogue to know which address the same token has over there, so it is the one
-  // step the list is genuinely required for.
+  // No minter getter: ask the contracts Wormholescan has seen sending this token. Each has to name
+  // the token back on chain; the one the token vouches for comes first, then the one holding most.
+  const viaIndex = candidates && candidates.length > 0 ? await managerFromCandidates(client, token, candidates) : undefined
+  if (viaIndex) return { kind: 'manager', manager: viaIndex, token, via: 'index' }
+
+  // Still nothing: this may be a locking hub. Walk in from the destination side. That walk needs the
+  // catalogue to know which address the same token has over there, so it is the one step the list
+  // is genuinely required for.
   const viaPeer = dst && listed ? await hubFromPeer(dst, tokenList, token) : undefined
   if (viaPeer) return { kind: 'manager', manager: viaPeer, token, via: 'peer' }
 
-  // A contract that answers neither token() nor minter() and is not in the list is not something
-  // this tab can follow — say which of the two it is, so the screen can explain it.
+  // A contract that answers neither token() nor minter(), that no index names and that is not in
+  // the list is not something this tab can follow on its own — say which of the two it is, so the
+  // screen can explain it and ask for the manager's address.
   if (!listed) {
     const isContract = await read(() => client.getCode({ address: addr }))
     return { kind: 'unknown', reason: !isContract || isContract === '0x' ? 'unreadable' : 'not_listed' }
   }
   return { kind: 'token_without_minter', token }
+}
+
+/**
+ * The candidates that name this token, ranked: one the token vouches for first (the anchor the
+ * gate will accept), then by the share of the token each holds — a hub holds what circulates on
+ * its spokes, a fake holds nothing. Reads that fail count as "no" for the ranking only; the gate
+ * reads everything again with the outage/refusal distinction it needs.
+ */
+async function managerFromCandidates(client: ReadClient, token: Address, candidates: readonly Address[]): Promise<Address | undefined> {
+  const seen = new Set<string>()
+  const scored: { manager: Address; anchored: boolean; held: bigint }[] = []
+  for (const raw of candidates) {
+    let manager: Address
+    try {
+      manager = getAddress(raw)
+    } catch {
+      continue
+    }
+    const key = manager.toLowerCase()
+    if (seen.has(key)) continue
+    if (seen.size >= MAX_MANAGER_CANDIDATES) break
+    seen.add(key)
+
+    const named = await read(() => client.readContract({ address: manager, abi: nttManagerAbi, functionName: 'token' }))
+    if (!named || !isAddressEqual(getAddress(named), token)) continue
+    const anchored = (await read(() => tokenAnchor(client, token, manager))) !== undefined
+    const held = (await read(() => client.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [manager] }))) ?? 0n
+    scored.push({ manager, anchored, held })
+  }
+  scored.sort((a, b) => (a.anchored !== b.anchored ? (a.anchored ? -1 : 1) : a.held > b.held ? -1 : a.held < b.held ? 1 : 0))
+  return scored[0]?.manager
 }
 
 /**
@@ -129,4 +192,38 @@ function listedAddressOn(token: NttToken, chain: ChainKey): Address | undefined 
   } catch {
     return undefined
   }
+}
+
+// ------------------------------------------------------------------- peers ----
+
+export type NttPeers = {
+  /** The chains this manager names an EVM peer on, in registry order. */
+  chains: ChainKey[]
+  /** False when at least one `getPeer` could not be read: the list may be short, not wrong. */
+  complete: boolean
+}
+
+/**
+ * Where this manager can send: `getPeer(id)` for every EVM chain Wormhole serves in our registry,
+ * except the source. The reads go out together — the client batches them into one Multicall3
+ * call where the chain has it — and a chain whose read fails is left out with `complete: false`,
+ * so the screen can offer every chain and let the gate decide rather than hide a route.
+ */
+export async function readNttPeers(client: ReadClient, manager: Address, src: ChainKey): Promise<NttPeers> {
+  const targets = evmChains().filter((c) => c.key !== src && nttServed(c.key))
+  const found = new Set<ChainKey>()
+  let complete = true
+  await Promise.all(
+    targets.map(async (c) => {
+      const id = wormholeChainId(c.key)
+      if (id === undefined) return
+      try {
+        const peer = await client.readContract({ address: manager, abi: nttManagerAbi, functionName: 'getPeer', args: [id] })
+        if (!isZeroBytes32(peer.peerAddress) && peerToAddress(peer.peerAddress)) found.add(c.key)
+      } catch {
+        complete = false
+      }
+    }),
+  )
+  return { chains: targets.map((c) => c.key).filter((k) => found.has(k)), complete }
 }

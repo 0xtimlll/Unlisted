@@ -68,6 +68,9 @@ const DELIBERATE_NOTES = new Set([
   'oft_fee_extreme',
   'oft_fee_unknown',
   'outbound_limit_unknown',
+  // NTT over its outbound limit asks the manager to queue (plan.ts): the tokens leave now, the
+  // message goes after the window — said in yellow, decided by the person.
+  'outbound_will_queue',
   'over_inbound_capacity',
   'peer_back_mismatch',
   'peer_back_unavailable',

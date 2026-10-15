@@ -89,6 +89,9 @@ export function noteLevel(code: string): ReasonLevel {
 const YELLOW_FLAGS: ReadonlySet<string> = new Set([
   'not_cross_checked',
   'adapter_empty',
+  // NTT: the manager address was typed in rather than found from the token or a hint. The on-chain
+  // checks are the same; the nuance is that nothing on the screen led to this contract.
+  'ntt_manager_manual',
   // Hyperlane: a collateral or native route below the locked-share / dispatch floors (discover.ts).
   'route_fresh',
   'route_standing_unknown',

@@ -296,6 +296,7 @@ export function nttPlan(over: Partial<NttPlan> = {}): NttPlan {
     value: 12n * 10n ** 14n,
     outboundCapacity: amount * 10n,
     inboundCapacity: amount * 10n,
+    rateLimitDuration: 86_400n,
     ...over,
   }
 }
@@ -339,6 +340,8 @@ const nttHarness = (): Harness => ({
     ntt_anchor_missing: () => ({ verification: nttVerified(null) }),
     simulation_failed: () => ({ simulation: { ok: false, reason: 'Error("no")' } }),
     fee_above_ceiling: () => ({ plan: nttPlan({ fee: 4n * 10n ** 17n, value: 5n * 10n ** 17n }) }),
+    // Over the outbound limit the plan asks the manager to queue: a yellow note, the send possible.
+    outbound_will_queue: () => ({ plan: nttPlan({ outboundCapacity: 1n, shouldQueue: true }) }),
   },
   blockers: {
     wallet_not_connected: () => ({ walletAddress: undefined }),
