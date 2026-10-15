@@ -148,7 +148,16 @@ export function isPublicHostname(hostname: string): boolean {
   return true
 }
 
-/** A personal RPC as the page may name it: https, default port, public hostname, no credentials, no fragment. */
+/**
+ * Hosts that serve a chain of their own choosing rather than the chain: a Tenderly Virtual
+ * TestNet answers `token()`, `peers()` and every `eth_call` for a contract that does not exist,
+ * which is the whole of the fake-route attack in one pasted URL (src/core/rpcPolicy.ts has
+ * refused these since the first audit). A fork is not an RPC of the chain, whatever chain id it
+ * answers.
+ */
+export const FORK_HOSTS = /(^|\.)tenderly\.co$|(^|\.)tenderly\.dev$|(^|\.)buildbear\.io$|(^|\.)phalcon\.xyz$/i
+
+/** A personal RPC as the page may name it: https, default port, public hostname, no credentials, no fragment, not a fork service. */
 export function validateCustomRpc(raw: string): { ok: true; url: string; provider: string } | { ok: false; reason: string } {
   let u: URL
   try {
@@ -160,6 +169,7 @@ export function validateCustomRpc(raw: string): { ok: true; url: string; provide
   if (u.port !== '') return { ok: false, reason: 'default port only' }
   if (u.username || u.password) return { ok: false, reason: 'no credentials in the URL' }
   if (!isPublicHostname(u.hostname)) return { ok: false, reason: 'not a public hostname' }
+  if (FORK_HOSTS.test(u.hostname)) return { ok: false, reason: 'a fork or simulation service is not an RPC of the chain' }
   u.hash = ''
   return { ok: true, url: u.toString(), provider: providerOfHost(u.hostname) }
 }

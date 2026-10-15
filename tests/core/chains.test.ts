@@ -169,6 +169,7 @@ describe('validateRpcUrl', () => {
     expect(validateRpcUrl('https://node.internal/rpc')).toEqual({ ok: false, reason: 'private_host' })
     expect(validateRpcUrl('https://node/rpc')).toEqual({ ok: false, reason: 'private_host' })
     expect(validateRpcUrl('https://rpc.example.com:8545/')).toEqual({ ok: false, reason: 'port' })
+    expect(validateRpcUrl('https://virtual.mainnet.rpc.tenderly.co/abc')).toEqual({ ok: false, reason: 'fork_service' })
   })
   it('rejects other schemes, credentials and garbage', () => {
     expect(validateRpcUrl('')).toEqual({ ok: false, reason: 'empty' })

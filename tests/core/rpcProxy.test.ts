@@ -218,7 +218,7 @@ describe('personal RPC', () => {
 
   it('is refused when it is not a public https host on the default port', async () => {
     const h = harness({ [ETH_A]: () => ok('0x1') })
-    for (const bad of ['http://my-node.example.org', 'https://localhost/rpc', 'https://127.0.0.1/rpc', 'https://10.0.0.5/rpc', 'https://[::1]/rpc', 'https://node.internal/rpc', 'https://rpc.local/', 'https://node.example.org:8545/', 'https://user:pw@node.example.org/', 'https://node/', 'ftp://node.example.org/']) {
+    for (const bad of ['https://virtual.mainnet.rpc.tenderly.co/abc', 'https://rpc.buildbear.io/x', 'http://my-node.example.org', 'https://localhost/rpc', 'https://127.0.0.1/rpc', 'https://10.0.0.5/rpc', 'https://[::1]/rpc', 'https://node.internal/rpc', 'https://rpc.local/', 'https://node.example.org:8545/', 'https://user:pw@node.example.org/', 'https://node/', 'ftp://node.example.org/']) {
       const r = await h.send('1', CALL, { headers: { 'x-rpc-url': bad } })
       expect(r.status, bad).toBe(400)
     }

@@ -16,14 +16,18 @@
 import { byKey, CHAINS, isSvm } from './chains.ts'
 
 /**
+ * Hosts that serve a chain of their own choosing rather than the chain. A Tenderly Virtual
+ * TestNet is an endpoint whose contract state its creator chooses, so a pasted URL to one could
+ * answer `token()`, `peers()` and `eth_call` for a contract that does not exist — the whole of
+ * the fake-route attack in one link. Refused for every chain, here and in the /rpc function
+ * (functions/rpc/[chain].ts, FORK_HOSTS), whatever chain id the fork answers.
+ */
+export const FORK_HOSTS = /(^|\.)tenderly\.co$|(^|\.)tenderly\.dev$|(^|\.)buildbear\.io$|(^|\.)phalcon\.xyz$/i
+
+/**
  * Well-known RPC providers people bring their own Solana keys for. Apex domains do not match `*.`.
- *
- * These are node operators serving the real chain. Fork and simulation services are deliberately
- * NOT here — `*.tenderly.co` was, and nothing in this codebase ever asked for it. A Tenderly
- * Virtual TestNet is an endpoint whose contract state its creator chooses, so allowing it meant a
- * pasted URL could answer `token()`, `peers()` and `eth_call` for a contract that does not exist,
- * which is the whole of the fake-route attack in one link. Anything added here should be a
- * provider of the chain, not a provider of a chain.
+ * These are node operators serving the real chain; anything added here should be a provider of
+ * the chain, not a provider of a chain.
  */
 export const SOLANA_PROVIDER_PATTERNS: readonly string[] = [
   '*.helius-rpc.com',
@@ -76,7 +80,7 @@ export function isPublicHostname(hostname: string): boolean {
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h)
 }
 
-export type RpcValidation = { ok: true; url: string } | { ok: false; reason: 'empty' | 'not_url' | 'insecure' | 'bad_scheme' | 'port' | 'private_host' | 'host_not_allowed' }
+export type RpcValidation = { ok: true; url: string } | { ok: false; reason: 'empty' | 'not_url' | 'insecure' | 'bad_scheme' | 'port' | 'private_host' | 'fork_service' | 'host_not_allowed' }
 
 /**
  * Validates a user-supplied RPC URL (§4) for a chain of the given VM: `https://` only, the
@@ -99,6 +103,7 @@ export function validateRpcUrl(input: string, vm: 'evm' | 'svm' = 'evm'): RpcVal
   if (u.protocol !== 'https:') return { ok: false, reason: 'bad_scheme' }
   if (u.port !== '') return { ok: false, reason: 'port' }
   if (!isPublicHostname(u.hostname)) return { ok: false, reason: 'private_host' }
+  if (FORK_HOSTS.test(u.hostname)) return { ok: false, reason: 'fork_service' }
   if (vm === 'svm' && !isAllowedSolanaHost(u.hostname)) return { ok: false, reason: 'host_not_allowed' }
   // A fragment is never sent to the server, yet it is stored and shown back, so it is dropped.
   u.hash = ''

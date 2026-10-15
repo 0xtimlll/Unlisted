@@ -786,7 +786,7 @@ export const en = {
   settings: {
     title: 'RPC settings',
     customRpc: 'Custom RPC for {chain}',
-    hint: 'https:// only, a public host. Stored in this browser only; reads reach it through this site’s own /rpc relay, which checks that it answers for the network.',
+    hint: 'https:// only, a public host. Stored in this browser only. Every read reaches it through this site’s own /rpc relay — so the URL, key included, passes through the site’s edge function on each call — and the relay checks that it answers for the network.',
     rpcTrust:
       'An RPC you set here is fully trusted: every balance, quote, peer check and simulation on this screen is whatever it answers. The relay only checks that it serves the right network — it is not a judgement about who runs the endpoint. Paste one only if you would trust it with the answer to “is this the real contract?”.',
     invalid_empty: '',
@@ -795,6 +795,7 @@ export const en = {
     invalid_bad_scheme: 'Only https:// is allowed',
     invalid_port: 'Only the default port is allowed',
     invalid_private_host: 'Not a public host',
+    invalid_fork_service: 'A fork or simulation service answers for a chain of its own choosing — it is not an RPC of the chain',
     invalid_host_not_allowed:
       'The page sends Solana transactions through this RPC itself, so its host must be one the site’s Content-Security-Policy lets the browser reach: the known Solana providers (Helius, QuickNode, Triton, Syndica, dRPC, …) are reachable — reachable, not vouched for.',
     solanaHint: 'For Solana, use your own RPC (Helius, QuickNode, …): public endpoints throttle simulation and fee lookups, and the send goes to it from the page directly.',
