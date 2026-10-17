@@ -104,16 +104,37 @@ export function sameOftInfo(a: OftInfo, b: OftInfo): boolean {
 type Opinion<T> = { ok: true; r: T } | { ok: false; e: unknown }
 const settle = <T,>(p: Promise<T>): Promise<Opinion<T>> => p.then((r) => ({ ok: true as const, r })).catch((e: unknown) => ({ ok: false as const, e }))
 
+/**
+ * Which operator's opinion is THE answer: the primary's, unless all the primary produced was an
+ * outage — then the first operator that did answer. A definite verdict from the primary ("not an
+ * OFT", "no contract") still stands on its own, as it always has.
+ */
+function answerIndex<T>(all: readonly Opinion<T>[], outage: (e: unknown) => boolean): number {
+  const first = all[0]!
+  if (first.ok || !outage(first.e)) return 0
+  const answered = all.findIndex((o) => o.ok)
+  if (answered >= 0) return answered
+  // Nobody produced an OFT; the first operator that gave a definite verdict speaks for the probe
+  // (so "not an OFT" still leads to the v1 probe), and only if none did is it an outage.
+  const verdict = all.findIndex((o) => !o.ok && !outage(o.e))
+  return verdict >= 0 ? verdict : 0
+}
+
 export async function probeOftQuorum(pair: Pair, address: string): Promise<Quorum<ProbeResult>> {
-  const [p, ...others] = await Promise.all([
-    probeOft(pair.primary, address, pair.endpointV2),
-    ...pair.secondaries.map((c) => settle(probeOft(c.client, address, pair.endpointV2))),
-  ])
+  const providers = [pair.primaryProvider, ...pair.secondaries.map((s) => s.provider)]
+  const all = await Promise.all([pair.primary, ...pair.secondaries.map((s) => s.client)].map((c) => settle(probeOft(c, address, pair.endpointV2))))
+  // An outage is a provider that did not answer (rpc_unavailable, or anything that is not one of
+  // the probe's own verdicts) — never a statement about the contract.
+  const outage = (e: unknown) => !(e instanceof ProbeError) || e.code === 'rpc_unavailable'
+  const at = answerIndex(all, outage)
+  const chosen = all[at]!
+  if (!chosen.ok) throw chosen.e
   let agreed = false
-  for (const [i, s] of others.entries()) {
-    const independent = pair.secondaries[i]!.provider !== pair.primaryProvider
+  for (const [i, s] of all.entries()) {
+    if (i === at) continue
+    const independent = providers[i] !== providers[at]
     if (s.ok) {
-      if (!sameOftInfo(p.info, s.r.info)) throw new ProbeError('rpc_mismatch', 'RPC providers disagree about this contract')
+      if (!sameOftInfo(chosen.r.info, s.r.info)) throw new ProbeError('rpc_mismatch', 'RPC providers disagree about this contract')
       if (independent) agreed = true
     } else if (
       s.e instanceof ProbeError &&
@@ -123,7 +144,7 @@ export async function probeOftQuorum(pair: Pair, address: string): Promise<Quoru
       throw new ProbeError('rpc_mismatch', `another RPC: ${s.e.code}`)
     }
   }
-  return { ...p, crossChecked: agreed }
+  return { ...chosen.r, crossChecked: agreed }
 }
 
 export function sameTx(a: TxPrefill, b: TxPrefill): boolean {
@@ -169,15 +190,18 @@ export function sameOftV1Info(a: OftV1Info, b: OftV1Info): boolean {
 }
 
 export async function probeOftV1Quorum(pair: Pair, chain: ChainKey, address: string): Promise<Quorum<ProbeV1Result>> {
-  const [p, ...others] = await Promise.all([
-    probeOftV1(pair.primary, chain, address),
-    ...pair.secondaries.map((c) => settle(probeOftV1(c.client, chain, address))),
-  ])
+  const providers = [pair.primaryProvider, ...pair.secondaries.map((s) => s.provider)]
+  const all = await Promise.all([pair.primary, ...pair.secondaries.map((s) => s.client)].map((c) => settle(probeOftV1(c, chain, address))))
+  const outage = (e: unknown) => !(e instanceof ProbeV1Error) || e.code === 'rpc_unavailable'
+  const at = answerIndex(all, outage)
+  const chosen = all[at]!
+  if (!chosen.ok) throw chosen.e
   let agreed = false
-  for (const [i, s] of others.entries()) {
-    const independent = pair.secondaries[i]!.provider !== pair.primaryProvider
+  for (const [i, s] of all.entries()) {
+    if (i === at) continue
+    const independent = providers[i] !== providers[at]
     if (s.ok) {
-      if (!sameOftV1Info(p.info, s.r.info)) throw new ProbeV1Error('rpc_mismatch', 'RPC providers disagree about this contract')
+      if (!sameOftV1Info(chosen.r.info, s.r.info)) throw new ProbeV1Error('rpc_mismatch', 'RPC providers disagree about this contract')
       if (independent) agreed = true
     } else if (
       s.e instanceof ProbeV1Error &&
@@ -187,5 +211,5 @@ export async function probeOftV1Quorum(pair: Pair, chain: ChainKey, address: str
       throw new ProbeV1Error('rpc_mismatch', `another RPC: ${s.e.code}`)
     }
   }
-  return { ...p, crossChecked: agreed }
+  return { ...chosen.r, crossChecked: agreed }
 }

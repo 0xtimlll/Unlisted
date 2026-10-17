@@ -836,6 +836,7 @@ export const en = {
     probe_foreign_endpoint:
       'This contract names an Endpoint that is not LayerZero’s on this network. Every route check asks that address about this contract, so a contract that chooses its own Endpoint is answering the questions about itself.',
     probe_rpc_mismatch: 'Two RPC providers disagree about this contract — refusing to continue.',
+    probe_rpc_unavailable: 'Could not read this contract — the RPC provider did not answer. Nothing is known about it yet; try again.',
     decode_invalid_hash: 'That is not a transaction hash.',
     decode_tx_not_found: 'Transaction not found on the selected chain.',
     decode_not_send: 'That transaction is not an OFT send().',
