@@ -279,3 +279,12 @@ describe('the page side (core/rpcProxy.ts)', () => {
     }
   })
 })
+
+describe('a keyless tier that ran out of quota', () => {
+  it('-32001 "usage limit for your current plan" moves on to the next RPC instead of being the answer', async () => {
+    resetProxyMemory()
+    const h = harness({ [ETH_A]: () => rpcErr(-32001, "You've reached the usage limit for your current plan."), [ETH_B]: () => ok('0xbb') })
+    const r = await h.send('1', CALL)
+    expect(((await r.json()) as { result: string }).result).toBe('0xbb')
+  })
+})

@@ -811,7 +811,7 @@ export const NETWORKS = {
     chainId: 56,
     nativeSymbol: 'BNB',
     nativeDecimals: 18,
-    rpcs: [{ url: 'https://bsc-dataseed.bnbchain.org', provider: 'bnbchain.org' }, { url: 'https://bsc-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://56.rpc.thirdweb.com', provider: 'thirdweb.com' }, { url: 'https://1rpc.io/bnb', provider: '1rpc.io' }],
+    rpcs: [{ url: 'https://bsc-dataseed.bnbchain.org', provider: 'bnbchain.org' }, { url: 'https://bsc-rpc.publicnode.com', provider: 'publicnode.com' }, { url: 'https://56.rpc.thirdweb.com', provider: 'thirdweb.com' }],
     explorerTxUrl: 'https://bscscan.com/tx/',
     explorerAddrUrl: 'https://bscscan.com/address/',
     srcConfirmationsHint: 20,

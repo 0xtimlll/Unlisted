@@ -183,8 +183,9 @@ function providerLevelError(err: { code?: unknown; message?: unknown }): boolean
   const code = typeof err.code === 'number' ? err.code : undefined
   const msg = String(err.message ?? '').toLowerCase()
   if (/revert|execution|insufficient funds|nonce|gas required|intrinsic gas|out of gas|invalid opcode|stack underflow|invalid jump|transaction underpriced/.test(msg)) return false
-  if (code === -32601 || code === -32005 || code === -32016 || code === -32029 || code === -32603 || code === 429) return true
-  return /rate limit|too many|limit exceeded|capacity|try again|timeout|timed out|unavailable|overloaded|not supported|unsupported|block range|range too|exceed|not found/.test(msg)
+  // -32001 is how keyless tiers say "quota spent" (1rpc.io: "You've reached the usage limit for your current plan").
+  if (code === -32601 || code === -32005 || code === -32016 || code === -32029 || code === -32603 || code === -32001 || code === 429) return true
+  return /rate limit|too many|limit exceeded|usage limit|quota|your current plan|api key|apikey|unauthorized|capacity|try again|timeout|timed out|unavailable|overloaded|not supported|unsupported|block range|range too|exceed|not found/.test(msg)
 }
 
 /* Per-isolate memory: the last upstream that answered for a chain, verified personal RPCs, buckets. */
