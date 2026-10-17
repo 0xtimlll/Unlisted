@@ -185,6 +185,23 @@ export async function readOutboundLimit(client: ReadClient, pool: Address, selec
     const b = await client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getCurrentOutboundRateLimiterState', args: [selector] })
     return { tokens: b.tokens, capacity: b.capacity, isEnabled: b.isEnabled }
   } catch {
+    return (await readBuckets(client, pool, selector))?.[0]
+  }
+}
+
+/**
+ * CCIP 2.x pools return both buckets from one call (getCurrentRateLimiterState(selector, false) —
+ * the standard-finality buckets; this app never requests fast finality). Undefined when the pool
+ * has neither form or the provider did not answer, exactly as before.
+ */
+async function readBuckets(client: ReadClient, pool: Address, selector: bigint): Promise<[RateLimitState, RateLimitState] | undefined> {
+  try {
+    const [o, i] = await client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getCurrentRateLimiterState', args: [selector, false] })
+    return [
+      { tokens: o.tokens, capacity: o.capacity, isEnabled: o.isEnabled },
+      { tokens: i.tokens, capacity: i.capacity, isEnabled: i.isEnabled },
+    ]
+  } catch {
     return undefined
   }
 }
@@ -195,7 +212,7 @@ export async function readInboundLimit(client: ReadClient, pool: Address, srcSel
     const b = await client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getCurrentInboundRateLimiterState', args: [srcSelector] })
     return { tokens: b.tokens, capacity: b.capacity, isEnabled: b.isEnabled }
   } catch {
-    return undefined
+    return (await readBuckets(client, pool, srcSelector))?.[1]
   }
 }
 

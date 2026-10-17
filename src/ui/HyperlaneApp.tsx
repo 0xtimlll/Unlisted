@@ -41,7 +41,7 @@ import { Address as AddressView } from './components/Address'
 import { ProtocolBadge } from './components/History'
 import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
-import { Alert, BoxLabel, Button, ChainDot, Row, Shell, Spinner } from './components/ui'
+import { Alert, BoxLabel, Button, ChainDot, ReadFailed, Row, Shell, Spinner } from './components/ui'
 import { RiskNotAssessed } from './components/RiskPanel'
 import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
 import { AmountPanel, FromToRow, RecipientPanel } from './components/FromTo'
@@ -593,7 +593,12 @@ export function HyperlaneApp({
             </div>
           ) : null}
         </div>
-        {typedData?.kind === 'unknown' ? <Alert kind="error">{d.hyperlaneReject[typedData.reason]}</Alert> : null}
+        {/* A read that did not come back is offered again; it is never a verdict about the contract. */}
+        {target && (typed.isError || (typedData?.kind === 'unknown' && typedData.reason === 'unreadable')) ? (
+          <ReadFailed message={d.ui.readFailedRoute} retryLabel={d.ui.retry} busy={typed.isFetching} onRetry={() => void typed.refetch()} />
+        ) : null}
+        {pickedRouter && picked.isError ? <ReadFailed message={d.ui.readFailedRoute} retryLabel={d.ui.retry} busy={picked.isFetching} onRetry={() => void picked.refetch()} /> : null}
+        {typedData?.kind === 'unknown' && typedData.reason !== 'unreadable' ? <Alert kind="error">{d.hyperlaneReject[typedData.reason]}</Alert> : null}
         {/* A pasted ERC-20: the registry's candidates are probed, and what is said is about them —
             never about the token itself, which is a perfectly good ERC-20. */}
         {typedToken && hints.length === 0 ? <Alert kind="info">{fmt(d.hyperlane.hintNone, { chain: src.name })}</Alert> : null}

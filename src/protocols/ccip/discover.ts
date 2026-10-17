@@ -9,10 +9,12 @@
  */
 import { getAddress, isAddressEqual, parseAbi, type Address } from 'viem'
 import { readOptional, UnreadableError } from '@/core/rpcErrors'
+import { sanitizeText } from '@/core/text'
 import type { ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
 import { tokenAdminRegistryAbi, tokenPoolAbi } from './abi'
-import { ccipConfig, chainOfCcipSelector } from './chains'
+import { CCIP_CHAINS, ccipConfig, chainOfCcipSelector } from './chains'
+import selectorNames from './selectorNames.json'
 
 const ZERO: Address = `0x${'0'.repeat(40)}`
 const erc20DecimalsAbi = parseAbi(['function decimals() view returns (uint8)'])
@@ -26,6 +28,27 @@ const read = <T,>(fn: () => Promise<T>): Promise<T | undefined> => readOptional(
 
 export type CcipRoute = { chain: ChainKey; selector: bigint }
 
+/**
+ * A chain the pool supports that this app does not serve over CCIP (Solana, Aptos, an EVM chain
+ * outside the registry, …): shown so the user learns where the token CAN go, never offered as a
+ * destination. `name` is the selector's registry name from chain-selectors, or undefined when even
+ * that list does not know the selector.
+ */
+export type CcipOtherDestination = { selector: bigint; name: string | undefined }
+
+const SELECTOR_NAMES: Readonly<Record<string, string>> = (selectorNames as { selectors: Record<string, string> }).selectors
+
+/** "solana-mainnet" → "Solana", "ethereum-mainnet-xyz-1" → "Xyz": the registry name made readable. */
+export function displaySelectorName(registryName: string): string {
+  const words = registryName
+    .replace(/^ethereum-mainnet-/, '')
+    .replace(/-mainnet(-\d+)?$|^mainnet$/, '')
+    .replace(/-\d+$/, '')
+    .split(/[-_]/)
+    .filter(Boolean)
+  return words.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(' ') || registryName
+}
+
 export type CcipDiscovery =
   | {
       kind: 'token'
@@ -35,10 +58,14 @@ export type CcipDiscovery =
       decimals: number
       /** Destinations the pool supports that we also serve. */
       routes: CcipRoute[]
+      /** Chains the pool supports that this app does not serve over CCIP. Shown, never offered. */
+      otherDestinations: CcipOtherDestination[]
+      /** The pool's own `typeAndVersion()`, e.g. "BurnMintTokenPool 1.6.1"; undefined when it has none. */
+      poolVersion: string | undefined
     }
   /** A real token, but CCIP has no pool for it on this chain. */
   | { kind: 'no_pool'; token: Address }
-  | { kind: 'unknown'; reason: 'unreadable' | 'chain_unsupported' | 'pool_token_mismatch' | 'pool_wrong_router' }
+  | { kind: 'unknown'; reason: 'unreadable' | 'pool_chains_unreadable' | 'chain_unsupported' | 'pool_token_mismatch' | 'pool_wrong_router' }
 
 export async function discoverCcipToken(client: ReadClient, chain: ChainKey, tokenAddress: string): Promise<CcipDiscovery> {
   try {
@@ -66,23 +93,65 @@ async function discoverUnguarded(client: ReadClient, chain: ChainKey, tokenAddre
   if (pool === undefined) return { kind: 'unknown', reason: 'unreadable' }
   if (isAddressEqual(pool, ZERO)) return { kind: 'no_pool', token }
 
-  const [poolToken, poolRouter, decimals, supported] = await Promise.all([
+  const [poolToken, routerV1, decimalsOfPool, version] = await Promise.all([
     read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getToken' })),
     read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getRouter' })),
     read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getTokenDecimals' })),
-    read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getSupportedChains' })),
+    read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'typeAndVersion' })),
   ])
+  // A method a pool's version does not have is a different question, never a verdict:
+  //   2.x pools keep the router in getDynamicConfig() and refuse getRouter();
+  //   1.5.0 pools (and the *AndProxy 1.5.0 wrappers) have no getTokenDecimals() — they do not
+  //   convert decimals, so the token's own decimals() are the pool's.
+  const poolRouter = routerV1 ?? (await read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getDynamicConfig' })))?.[0]
+  const decimals = decimalsOfPool ?? (await read(() => client.readContract({ address: token, abi: erc20DecimalsAbi, functionName: 'decimals' })))
 
   if (!poolToken || !isAddressEqual(poolToken, token)) return { kind: 'unknown', reason: 'pool_token_mismatch' }
   if (!poolRouter || !isAddressEqual(poolRouter, getAddress(cfg.router))) return { kind: 'unknown', reason: 'pool_wrong_router' }
-  if (decimals === undefined || supported === undefined) return { kind: 'unknown', reason: 'unreadable' }
+  if (decimals === undefined) return { kind: 'unknown', reason: 'unreadable' }
+
+  const supported = await supportedChains(client, pool, chain)
+  if (supported === undefined) return { kind: 'unknown', reason: 'pool_chains_unreadable' }
 
   const routes: CcipRoute[] = []
+  const otherDestinations: CcipOtherDestination[] = []
+  const own = cfg.selector
   for (const selector of supported) {
+    if (selector === own) continue
     const key = chainOfCcipSelector(selector)
-    if (key && key !== chain) routes.push({ chain: key, selector })
+    if (key) routes.push({ chain: key, selector })
+    else otherDestinations.push({ selector, name: SELECTOR_NAMES[selector.toString()] })
   }
-  return { kind: 'token', token, pool, decimals: Number(decimals), routes }
+  return {
+    kind: 'token',
+    token,
+    pool,
+    decimals: Number(decimals),
+    routes,
+    otherDestinations,
+    poolVersion: version === undefined ? undefined : sanitizeText(version, 64),
+  }
+}
+
+/**
+ * The chains a pool supports, by whichever method its version has.
+ *
+ * Every pool the 1.5+ TokenAdminRegistry hands out answers `getSupportedChains()`: BurnMint/
+ * LockRelease/BurnFromMint/BurnWithFromMint TokenPool 1.5.x and 1.6.x, and the *AndProxy 1.5.0
+ * wrappers around legacy 1.0/1.2/1.4 pools. A pool that refuses it (a future or custom version)
+ * is asked `isSupportedChain(selector)` — present since 1.4 — for every selector the chain-selectors
+ * registry and our config know, so a version change degrades to a slower read, not to "no
+ * destinations". `undefined` only when neither method answers: the screen then says the pool's
+ * networks could not be read, never that there are none.
+ */
+async function supportedChains(client: ReadClient, pool: Address, chain: ChainKey): Promise<readonly bigint[] | undefined> {
+  const listed = await read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'getSupportedChains' }))
+  if (listed !== undefined) return listed
+  const own = ccipConfig(chain)?.selector
+  const candidates = [...new Set([...Object.keys(SELECTOR_NAMES), ...Object.values(CCIP_CHAINS).map((c) => c!.selector.toString())])].map((x) => BigInt(x)).filter((x) => x !== own)
+  const answers = await Promise.all(candidates.map((selector) => read(() => client.readContract({ address: pool, abi: tokenPoolAbi, functionName: 'isSupportedChain', args: [selector] }))))
+  if (answers.every((a) => a === undefined)) return undefined
+  return candidates.filter((_, i) => answers[i] === true)
 }
 
 export type RemoteSide = {
@@ -156,23 +225,36 @@ function sameDiscovery(a: CcipDiscovery, b: CcipDiscovery): boolean {
   return true
 }
 
+/** A provider that could not answer: an outage, not an opinion about the token. */
+const outage = (d: CcipDiscovery | undefined) => !d || (d.kind === 'unknown' && (d.reason === 'unreadable' || d.reason === 'pool_chains_unreadable'))
+
+/**
+ * Asks the primary and every independent operator. An operator that could not read is an outage,
+ * never a verdict: if the primary was the one that could not, the first operator that did answer
+ * gives the answer (and the cross-check then needs yet another one to agree). Only when every
+ * operator failed is the result `unreadable` — and the screen offers to try again.
+ */
 export async function discoverCcipTokenQuorum(
   primary: ReadClient,
-  secondary: ReadClient | undefined,
+  secondaries: ReadClient | readonly ReadClient[] | undefined,
   chain: ChainKey,
   tokenAddress: string,
 ): Promise<CcipDiscoveryQuorum> {
-  const [first, other] = await Promise.all([
-    discoverCcipToken(primary, chain, tokenAddress),
-    secondary ? discoverCcipToken(secondary, chain, tokenAddress).catch((): undefined => undefined) : Promise.resolve(undefined),
-  ])
-
-  if (!other) return { ...first, crossChecked: false }
-  // What an unreachable provider produces. An outage, not a second opinion.
-  if (other.kind === 'unknown' && other.reason === 'unreadable') return { ...first, crossChecked: false }
-  if (!sameDiscovery(first, other)) {
-    const reason = other.kind === 'unknown' ? other.reason : 'unreadable'
-    return { kind: 'unknown', reason, crossChecked: true }
+  const others = secondaries === undefined ? [] : Array.isArray(secondaries) ? [...secondaries] : [secondaries as ReadClient]
+  const ask = (c: ReadClient) => discoverCcipToken(c, chain, tokenAddress).catch((): undefined => undefined)
+  const answers = await Promise.all([ask(primary), ...others.map(ask)])
+  const usable = answers.filter((a): a is CcipDiscovery => !outage(a))
+  if (usable.length === 0) {
+    const first = answers[0]
+    return { ...(first ?? { kind: 'unknown', reason: 'unreadable' }), crossChecked: false }
   }
-  return { ...first, crossChecked: true }
+  const [answer, ...rest] = usable
+  if (rest.length === 0) return { ...answer!, crossChecked: false }
+  for (const other of rest) {
+    if (!sameDiscovery(answer!, other)) {
+      const reason = other.kind === 'unknown' ? other.reason : 'unreadable'
+      return { kind: 'unknown', reason, crossChecked: true }
+    }
+  }
+  return { ...answer!, crossChecked: true }
 }

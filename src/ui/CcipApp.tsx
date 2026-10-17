@@ -34,7 +34,8 @@ import { Address as AddressView } from './components/Address'
 import { ProtocolBadge } from './components/History'
 import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
-import { Alert, BoxLabel, Button, ChainDot, Row, Shell, Spinner } from './components/ui'
+import { Alert, BoxLabel, Button, ChainDot, ReadFailed, Row, Shell, Spinner } from './components/ui'
+import { displaySelectorName } from '@/protocols/ccip/discover'
 import { RiskNotAssessed } from './components/RiskPanel'
 import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
 import { AmountPanel, FromToRow, RecipientPanel } from './components/FromTo'
@@ -198,6 +199,11 @@ export function CcipApp({
     () => (discovery.data?.kind === 'token' ? discovery.data.routes.map((r) => r.chain) : []),
     [discovery.data],
   )
+  const otherDestinations = discovery.data?.kind === 'token' ? discovery.data.otherDestinations : []
+  const poolVersion = discovery.data?.kind === 'token' ? discovery.data.poolVersion : undefined
+  // Every operator failed, or the query itself threw: a failed read, offered again — never "nothing".
+  const discoveryReadFailed =
+    !!target && (discovery.isError || (discovery.data?.kind === 'unknown' && (discovery.data.reason === 'unreadable' || discovery.data.reason === 'pool_chains_unreadable')))
 
   let amountError = ''
   let amount: bigint | undefined
@@ -521,10 +527,13 @@ export function CcipApp({
           ) : null}
         </div>
         {discovery.data?.kind === 'no_pool' ? <Alert kind="error">{d.ccip.noPool}</Alert> : null}
-        {discovery.data?.kind === 'unknown' ? <Alert kind="error">{d.ccipReject[discovery.data.reason]}</Alert> : null}
+        {/* A read that did not come back is never "no destinations": it says so and offers to ask again. */}
+        {discoveryReadFailed ? <ReadFailed message={d.ccip.readFailed} retryLabel={d.ccip.retry} busy={discovery.isFetching} onRetry={() => void discovery.refetch()} /> : null}
+        {discovery.data?.kind === 'unknown' && !discoveryReadFailed ? <Alert kind="error">{d.ccipReject[discovery.data.reason]}</Alert> : null}
         {token && pool ? (
           <p className="px-1 text-xs text-muted">
             {d.ccip.foundPool} <AddressView value={pool} href={src.explorerAddrUrl + pool} short />
+            {poolVersion ? <span className="ml-1">· {fmt(d.ccip.poolVersion, { version: poolVersion })}</span> : null}
           </p>
         ) : null}
         {/* The pool was found, but only one provider answered — say so rather than imply two agreed. */}
@@ -546,7 +555,15 @@ export function CcipApp({
           toDisabled={destinations.length === 0}
           reverse={{ enabled: reverseEnabled, title: reverseTitle, onClick: onReverse }}
         />
-        {token && destinations.length === 0 ? <p className="px-1 text-xs text-muted">{d.ccip.noDestinations}</p> : null}
+        {token && otherDestinations.length > 0 ? (
+          <p className="px-1 text-xs text-muted">
+            {fmt(d.ccip.otherDestinations, {
+              chains: otherDestinations.map((o) => (o.name ? displaySelectorName(o.name) : fmt(d.ccip.unknownSelector, { selector: o.selector.toString() }))).join(', '),
+              them: otherDestinations.length === 1 ? d.ccip.otherDestinationsOne : d.ccip.otherDestinationsMany,
+            })}
+          </p>
+        ) : null}
+        {token && destinations.length === 0 && otherDestinations.length === 0 ? <p className="px-1 text-xs text-muted">{d.ccip.noDestinations}</p> : null}
 
         <AmountPanel
           value={amountInput}

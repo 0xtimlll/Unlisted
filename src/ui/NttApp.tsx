@@ -33,7 +33,7 @@ import { Address as AddressView } from './components/Address'
 import { ProtocolBadge } from './components/History'
 import { Panel, PanelFold, PanelSection, TwoColumn } from './components/Layout'
 import { VerdictCard } from './components/Verdict'
-import { Alert, BoxLabel, Button, ChainDot, Row, Shell, Spinner } from './components/ui'
+import { Alert, BoxLabel, Button, ChainDot, ReadFailed, Row, Shell, Spinner } from './components/ui'
 import { RiskNotAssessed } from './components/RiskPanel'
 import { IndicatorReasons, RouteIndicator } from './components/RouteIndicator'
 import { AmountPanel, FromToRow, RecipientPanel } from './components/FromTo'
@@ -528,7 +528,11 @@ export function NttApp({
         {tokenList.data?.unavailable ? <Alert kind="warn">{d.ntt.listUnavailable}</Alert> : null}
         {/* The index matters only when the token itself led nowhere; said then, not on every search. */}
         {managerIndex.data?.unavailable && discovery.data && discovery.data.kind !== 'manager' ? <Alert kind="warn">{d.ntt.indexUnavailable}</Alert> : null}
-        {discovery.data?.kind === 'unknown' ? <Alert kind="error">{discovery.data.reason === 'not_listed' ? d.ntt.notListed : d.ntt.unreadable}</Alert> : null}
+        {/* A read that did not come back is offered again; it is never "no manager" or "no peers". */}
+        {target && (discovery.isError || (discovery.data?.kind === 'unknown' && discovery.data.reason === 'unreadable')) ? (
+          <ReadFailed message={d.ui.readFailedManager} retryLabel={d.ui.retry} busy={discovery.isFetching} onRetry={() => void discovery.refetch()} />
+        ) : null}
+        {discovery.data?.kind === 'unknown' && discovery.data.reason === 'not_listed' ? <Alert kind="error">{d.ntt.notListed}</Alert> : null}
         {discovery.data?.kind === 'token_without_minter' ? <Alert kind="warn">{dstChain ? d.ntt.noMinter : d.ntt.pickDestinationFirst}</Alert> : null}
         {discovery.data?.kind === 'manager' ? (
           <p className="px-1 text-xs text-muted">

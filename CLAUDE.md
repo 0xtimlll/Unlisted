@@ -413,6 +413,21 @@ Solana-RPC обязан быть у известного провайдера (`
 нашедшей сетью, поиск адаптера ждёт не дольше `ADAPTER_SEARCH_BUDGET_MS` (не ответившие сети
 записываются как «не удалось спросить»).
 
+**CCIP: пулы по поколениям и «не прочитано» ≠ «нет назначений» (2026-10-17).** Разбор elizaOS
+(`0xea17…2478`): пулы на BNB Chain, Ethereum и Base (BurnMintTokenPool 1.6.1) поддерживают только
+Solana — так и в CCIP Directory (lanes), прямого BNB → Ethereum/Base нет; экран теперь говорит «пул
+поддерживает Solana, но здесь недоступно» (`otherDestinations`, имена селекторов —
+`ccip/selectorNames.json`, генерируется `update-networks.ts --ccip-names`, только для показа).
+Сеть пула — по версии: `getSupportedChains()`, а если пул его не знает — `isSupportedChain(selector)`
+по всем известным селекторам; 1.5.0 (`*AndProxy`) не имеет `getTokenDecimals()` — берутся
+`decimals()` токена; 2.x не имеет `getRouter()` — роутер это `getDynamicConfig()[0]`, лимиты —
+`getCurrentRateLimiterState(sel, false)` (сигнатуры — chainlink-ccip main, `pools/TokenPool.sol`).
+**Отсутствие метода у версии — не вердикт.** Обнаружение спрашивает все независимые операторы
+(`independentSecondaries`): не ответил первый — отвечает следующий; не ответил никто — `unreadable`
+/ `pool_chains_unreadable`, и экран показывает `ReadFailed` («не удалось прочитать» + «Try again»),
+никогда «нет назначений». Тот же `ReadFailed` — в NTT и Hyperlane, когда запрос упал. У BNB Chain
+четыре оператора RPC (добавлены thirdweb и 1rpc.io).
+
 **Окно выбора сети (2026-10-15).** Порядок по умолчанию — по TVL из конфига; переключатель
 «Popular / Recent first» (`ui/networkOrder.ts`, чистые функции с тестами) хранится вместе с
 настройками (`stored.networkOrder`, `stored.recentChains` — до пяти последних выборов) через

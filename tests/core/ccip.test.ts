@@ -8,16 +8,10 @@ import { describe, expect, it } from 'vitest'
 import { encodeAbiParameters, encodeFunctionData, getAddress, type Abi, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
 import { ccipRouterAbi, EVM_EXTRA_ARGS_V2_TAG } from '@/protocols/ccip/abi'
-import { discoverCcipTokenQuorum } from '@/protocols/ccip/discover'
+import { discoverCcipTokenQuorum, displaySelectorName } from '@/protocols/ccip/discover'
 import { CCIP_CHAINS, ccipConfig, ccipSelector, chainOfCcipSelector, isCcipRouter } from '@/protocols/ccip/chains'
 import { ccipApprovePlan, runCcipGuards, type CcipGuardInput } from '@/protocols/ccip/guards'
-import {
-  assembleCcipSendArgs,
-  buildCcipMessage,
-  encodeExtraArgsV2,
-  scaleAmount,
-  type CcipPlan,
-} from '@/protocols/ccip/plan'
+import { assembleCcipSendArgs, buildCcipMessage, encodeExtraArgsV2, scaleAmount, type CcipPlan, readInboundLimit, readOutboundLimit } from '@/protocols/ccip/plan'
 import { ccipSelfCheck, encodeCcipSend } from '@/protocols/ccip/preview'
 import { ccipMessageUrl } from '@/protocols/ccip/track'
 
@@ -255,6 +249,7 @@ describe('the pool, asked twice (RPC quorum)', () => {
     [`${POOL.toLowerCase()}.getRouter`]: ROUTER,
     [`${POOL.toLowerCase()}.getTokenDecimals`]: 18,
     [`${POOL.toLowerCase()}.getSupportedChains`]: [BASE.selector],
+    [`${POOL.toLowerCase()}.typeAndVersion`]: 'BurnMintTokenPool 1.6.1',
     ...over,
   })
 
@@ -290,6 +285,87 @@ describe('the pool, asked twice (RPC quorum)', () => {
     expect(r).toMatchObject({ kind: 'unknown', reason: 'unreadable' })
   })
 
+  // ---- elizaOS on BNB Chain (2026-10-17): the pool's lanes are only to Solana ----
+
+  const SOLANA_SELECTOR = 124615329519749607n
+
+  it('a pool that supports only chains we do not serve over CCIP names them, instead of "nothing"', async () => {
+    const r = await quorum(answers({ [`${POOL.toLowerCase()}.getSupportedChains`]: [SOLANA_SELECTOR] }))
+    expect(r.kind).toBe('token')
+    if (r.kind !== 'token') return
+    expect(r.routes).toEqual([])
+    expect(r.otherDestinations).toEqual([{ selector: SOLANA_SELECTOR, name: 'solana-mainnet' }])
+    expect(displaySelectorName('solana-mainnet')).toBe('Solana')
+    expect(r.poolVersion).toBe('BurnMintTokenPool 1.6.1')
+  })
+
+  it('a provider failing on getSupportedChains is a failed read — never an empty destination list', async () => {
+    const r = await quorum(answers({ [`${POOL.toLowerCase()}.getSupportedChains`]: new Error('HTTP request failed: 502') }))
+    expect(r).toMatchObject({ kind: 'unknown', reason: 'unreadable' })
+    expect(r.kind === 'token' ? r.routes : 'no routes claimed').toBe('no routes claimed')
+  })
+
+  it('when the primary cannot read, the next operator answers (and nothing is cross-checked)', async () => {
+    const down = answers({ [`${POOL.toLowerCase()}.getSupportedChains`]: new Error('fetch failed') })
+    const r = await discoverCcipTokenQuorum(mockClient(down), [mockClient({}), mockClient(answers())], 'ethereum', TOKEN)
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    if (r.kind === 'token') expect(r.routes.map((x) => x.chain)).toEqual(['base'])
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('keeps asking operators until a second one agrees: a down first secondary does not cost the cross-check', async () => {
+    const r = await discoverCcipTokenQuorum(mockClient(answers()), [mockClient({}), mockClient(answers())], 'ethereum', TOKEN)
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    expect(r.crossChecked).toBe(true)
+  })
+
+  it('a pool version without getSupportedChains is asked isSupportedChain for every known selector', async () => {
+    const isSupported = new Map([[BASE.selector, true]])
+    const client = {
+      readContract: async ({ address, functionName, args }: { address: string; functionName: string; args?: readonly unknown[] }) => {
+        const key = `${address.toLowerCase()}.${functionName}`
+        if (functionName === 'getSupportedChains') throw new Error('execution reverted')
+        if (functionName === 'isSupportedChain') return isSupported.get(args![0] as bigint) ?? false
+        const a = answers()
+        if (!(key in a)) throw new Error(`no answer for ${key}`)
+        return a[key]
+      },
+    } as unknown as ReadClient
+    const r = await discoverCcipTokenQuorum(client, undefined, 'ethereum', TOKEN)
+    expect(r.kind).toBe('token')
+    if (r.kind === 'token') expect(r.routes.map((x) => x.chain)).toEqual(['base'])
+  })
+
+  it('a pool that answers neither method is "could not read its networks", not "no destinations"', async () => {
+    const refuses = answers({
+      [`${POOL.toLowerCase()}.getSupportedChains`]: new Error('execution reverted'),
+    })
+    const client = {
+      readContract: async (q: { address: string; functionName: string }) => {
+        if (q.functionName === 'isSupportedChain') throw new Error('execution reverted')
+        const key = `${q.address.toLowerCase()}.${q.functionName}`
+        const v = refuses[key]
+        if (v instanceof Error) throw v
+        if (v === undefined) throw new Error(`no answer for ${key}`)
+        return v
+      },
+    } as unknown as ReadClient
+    const r = await discoverCcipTokenQuorum(client, undefined, 'ethereum', TOKEN)
+    expect(r).toMatchObject({ kind: 'unknown', reason: 'pool_chains_unreadable' })
+  })
+
+  it('a 2.x pool without getRouter is checked by getDynamicConfig().router — not called "wrong router"', async () => {
+    const r = await quorum(answers({ [`${POOL.toLowerCase()}.getRouter`]: new Error('execution reverted'), [`${POOL.toLowerCase()}.getDynamicConfig`]: [ROUTER, OTHER, OTHER] }))
+    expect(r).toMatchObject({ kind: 'token', pool: POOL })
+    const wrong = await quorum(answers({ [`${POOL.toLowerCase()}.getRouter`]: new Error('execution reverted'), [`${POOL.toLowerCase()}.getDynamicConfig`]: [OTHER, OTHER, OTHER] }))
+    expect(wrong).toMatchObject({ kind: 'unknown', reason: 'pool_wrong_router' })
+  })
+
+  it('a 1.5.0 pool without getTokenDecimals takes the token’s own decimals — not "unreadable"', async () => {
+    const r = await quorum(answers({ [`${POOL.toLowerCase()}.getTokenDecimals`]: new Error('execution reverted'), [`${TOKEN.toLowerCase()}.decimals`]: 6 }))
+    expect(r).toMatchObject({ kind: 'token', decimals: 6 })
+  })
+
   it('blocks when the second provider names a different pool', async () => {
     const other = answers({
       [`${getAddress(ETH.tokenAdminRegistry).toLowerCase()}.getPool`]: DST_POOL,
@@ -297,6 +373,7 @@ describe('the pool, asked twice (RPC quorum)', () => {
       [`${DST_POOL.toLowerCase()}.getRouter`]: ROUTER,
       [`${DST_POOL.toLowerCase()}.getTokenDecimals`]: 18,
       [`${DST_POOL.toLowerCase()}.getSupportedChains`]: [BASE.selector],
+      [`${DST_POOL.toLowerCase()}.typeAndVersion`]: 'BurnMintTokenPool 1.6.1',
     })
     const r = await quorum(answers(), other)
     expect(r.kind).toBe('unknown')
@@ -382,5 +459,33 @@ describe('CCIP tracking', () => {
     const id = `0x${'cd'.repeat(32)}`
     expect(ccipMessageUrl(id)).toBe(`https://ccip.chain.link/msg/${id}`)
     expect(() => ccipMessageUrl('nope')).toThrow()
+  })
+})
+
+describe('rate limits across pool generations', () => {
+  const bucket = (tokens: bigint) => ({ tokens, lastUpdated: 0, isEnabled: true, capacity: 1000n, rate: 1n })
+  const client = (answers: Record<string, unknown>) =>
+    ({
+      readContract: async ({ functionName }: { functionName: string }) => {
+        const v = answers[functionName]
+        if (v === undefined || v instanceof Error) throw v ?? new Error('execution reverted')
+        return v
+      },
+    }) as unknown as ReadClient
+
+  it('1.x pools answer getCurrentOutbound/InboundRateLimiterState', async () => {
+    const c = client({ getCurrentOutboundRateLimiterState: bucket(5n), getCurrentInboundRateLimiterState: bucket(7n) })
+    expect((await readOutboundLimit(c, POOL, 1n))?.tokens).toBe(5n)
+    expect((await readInboundLimit(c, POOL, 1n))?.tokens).toBe(7n)
+  })
+
+  it('2.x pools answer both buckets from getCurrentRateLimiterState(selector, false)', async () => {
+    const c = client({ getCurrentRateLimiterState: [bucket(11n), bucket(13n)] })
+    expect((await readOutboundLimit(c, POOL, 1n))?.tokens).toBe(11n)
+    expect((await readInboundLimit(c, POOL, 1n))?.tokens).toBe(13n)
+  })
+
+  it('a pool with neither is "limit unknown", as before', async () => {
+    expect(await readOutboundLimit(client({}), POOL, 1n)).toBeUndefined()
   })
 })

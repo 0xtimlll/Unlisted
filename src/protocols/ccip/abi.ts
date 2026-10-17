@@ -98,12 +98,18 @@ export const tokenPoolAbi = parseAbi([
   'function getToken() view returns (address)',
   'function getTokenDecimals() view returns (uint8)',
   'function getRouter() view returns (address)',
+  'function typeAndVersion() view returns (string)',
   'function isSupportedChain(uint64 remoteChainSelector) view returns (bool)',
   'function getSupportedChains() view returns (uint64[])',
   'function getRemoteToken(uint64 remoteChainSelector) view returns (bytes)',
   'function getRemotePools(uint64 remoteChainSelector) view returns (bytes[])',
   'function getCurrentOutboundRateLimiterState(uint64 remoteChainSelector) view returns (TokenBucket)',
   'function getCurrentInboundRateLimiterState(uint64 remoteChainSelector) view returns (TokenBucket)',
+  // CCIP 2.x pools (chainlink-ccip main, chains/evm/contracts/pools/TokenPool.sol): the router is the
+  // first field of the dynamic config, and both buckets come from one call. LombardTokenPool 2.1.0
+  // on BNB Chain answers these and refuses getRouter / getCurrent*RateLimiterState.
+  'function getDynamicConfig() view returns (address router, address rateLimitAdmin, address feeAdmin)',
+  'function getCurrentRateLimiterState(uint64 remoteChainSelector, bool fastFinality) view returns (TokenBucket outboundRateLimiterState, TokenBucket inboundRateLimiterState)',
 ])
 
 /**

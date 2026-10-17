@@ -5,7 +5,7 @@ import type { Address } from 'viem'
 import { erc20Abi } from '@/core/abi'
 import { evmByKey, type ChainKey } from '@/core/chains'
 import { makeReadClient } from '@/core/client'
-import { clientPair, independentSecondary } from '@/core/quorum'
+import { clientPair, independentSecondaries } from '@/core/quorum'
 import { sanitizeLabel } from '@/core/probe'
 import type { Recipient } from '@/core/recipient'
 import { ccipConfig } from '@/protocols/ccip/chains'
@@ -15,15 +15,14 @@ import { previewCcipSend, type CcipPreview } from '@/protocols/ccip/preview'
 
 const clientFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) => makeReadClient(evmByKey(chain), customRpc[chain])
 
-/** A second, unrelated provider for this chain, or undefined when the registry has none to spare. */
-const secondFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) =>
-  independentSecondary(clientPair(evmByKey(chain), customRpc[chain]))
+/** Every other operator for this chain: pool discovery keeps asking until one of them answers. */
+const othersFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) => independentSecondaries(clientPair(evmByKey(chain), customRpc[chain]))
 
 /** The token's pool, from the TokenAdminRegistry in our config, and the chains it can reach. */
 export function useCcipToken(chain: ChainKey, token: string | null, customRpc: Partial<Record<ChainKey, string>>) {
   return useQuery({
     queryKey: ['ccipToken', chain, token?.toLowerCase()],
-    queryFn: (): Promise<CcipDiscoveryQuorum> => discoverCcipTokenQuorum(clientFor(chain, customRpc), secondFor(chain, customRpc), chain, token!),
+    queryFn: (): Promise<CcipDiscoveryQuorum> => discoverCcipTokenQuorum(clientFor(chain, customRpc), othersFor(chain, customRpc), chain, token!),
     enabled: !!token,
     staleTime: 60_000,
     retry: false,

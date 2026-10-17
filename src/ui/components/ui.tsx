@@ -150,6 +150,22 @@ export function Alert({ kind, children }: { kind: 'error' | 'warn' | 'info' | 'o
   return <div className={`rounded-xl bg-surface-2 px-3 py-2 text-sm ${c}`}>{children}</div>
 }
 
+/**
+ * A read that did not come back: says so, and offers to ask again. Never a verdict about the
+ * contract — "could not read" and "there is nothing" are different answers, and only this one
+ * comes with a button. `busy` while the retry is in flight.
+ */
+export function ReadFailed({ message, retryLabel, busy, onRetry }: { message: ReactNode; retryLabel: string; busy: boolean; onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2 text-sm text-warn" role="alert">
+      <span>{message}</span>
+      <Button variant="pill" className="h-7 shrink-0 px-3" onClick={onRetry} disabled={busy}>
+        {busy ? <Spinner /> : retryLabel}
+      </Button>
+    </div>
+  )
+}
+
 export function Spinner() {
   return <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent align-middle" aria-hidden />
 }

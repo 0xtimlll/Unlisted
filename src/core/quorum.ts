@@ -64,6 +64,21 @@ export function independentSecondary(pair: Pair): ReadClient | undefined {
   return pair.secondaries.find((s) => s.provider !== pair.primaryProvider)?.client
 }
 
+/**
+ * Every secondary run by a different operator than the primary, one per operator, in registry
+ * order — for checks that keep asking when one operator does not answer (CCIP's pool discovery).
+ */
+export function independentSecondaries(pair: Pair): ReadClient[] {
+  const seen = new Set([pair.primaryProvider])
+  const out: ReadClient[] = []
+  for (const s of pair.secondaries) {
+    if (seen.has(s.provider)) continue
+    seen.add(s.provider)
+    out.push(s.client)
+  }
+  return out
+}
+
 export type Quorum<T> = T & { crossChecked: boolean }
 
 function sameRoutes(a: OftInfo['routes'], b: OftInfo['routes']): boolean {

@@ -238,6 +238,8 @@ for (const file of walk(SRC)) {
       'getToken', 'getTokenDecimals', 'getRouter', 'isSupportedChain', 'getSupportedChains',
       'getRemoteToken', 'getRemotePools',
       'getCurrentOutboundRateLimiterState', 'getCurrentInboundRateLimiterState',
+      // CCIP 2.x pools (chainlink-ccip main, pools/TokenPool.sol): both view.
+      'getDynamicConfig', 'getCurrentRateLimiterState',
       // LayerZero v1 (§3). All view — see src/protocols/lz-v1/abi.ts for the source of each.
       'lzEndpoint', 'trustedRemoteLookup', 'getTrustedRemoteAddress', 'minDstGasLookup',
       'payloadSizeLimitLookup', 'useCustomAdapterParams', 'estimateSendFee', 'quoteOFTFee',
