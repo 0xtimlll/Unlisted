@@ -207,9 +207,9 @@ export async function readRemoteSide(
  * the two verdicts that stop a token being bridged at all, and a single provider that answers
  * `getPool` with an address of its choosing decides both of them on its own.
  *
- * Same rules as everywhere else: the primary's answer is the answer, an unreachable second
- * provider (`unreadable`) only drops the flag, and a second provider that answers differently
- * blocks.
+ * Rules: an operator that could not read is an outage, never an opinion; the first operator that
+ * did answer gives the answer, and it counts as cross-checked only when another operator agrees;
+ * any operator that answers differently blocks. One answer alone is shown as "not cross-checked".
  */
 export type CcipDiscoveryQuorum = CcipDiscovery & { crossChecked: boolean }
 
