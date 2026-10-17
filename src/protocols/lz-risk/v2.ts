@@ -16,7 +16,7 @@
  *     `_origin.sender` to be the peer. The message is the 40 bytes OFTMsgCodec.encode produces:
  *     `abi.encodePacked(sendTo, amountSD)`.
  */
-import { encodeFunctionData, encodePacked, keccak256, parseAbi, type Address, type Hex } from 'viem'
+import { decodeAbiParameters, encodeFunctionData, encodePacked, keccak256, parseAbi, toEventSelector, type Address, type Hex } from 'viem'
 import { erc20Abi, oftAbi } from '../../core/abi'
 import { byEid, evmByKey, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
@@ -210,35 +210,46 @@ async function checkConfig(c: V2RiskContext): Promise<Outcome> {
   )
   if (!send.ok) return { state: { status: 'unchecked', reason: send.reason } }
 
-  const srcDvns = [...send.value.requiredDVNs, ...send.value.optionalDVNs]
-  const verdict = judgeDvns(c.srcChain, srcDvns)
-  if (verdict.dead.length > 0) {
-    const names = verdict.dead.map((d) => `${d.entry.name} (${d.address})`).join(', ')
-    return { state: { status: 'fail', reason: `deprecated DVN on the send side: ${names}` }, extra: { deprecatedVerifier: true, deadVerifier: verdict.dead.some((d) => d.entry.id === DEAD_DVN_ID) } }
-  }
+  const verdict = judgeDvns(c.srcChain, [...send.value.requiredDVNs, ...send.value.optionalDVNs])
+  const sendDeprecated = (): Outcome => ({
+    state: { status: 'fail', reason: `deprecated DVN on the send side: ${verdict.dead.map((d) => `${d.entry.name} (${d.address})`).join(', ')}` },
+    extra: { deprecatedVerifier: true, deadVerifier: verdict.dead.some((d) => d.entry.id === DEAD_DVN_ID) },
+  })
 
-  // The receive side, read on the destination's own chain from the registry's endpoint.
+  // The receive side, read on the destination's own chain from the registry's endpoint — also when
+  // the send side already failed: a dead DVN on the receive side is red whatever the history says,
+  // and it can only be seen by reading it.
   const recvLib = await attempt(
     c.dstClient.readContract({ address: dstEndpoint, abi: v2Abi, functionName: 'getReceiveLibrary', args: [c.dstOft, c.plan.srcEid] }),
     undefined,
     'receive library',
   )
-  if (!recvLib.ok) {
-    return { state: { status: 'unchecked', reason: recvLib.reason }, extra: { unknownDvnSet: verdict.unknown.length > 0 } }
-  }
-  const recv = await attempt(
-    c.dstClient.readContract({ address: recvLib.value[0], abi: v2Abi, functionName: 'getUlnConfig', args: [c.dstOft, c.plan.srcEid] }),
-    undefined,
-    'receive ULN config',
-  )
+  const recv = recvLib.ok
+    ? await attempt(
+        c.dstClient.readContract({ address: recvLib.value[0], abi: v2Abi, functionName: 'getUlnConfig', args: [c.dstOft, c.plan.srcEid] }),
+        undefined,
+        'receive ULN config',
+      )
+    : recvLib
   if (!recv.ok) {
+    // Unread receive side: a send-side deprecated DVN is still a fact, but without the receive side
+    // nothing may vouch for the route, so it is never treated as contradicted by deliveries.
+    if (verdict.dead.length > 0) {
+      const o = sendDeprecated()
+      return { ...o, extra: { ...o.extra, deadVerifier: true } }
+    }
     return { state: { status: 'unchecked', reason: recv.reason }, extra: { unknownDvnSet: verdict.unknown.length > 0 } }
   }
 
   const dstVerdict = judgeDvns(c.dstChain, [...recv.value.requiredDVNs, ...recv.value.optionalDVNs])
+  const deadAnywhere = [...verdict.dead, ...dstVerdict.dead].some((d) => d.entry.id === DEAD_DVN_ID)
+  if (verdict.dead.length > 0) {
+    const o = sendDeprecated()
+    return { ...o, extra: { ...o.extra, deadVerifier: deadAnywhere } }
+  }
   if (dstVerdict.dead.length > 0) {
     const names = dstVerdict.dead.map((d) => `${d.entry.name} (${d.address})`).join(', ')
-    return { state: { status: 'fail', reason: `deprecated DVN on the receive side: ${names}` }, extra: { deprecatedVerifier: true, deadVerifier: dstVerdict.dead.some((d) => d.entry.id === DEAD_DVN_ID) } }
+    return { state: { status: 'fail', reason: `deprecated DVN on the receive side: ${names}` }, extra: { deprecatedVerifier: true, deadVerifier: deadAnywhere } }
   }
 
   // A send set and a receive set that do not match mean a message signed by the senders' DVNs is
@@ -310,12 +321,25 @@ export function compareUlnShape(a: Uln, b: Uln, srcChain: ChainKey, dstChain: Ch
   if (!sendReq || !sendOpt || !recvReq || !recvOpt) {
     return { same: 'unknown', why: 'a DVN on one side is not in LayerZero’s published list, so the two sides cannot be matched by operator' }
   }
+  // ReceiveUln302 counts verifications per DVN ADDRESS. If one operator appears under two different
+  // addresses on the receive side, a single send-side DVN of that operator cannot satisfy both, and
+  // which one it is cannot be told from ids — so that is "cannot compare", never "compatible".
+  const recvAll = [...b.requiredDVNs, ...b.optionalDVNs].map((x) => x.toLowerCase())
+  const recvIds = [...recvReq, ...recvOpt]
+  const seenId = new Map<string, string>()
+  for (const [i, id] of recvIds.entries()) {
+    const prior = seenId.get(id)
+    if (prior !== undefined && prior !== recvAll[i]) {
+      return { same: 'unknown', why: `the receive side lists two different ${id} DVN contracts, so it cannot be matched to the send side by operator` }
+    }
+    seenId.set(id, recvAll[i]!)
+  }
   const verifiers = new Set([...sendReq, ...sendOpt])
   const missing = recvReq.filter((id) => !verifiers.has(id))
   if (missing.length > 0) {
     return { same: false, why: `the receive side requires ${missing.join(', ')}, which the send side never asks to verify` }
   }
-  const available = recvOpt.filter((id) => verifiers.has(id)).length
+  const available = new Set(recvOpt.filter((id) => verifiers.has(id))).size
   if (available < b.optionalDVNThreshold) {
     return {
       same: false,
@@ -480,12 +504,46 @@ async function checkHistory(c: V2RiskContext): Promise<Outcome> {
       extra: { history: { kind: 'none_in_window', days: days.value } },
     }
   }
+  // The newest OFTReceived is the contract's own word, and its date is what "recent" rests on. It
+  // counts only when the same transaction carries the REGISTRY endpoint's PacketDelivered for
+  // exactly this (srcEid, sender) → receiver: an event the contract under test cannot write.
+  const confirmed = await endpointConfirms(c, (scan.value.log as { transactionHash?: Hex }).transactionHash)
+  if (!confirmed.ok) {
+    const reason = `the newest delivery the contract logs is not confirmed by the endpoint (${confirmed.reason})`
+    return { state: { status: 'unchecked', reason }, extra: { history: { kind: 'unknown', reason } } }
+  }
   const age = await daysSinceBlock(c.dstClient, scan.value.blockNumber)
   if (!age.ok) return { state: { status: 'unchecked', reason: age.reason }, extra: { history: { kind: 'unknown', reason: age.reason } } }
   return {
     state: { status: 'pass', note: `last delivered ${age.value < 1 ? 'today' : `${Math.floor(age.value)} day(s) ago`}` },
     extra: { history: { kind: 'delivered', days: age.value } },
   }
+}
+
+/**
+ * EndpointV2's PacketDelivered (ILayerZeroEndpointV2: `event PacketDelivered(Origin origin, address
+ * receiver)`, Origin = (uint32 srcEid, bytes32 sender, uint64 nonce)) — checked on a live BEM
+ * delivery on X Layer (tx 0x9d1e47…8e8b, nonce 1496) before it was written here.
+ */
+const PACKET_DELIVERED = parseAbi(['event PacketDelivered((uint32 srcEid, bytes32 sender, uint64 nonce) origin, address receiver)'])
+const PACKET_DELIVERED_TOPIC = toEventSelector(PACKET_DELIVERED[0])
+
+async function endpointConfirms(c: V2RiskContext, txHash: Hex | undefined): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (!txHash) return { ok: false, reason: 'no transaction hash on the log' }
+  const receipt = await attempt(c.dstClient.getTransactionReceipt({ hash: txHash }), undefined, 'delivery receipt')
+  if (!receipt.ok) return { ok: false, reason: receipt.reason }
+  const endpoint = registryEndpoint(c).toLowerCase()
+  const sender = `0x${'0'.repeat(24)}${c.info.oft.slice(2).toLowerCase()}`
+  for (const log of receipt.value.logs) {
+    if (log.address.toLowerCase() !== endpoint || log.topics[0] !== PACKET_DELIVERED_TOPIC) continue
+    try {
+      const [origin, receiver] = decodeAbiParameters(PACKET_DELIVERED[0].inputs, log.data)
+      if (origin.srcEid === c.plan.srcEid && origin.sender.toLowerCase() === sender && sameAddress(receiver, c.dstOft)) return { ok: true }
+    } catch {
+      /* not this event's shape: keep looking */
+    }
+  }
+  return { ok: false, reason: 'no PacketDelivered from the registry endpoint for this route in that transaction' }
 }
 
 /** 8. Was the peer changed recently? */
@@ -605,12 +663,12 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
 }
 
 /**
- * Is this route delivering right now, by the endpoints' own counters? Three facts, all from the
- * registry endpoints and none from the contracts under test: the destination endpoint's inbound
- * nonce for this exact (receiver, srcEid, sender) is above zero (check 7 refuses logged deliveries
- * the nonce does not confirm); the newest delivery is at most RECENT_DELIVERY_DAYS old; and the
- * path is level — every packet sent has been verified and executed (check 2), so nothing is stuck
- * behind the config the receive side has today.
+ * Is this route delivering right now, by the registry endpoints' own records? The destination
+ * endpoint's inbound nonce for this exact (receiver, srcEid, sender) is above zero (check 7); the
+ * newest delivery is at most RECENT_DELIVERY_DAYS old — its date is the block of a transaction in
+ * which the registry endpoint itself emitted PacketDelivered for this route (endpointConfirms), so
+ * the contract under test cannot backdate or invent it; and the path is level — every packet sent
+ * has been verified and executed (check 2), so nothing is stuck behind today's receive config.
  */
 const RECENT_DELIVERY_DAYS = 7
 export function deliveringNow(checks: Record<CheckId, CheckState>, history: RiskInput['history'], delayed: RiskInput['delayed']): boolean {

@@ -7,11 +7,12 @@
  * to the endpoint's own `quote` for the fee, and to the endpoint's `inboundNonce` for history.
  */
 import { describe, expect, it } from 'vitest'
-import { getAddress, type Address } from 'viem'
+import { encodeAbiParameters, getAddress, toEventSelector, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
 import { evmByKey } from '@/core/chains'
 import { addressToBytes32 } from '@/core/encoding'
 import { assessRisk } from '@/protocols/lz-risk/risk'
+import dvns from '@/protocols/lz-risk/dvns.json'
 import { assessV2Route, combineOptionsV2, type V2RiskContext } from '@/protocols/lz-risk/v2'
 import { ENDPOINT_HYPER, ETH_EID, NATIVE_FEE, OTHER, TREAD_ADAPTER, TREAD_OFT, treadOftInfo, treadPlan } from './fixtures'
 
@@ -135,8 +136,23 @@ describe('the fee is the endpoint’s own quote', () => {
 })
 
 describe('history is the endpoint’s nonce, not the contract’s events', () => {
-  const found = { getLogs: async () => [{ blockNumber: 999_000n }] }
-  const withLogs = (c: V2RiskContext): V2RiskContext => ({ ...c, dstClient: Object.assign(Object.create(Object.getPrototypeOf(c.dstClient)), c.dstClient, found) as ReadClient })
+  const TX = `0x${'ab'.repeat(32)}` as const
+  /** The registry endpoint's own PacketDelivered for this route, in the delivery transaction. */
+  const delivered = (c: V2RiskContext, from: Address = REGISTRY_ETH_ENDPOINT) => ({
+    address: from,
+    topics: [toEventSelector('event PacketDelivered((uint32 srcEid, bytes32 sender, uint64 nonce) origin, address receiver)')],
+    data: encodeAbiParameters(
+      [{ type: 'tuple', components: [{ name: 'srcEid', type: 'uint32' }, { name: 'sender', type: 'bytes32' }, { name: 'nonce', type: 'uint64' }] }, { type: 'address' }],
+      [{ srcEid: c.plan.srcEid, sender: addressToBytes32(c.info.oft), nonce: 7n }, c.dstOft],
+    ),
+  })
+  const withLogs = (c: V2RiskContext, receiptLogs?: unknown[]): V2RiskContext => {
+    const found = {
+      getLogs: async () => [{ blockNumber: 999_000n, transactionHash: TX }],
+      getTransactionReceipt: async () => ({ logs: receiptLogs ?? [delivered(c)] }),
+    }
+    return { ...c, dstClient: Object.assign(Object.create(Object.getPrototypeOf(c.dstClient)), c.dstClient, found) as ReadClient }
+  }
 
   it('OFTReceived logs with an inboundNonce of zero are a failed check and a route nothing was ever delivered on', async () => {
     const input = await assessV2Route(withLogs(ctx({ dst: { inboundNonce: 0n } })))
@@ -148,6 +164,14 @@ describe('history is the endpoint’s nonce, not the contract’s events', () =>
     const input = await assessV2Route(withLogs(ctx()))
     expect(input.checks.history.status).toBe('pass')
     expect(input.history.kind).toBe('delivered')
+  })
+
+  it('a contract-logged delivery without the registry endpoint’s PacketDelivered in that transaction is not a delivery', async () => {
+    const c = ctx()
+    // The same event shape emitted by some other contract (the one under test, say) proves nothing.
+    const input = await assessV2Route(withLogs(c, [delivered(c, OTHER)]))
+    expect(input.checks.history.status).toBe('unchecked')
+    expect(input.history.kind).toBe('unknown')
   })
 
   it('logs whose nonce could not be read are UNCHECKED — the contract’s word alone confirms nothing', async () => {
@@ -188,5 +212,21 @@ describe('recent changes: a window shorter than the rule says nothing', () => {
   it('no PeerSet in a thirty-day window is a pass', async () => {
     const input = await assessV2Route(ctx())
     expect(input.checks.recent_changes.status).toBe('pass')
+  })
+})
+
+describe('a dead DVN on the receive side is seen even when the send side already failed', () => {
+  const table = (dvns as { chains: Record<string, { dvns: Record<string, { id: string; deprecated: boolean }> }> }).chains
+  const pick = (chain: string, ok: (e: { id: string; deprecated: boolean }) => boolean) => getAddress(Object.entries(table[chain]!.dvns).find(([, e]) => ok(e))![0])
+
+  it('send: deprecated (not dead); receive: LZDeadDVN → deadVerifier, so deliveries can never soften it', async () => {
+    const deprecatedOnHyper = pick('hyperevm', (e) => e.deprecated && e.id !== 'lz-dead-dvn')
+    const deadOnEth = pick('ethereum', (e) => e.id === 'lz-dead-dvn')
+    const input = await assessV2Route(
+      ctx({ src: { getUlnConfig: { ...uln, requiredDVNs: [deprecatedOnHyper] } }, dst: { getUlnConfig: { ...uln, requiredDVNs: [deadOnEth] } } }),
+    )
+    expect(input.deprecatedVerifier).toBe(true)
+    expect(input.deadVerifier).toBe(true)
+    expect(assessRisk({ ...input, recentDeliveries: true, linkCrossChecked: true }).tier).toBe('BLOCKED')
   })
 })

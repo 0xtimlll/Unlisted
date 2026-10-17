@@ -226,6 +226,15 @@ describe('config compatibility the way ReceiveUln302 judges it (BEM BNB Chain â†
     expect(compareUlnShape(send, recv, 'bsc', 'xlayer' as never)).toMatchObject({ same: false })
   })
 
+  it('one operator under two receive-side addresses cannot be satisfied by one send-side DVN: "unknown", never "compatible"', () => {
+    const t = (dvnTable as { chains: Record<string, { dvns: Record<string, { id: string; deprecated: boolean }> }> }).chains['ethereum']!.dvns
+    const lzOnEth = Object.entries(t).filter(([, e]) => e.id === 'layerzero-labs' && !e.deprecated).map(([a]) => getAddress(a))
+    expect(lzOnEth.length).toBeGreaterThanOrEqual(2)
+    const send = cfg(20n, [dvn('bsc', 'layerzero-labs')], [], 0)
+    const recv = cfg(20n, [lzOnEth[0]!, lzOnEth[1]!], [], 0)
+    expect(compareUlnShape(send, recv, 'bsc', 'ethereum')).toMatchObject({ same: 'unknown' })
+  })
+
   it('every registry chain LayerZero serves has its DVNs in the committed table (X Layer included)', () => {
     const chains = (dvnTable as { chains: Record<string, unknown> }).chains
     expect(Object.keys(chains)).toContain('xlayer')
