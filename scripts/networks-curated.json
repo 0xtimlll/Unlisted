@@ -53,7 +53,7 @@
       "coingeckoPlatform": "optimistic-ethereum"
     },
     "56": {
-      "$note": "Four operators since 2026-10-17: with two, a moment's outage of publicnode left the CCIP pool of elizaOS without a cross-check. thirdweb and 1rpc answer eth_call and eth_simulateV1; publicnode serves the widest eth_getLogs ranges.",
+      "$note": "Three operators since 2026-10-17: with two, a moment's outage of publicnode left reads without a cross-check (elizaOS on CCIP, BEM on OFT). thirdweb answers eth_call and eth_simulateV1; publicnode serves the widest eth_getLogs ranges. 1rpc.io was tried and dropped: its keyless tier answers -32001 \"usage limit for your current plan\".",
       "key": "bsc",
       "name": "BNB Chain",
       "nativeSymbol": "BNB",
@@ -69,10 +69,6 @@
         {
           "url": "https://56.rpc.thirdweb.com",
           "provider": "thirdweb.com"
-        },
-        {
-          "url": "https://1rpc.io/bnb",
-          "provider": "1rpc.io"
         }
       ],
       "explorerTxUrl": "https://bscscan.com/tx/",
