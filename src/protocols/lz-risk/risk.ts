@@ -86,6 +86,19 @@ export type RiskInput = {
   unknownInfra: boolean
   /** v2: the send config on the source does not match the receive config on the destination. */
   configMismatch: boolean
+  /**
+   * The verifier that LayerZero publishes as the dead DVN (`lz-dead-dvn`) is configured: nothing it
+   * is asked to verify is ever verified. Red whatever the history says — deliveries made before it
+   * was set prove nothing about the next message. A merely deprecated DVN still verifies.
+   */
+  deadVerifier?: boolean
+  /**
+   * The route is delivering now, by the registry endpoints' own counters (v2.ts, deliveringNow): the
+   * destination endpoint's inbound nonce confirms deliveries, the newest is under a week old, and
+   * every packet sent has arrived. Evidence the config works as it stands, whatever our reading of
+   * it says — so a config verdict against it is downgraded to yellow, never shown red.
+   */
+  recentDeliveries?: boolean
   /** v2: the DVN set is not one LayerZero's published metadata knows about. */
   unknownDvnSet: boolean
   /**
@@ -218,10 +231,14 @@ export function assessRisk(i: RiskInput): RouteRisk {
     const c = i.checks[id]
     if (c.status === 'fail' && isHard(id)) blocking.push({ text: c.reason, check: id })
   }
-  if (i.deprecatedVerifier) {
+  // A config verdict that the route's own deliveries contradict is our reading being wrong, not the
+  // route: said in yellow and logged, never red. The dead DVN is the exception — it verifies nothing
+  // from the moment it is set, so past deliveries cannot vouch for the next message.
+  const contradictedByDeliveries = i.recentDeliveries === true && !i.deadVerifier && (i.configMismatch || i.deprecatedVerifier)
+  if (i.deprecatedVerifier && !contradictedByDeliveries) {
     blocking.push({ text: 'a party that verifies this route is one LayerZero has deprecated', check: 'config' })
   }
-  if (i.configMismatch) blocking.push({ text: 'the send config on the source does not match the receive config on the destination', check: 'config' })
+  if (i.configMismatch && !contradictedByDeliveries) blocking.push({ text: 'the send config on the source does not match the receive config on the destination', check: 'config' })
   if (blocking.length > 0) {
     return { tier: 'BLOCKED', reasons: blocking, checks: i.checks, hardUnchecked: hardUncheckedOf(i), adapter: i.adapter }
   }
@@ -231,10 +248,24 @@ export function assessRisk(i: RiskInput): RouteRisk {
   // and the panel still shows it grey, so the silence here is visible rather than hidden.
   for (const id of CHECK_IDS) {
     const c = i.checks[id]
-    if (c.status === 'fail' && !isHard(id)) reasons.push({ text: c.reason, check: id })
+    if (c.status === 'fail' && !isHard(id) && !(id === 'config' && contradictedByDeliveries)) reasons.push({ text: c.reason, check: id })
   }
 
   let tier: Tier = 'OK'
+
+  if (contradictedByDeliveries) {
+    const detail = i.checks.config.status === 'fail' ? ` (${i.checks.config.reason})` : ''
+    reasons.push({ text: `the two sides’ LayerZero configs look different, but transfers on this route are being delivered${detail}`, check: 'config' })
+    tier = worse(tier, 'CAUTION')
+    // Logged as what it most likely is: a reading of the config this app gets wrong.
+    console.warn(`[lz-risk] config verdict contradicted by live deliveries — probable check bug${detail}`)
+  }
+  // The config could not be read on one side or the other: said in yellow, never red and never
+  // silent. "Could not check" is not "fine", and it is not "broken" either.
+  if (i.checks.config.status === 'unchecked') {
+    reasons.push({ text: `the LayerZero config could not be checked: ${i.checks.config.reason}`, check: 'config' })
+    tier = worse(tier, 'CAUTION')
+  }
 
   // ---- what holds the tier at UNVERIFIED ---------------------------------------
   const hardUnchecked = hardUncheckedOf(i)
@@ -337,7 +368,7 @@ export function assessRisk(i: RiskInput): RouteRisk {
     // §4 is explicit that this is at most a warning, and that a DVN LayerZero's own metadata knows
     // and has not deprecated is not a warning at all — the set being unusual is the project's
     // choice, not a defect.
-    reasons.push({ text: 'this route uses a DVN set LayerZero’s published list does not describe', check: 'config' })
+    reasons.push({ text: 'a DVN on this route could not be matched to an operator in LayerZero’s published list, so the two sides’ configs could not be compared', check: 'config' })
     tier = worse(tier, 'CAUTION')
   }
   // A soft check that outright failed cannot leave the verdict at OK either.

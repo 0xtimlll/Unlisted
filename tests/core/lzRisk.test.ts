@@ -279,7 +279,7 @@ describe('CAUTION never becomes worse than it is', () => {
     // own reason and carries its own weight.
     const r = assessRisk(clean({ unknownDvnSet: true, history: { kind: 'never' } }))
     expect(r.tier).toBe('UNVERIFIED')
-    expect(r.reasons.some((x) => /DVN set/.test(x.text))).toBe(true)
+    expect(r.reasons.some((x) => /could not be matched to an operator/.test(x.text))).toBe(true)
     expect(r.reasons.some((x) => /ever been delivered/.test(x.text))).toBe(true)
     // The DVN half of that never caps on its own — §4 says a V2 route with an unusual but healthy
     // set and no history is CAUTION at most. The missing history is what capped it.

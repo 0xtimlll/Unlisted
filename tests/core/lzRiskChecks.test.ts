@@ -8,12 +8,12 @@
  *      every chain, so comparing the send side's addresses with the receive side's calls every
  *      healthy V2 route broken — which is exactly what happened before this test existed.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { getAddress, type Address } from 'viem'
 import type { ReadClient } from '@/core/client'
-import { assessRisk, CHECK_IDS, HARD_CHECKS } from '@/protocols/lz-risk/risk'
+import { assessRisk, CHECK_IDS, emptyRiskInput, HARD_CHECKS, type CheckId, type CheckState, type RiskInput } from '@/protocols/lz-risk/risk'
 import { assessV1Route, v1Payload } from '@/protocols/lz-risk/v1'
-import { compareUlnShape } from '@/protocols/lz-risk/v2'
+import { compareUlnShape, deliveringNow } from '@/protocols/lz-risk/v2'
 import dvnTable from '@/protocols/lz-risk/dvns.json'
 import type { OftV1Info, V1Route } from '@/protocols/lz-v1/detect'
 import { encodeAdapterParamsType1 } from '@/protocols/lz-v1/adapterParams'
@@ -175,10 +175,15 @@ describe('DVNs are compared by operator, not by address', () => {
     expect(compareUlnShape(uln([onEth]), uln([onArb]), 'ethereum', 'arbitrum')).toEqual({ same: true })
   })
 
-  it('still notices a real difference in confirmations or count', () => {
+  it('confirmations: the send side may wait longer than the receive side asks, never shorter', () => {
     const lz = pair('layerzero-labs')!
-    expect(compareUlnShape(uln([lz[0]], 20n), uln([lz[1]], 15n), 'ethereum', 'arbitrum')).toMatchObject({ same: false })
-    expect(compareUlnShape(uln([lz[0]]), uln([]), 'ethereum', 'arbitrum')).toMatchObject({ same: false })
+    expect(compareUlnShape(uln([lz[0]], 20n), uln([lz[1]], 15n), 'ethereum', 'arbitrum')).toEqual({ same: true })
+    expect(compareUlnShape(uln([lz[0]], 15n), uln([lz[1]], 20n), 'ethereum', 'arbitrum')).toMatchObject({ same: false, why: expect.stringMatching(/15 confirmations.*requires 20/) })
+  })
+
+  it('a receive side that requires nothing more than the send side verifies is compatible, whatever the counts', () => {
+    const lz = pair('layerzero-labs')!
+    expect(compareUlnShape(uln([lz[0]]), uln([]), 'ethereum', 'arbitrum')).toEqual({ same: true })
   })
 
   it('notices two different operators', () => {
@@ -191,5 +196,78 @@ describe('DVNs are compared by operator, not by address', () => {
     const lz = pair('layerzero-labs')!
     const stranger = getAddress('0x1234567890123456789012345678901234567890')
     expect(compareUlnShape(uln([stranger]), uln([lz[1]]), 'ethereum', 'arbitrum')).toMatchObject({ same: 'unknown' })
+  })
+})
+
+describe('config compatibility the way ReceiveUln302 judges it (BEM BNB Chain → X Layer, 2026-10-17)', () => {
+  const dvn = (chain: 'bsc' | 'xlayer', id: string) => {
+    const t = (dvnTable as { chains: Record<string, { dvns: Record<string, { id: string; deprecated: boolean }> }> }).chains[chain]!.dvns
+    const hit = Object.entries(t).find(([, e]) => e.id === id && !e.deprecated)
+    if (!hit) throw new Error(`${id} not on ${chain}`)
+    return getAddress(hit[0])
+  }
+  const cfg = (confirmations: bigint, requiredDVNs: Address[], optionalDVNs: Address[], optionalDVNThreshold: number) => ({ confirmations, requiredDVNs, optionalDVNs, optionalDVNThreshold })
+
+  it('the live BEM shapes are compatible: 2 required + 1 of 2 on send, 1 required + 2 of 3 on receive', () => {
+    const send = cfg(20n, [dvn('bsc', 'nethermind'), dvn('bsc', 'layerzero-labs')], [dvn('bsc', 'horizen-labs'), dvn('bsc', 'canary')], 1)
+    const recv = cfg(20n, [dvn('xlayer', 'layerzero-labs')], [dvn('xlayer', 'canary'), dvn('xlayer', 'nethermind'), dvn('xlayer', 'horizen-labs')], 2)
+    expect(compareUlnShape(send, recv, 'bsc', 'xlayer' as never)).toEqual({ same: true })
+  })
+
+  it('a receive-required operator the send side never asks to verify is a real mismatch', () => {
+    const send = cfg(20n, [dvn('bsc', 'nethermind')], [], 0)
+    const recv = cfg(20n, [dvn('xlayer', 'layerzero-labs')], [], 0)
+    expect(compareUlnShape(send, recv, 'bsc', 'xlayer' as never)).toMatchObject({ same: false, why: expect.stringMatching(/layerzero-labs/) })
+  })
+
+  it('too few of the receive-optional operators among the send side’s verifiers is a real mismatch', () => {
+    const send = cfg(20n, [dvn('bsc', 'layerzero-labs')], [dvn('bsc', 'canary')], 1)
+    const recv = cfg(20n, [dvn('xlayer', 'layerzero-labs')], [dvn('xlayer', 'canary'), dvn('xlayer', 'nethermind')], 2)
+    expect(compareUlnShape(send, recv, 'bsc', 'xlayer' as never)).toMatchObject({ same: false })
+  })
+
+  it('every registry chain LayerZero serves has its DVNs in the committed table (X Layer included)', () => {
+    const chains = (dvnTable as { chains: Record<string, unknown> }).chains
+    expect(Object.keys(chains)).toContain('xlayer')
+    expect(Object.keys(chains).length).toBeGreaterThan(90)
+  })
+})
+
+describe('the verdict around the config check', () => {
+  const passing = Object.fromEntries(CHECK_IDS.map((k) => [k, { status: 'pass' }])) as Record<CheckId, CheckState>
+  const base = (): RiskInput => ({ ...emptyRiskInput(), checks: { ...passing }, linkCrossChecked: true, history: { kind: 'delivered', days: 0.1 } })
+
+  it('a real mismatch with no recent deliveries is red', () => {
+    const r = assessRisk({ ...base(), configMismatch: true, checks: { ...base().checks, config: { status: 'fail', reason: 'x' } } })
+    expect(r.tier).toBe('BLOCKED')
+  })
+
+  it('a mismatch the route’s live deliveries contradict is yellow, with the reason, and logged', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const r = assessRisk({ ...base(), configMismatch: true, recentDeliveries: true, checks: { ...base().checks, config: { status: 'fail', reason: 'the shapes differ' } } })
+    expect(r.tier).toBe('CAUTION')
+    expect(r.reasons.map((x) => x.text).join(' ')).toMatch(/look different, but transfers on this route are being delivered/)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('the dead DVN stays red whatever the history says', () => {
+    const r = assessRisk({ ...base(), deprecatedVerifier: true, deadVerifier: true, recentDeliveries: true, checks: { ...base().checks, config: { status: 'fail', reason: 'dead' } } })
+    expect(r.tier).toBe('BLOCKED')
+  })
+
+  it('a config that could not be read is yellow — never red, never silent', () => {
+    const r = assessRisk({ ...base(), checks: { ...base().checks, config: { status: 'unchecked', reason: 'receive ULN config: timeout' } } })
+    expect(r.tier).toBe('CAUTION')
+    expect(r.reasons.map((x) => x.text).join(' ')).toMatch(/could not be checked: receive ULN config: timeout/)
+  })
+
+  it('deliveringNow: endpoint-confirmed recent delivery and a level path, nothing less', () => {
+    const checks = base().checks
+    expect(deliveringNow(checks, { kind: 'delivered', days: 1 }, undefined)).toBe(true)
+    expect(deliveringNow(checks, { kind: 'delivered', days: 30 }, undefined)).toBe(false)
+    expect(deliveringNow(checks, { kind: 'delivered', days: 1 }, { packets: 3, oldestMinutes: 90 })).toBe(false)
+    expect(deliveringNow({ ...checks, path: { status: 'unchecked', reason: 'x' } }, { kind: 'delivered', days: 1 }, undefined)).toBe(false)
+    expect(deliveringNow(checks, { kind: 'unknown', reason: 'x' }, undefined)).toBe(false)
   })
 })
