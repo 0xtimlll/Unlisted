@@ -16,7 +16,7 @@
  *     `_origin.sender` to be the peer. The message is the 40 bytes OFTMsgCodec.encode produces:
  *     `abi.encodePacked(sendTo, amountSD)`.
  */
-import { encodeFunctionData, encodePacked, keccak256, parseAbi, type Address, type Hex } from 'viem'
+import { decodeAbiParameters, encodeFunctionData, encodePacked, keccak256, parseAbi, toEventSelector, type Address, type Hex } from 'viem'
 import { erc20Abi, oftAbi } from '../../core/abi'
 import { byEid, evmByKey, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
@@ -25,7 +25,7 @@ import { sanitizeText } from '../../core/text'
 import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
 import { lockedBps, type AdapterStanding } from './adapters'
-import { dvnInfo, judgeDvns } from './dvns'
+import { DEAD_DVN_ID, dvnInfo, judgeDvns } from './dvns'
 import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
 import { THIN_GAS_RATIO } from './v1'
@@ -210,35 +210,46 @@ async function checkConfig(c: V2RiskContext): Promise<Outcome> {
   )
   if (!send.ok) return { state: { status: 'unchecked', reason: send.reason } }
 
-  const srcDvns = [...send.value.requiredDVNs, ...send.value.optionalDVNs]
-  const verdict = judgeDvns(c.srcChain, srcDvns)
-  if (verdict.dead.length > 0) {
-    const names = verdict.dead.map((d) => `${d.entry.name} (${d.address})`).join(', ')
-    return { state: { status: 'fail', reason: `deprecated DVN on the send side: ${names}` }, extra: { deprecatedVerifier: true } }
-  }
+  const verdict = judgeDvns(c.srcChain, [...send.value.requiredDVNs, ...send.value.optionalDVNs])
+  const sendDeprecated = (): Outcome => ({
+    state: { status: 'fail', reason: `deprecated DVN on the send side: ${verdict.dead.map((d) => `${d.entry.name} (${d.address})`).join(', ')}` },
+    extra: { deprecatedVerifier: true, deadVerifier: verdict.dead.some((d) => d.entry.id === DEAD_DVN_ID) },
+  })
 
-  // The receive side, read on the destination's own chain from the registry's endpoint.
+  // The receive side, read on the destination's own chain from the registry's endpoint — also when
+  // the send side already failed: a dead DVN on the receive side is red whatever the history says,
+  // and it can only be seen by reading it.
   const recvLib = await attempt(
     c.dstClient.readContract({ address: dstEndpoint, abi: v2Abi, functionName: 'getReceiveLibrary', args: [c.dstOft, c.plan.srcEid] }),
     undefined,
     'receive library',
   )
-  if (!recvLib.ok) {
-    return { state: { status: 'unchecked', reason: recvLib.reason }, extra: { unknownDvnSet: verdict.unknown.length > 0 } }
-  }
-  const recv = await attempt(
-    c.dstClient.readContract({ address: recvLib.value[0], abi: v2Abi, functionName: 'getUlnConfig', args: [c.dstOft, c.plan.srcEid] }),
-    undefined,
-    'receive ULN config',
-  )
+  const recv = recvLib.ok
+    ? await attempt(
+        c.dstClient.readContract({ address: recvLib.value[0], abi: v2Abi, functionName: 'getUlnConfig', args: [c.dstOft, c.plan.srcEid] }),
+        undefined,
+        'receive ULN config',
+      )
+    : recvLib
   if (!recv.ok) {
+    // Unread receive side: a send-side deprecated DVN is still a fact, but without the receive side
+    // nothing may vouch for the route, so it is never treated as contradicted by deliveries.
+    if (verdict.dead.length > 0) {
+      const o = sendDeprecated()
+      return { ...o, extra: { ...o.extra, deadVerifier: true } }
+    }
     return { state: { status: 'unchecked', reason: recv.reason }, extra: { unknownDvnSet: verdict.unknown.length > 0 } }
   }
 
   const dstVerdict = judgeDvns(c.dstChain, [...recv.value.requiredDVNs, ...recv.value.optionalDVNs])
+  const deadAnywhere = [...verdict.dead, ...dstVerdict.dead].some((d) => d.entry.id === DEAD_DVN_ID)
+  if (verdict.dead.length > 0) {
+    const o = sendDeprecated()
+    return { ...o, extra: { ...o.extra, deadVerifier: deadAnywhere } }
+  }
   if (dstVerdict.dead.length > 0) {
     const names = dstVerdict.dead.map((d) => `${d.entry.name} (${d.address})`).join(', ')
-    return { state: { status: 'fail', reason: `deprecated DVN on the receive side: ${names}` }, extra: { deprecatedVerifier: true } }
+    return { state: { status: 'fail', reason: `deprecated DVN on the receive side: ${names}` }, extra: { deprecatedVerifier: true, deadVerifier: deadAnywhere } }
   }
 
   // A send set and a receive set that do not match mean a message signed by the senders' DVNs is
@@ -264,32 +275,31 @@ type Uln = { confirmations: bigint; requiredDVNs: readonly Address[]; optionalDV
 export type ShapeComparison = { same: true } | { same: false; why: string } | { same: 'unknown'; why: string }
 
 /**
- * Do the two sides ask for the same verification?
+ * Will a message sent under the source's send config be accepted under the destination's receive
+ * config? (`same` is kept as the field name; it means "compatible".)
  *
- * **Not by address.** A DVN is an operator, and the same operator has a different contract on every
- * chain — so the send side's `requiredDVNs` and the receive side's are different addresses even when
- * the route is configured perfectly. Comparing them directly reports every healthy V2 route as
- * broken, which is how this was found: three required DVNs and twenty confirmations on both sides,
- * called a mismatch.
+ * This is the check ReceiveUln302 itself makes, not a demand that the two configs look alike:
  *
- * So the comparison is over LayerZero's own ids for those addresses, and when even one address on
- * either side is not in the committed list there is no way to line the two up — that is `unknown`,
- * never a mismatch. Counts and confirmations are compared regardless, because those are plain
- * numbers and mean the same thing on both chains.
+ *   • Who verifies is decided by the SEND config: every required AND every optional DVN in it is
+ *     assigned the packet (SendUln302 assigns jobs to both lists). The send-side optional threshold
+ *     plays no part in delivery.
+ *   • The RECEIVE config decides what is enough: every receive-required DVN must have verified, and
+ *     at least `optionalDVNThreshold` of the receive-optional DVNs must have, each after
+ *     `confirmations` blocks — which the DVNs wait out as the SEND config told them to.
+ *
+ * So the route works when every receive-required operator is among the send side's verifiers,
+ * enough receive-optional operators are among them, and the send side waits at least as many
+ * blocks as the receive side asks for. The shapes may differ freely — BEM's BNB Chain → X Layer
+ * route requires {Nethermind, LayerZero Labs} + 1 of {Horizen, Canary} on send and {LayerZero Labs}
+ * + 2 of {Canary, Nethermind, Horizen} on receive, and delivers every message (2026-10-17); the
+ * old "same counts, same sets" rule called it broken.
+ *
+ * **By operator, not by address**: the same operator has a different contract on every chain, so
+ * addresses are mapped to LayerZero's own DVN ids through the committed table (dvns.json, generated
+ * from LayerZero's metadata). An address on either side that the table does not know means the two
+ * cannot be lined up — `unknown`, never a mismatch.
  */
 export function compareUlnShape(a: Uln, b: Uln, srcChain: ChainKey, dstChain: ChainKey): ShapeComparison {
-  if (a.confirmations !== b.confirmations) {
-    return { same: false, why: `the send side waits for ${a.confirmations} confirmations, the receive side for ${b.confirmations}` }
-  }
-  if (a.requiredDVNs.length !== b.requiredDVNs.length) {
-    return { same: false, why: `the send side requires ${a.requiredDVNs.length} DVN(s), the receive side ${b.requiredDVNs.length}` }
-  }
-  if (a.optionalDVNThreshold !== b.optionalDVNThreshold || a.optionalDVNs.length !== b.optionalDVNs.length) {
-    return {
-      same: false,
-      why: `the optional DVN threshold differs: ${a.optionalDVNThreshold} of ${a.optionalDVNs.length} on the send side, ${b.optionalDVNThreshold} of ${b.optionalDVNs.length} on the receive side`,
-    }
-  }
   const ids = (chain: ChainKey, xs: readonly Address[]): string[] | undefined => {
     const out: string[] = []
     for (const x of xs) {
@@ -297,20 +307,44 @@ export function compareUlnShape(a: Uln, b: Uln, srcChain: ChainKey, dstChain: Ch
       if (!e || !e.id) return undefined
       out.push(e.id)
     }
-    return out.sort()
+    return out
   }
-  const aReq = ids(srcChain, a.requiredDVNs)
-  const bReq = ids(dstChain, b.requiredDVNs)
-  const aOpt = ids(srcChain, a.optionalDVNs)
-  const bOpt = ids(dstChain, b.optionalDVNs)
-  if (!aReq || !bReq || !aOpt || !bOpt) {
-    return { same: 'unknown', why: 'a DVN on one side is not in LayerZero’s published list, so the two sides cannot be lined up by operator' }
+  const sendReq = ids(srcChain, a.requiredDVNs)
+  const sendOpt = ids(srcChain, a.optionalDVNs)
+  const recvReq = ids(dstChain, b.requiredDVNs)
+  const recvOpt = ids(dstChain, b.optionalDVNs)
+
+  // Plain numbers mean the same thing on both chains: compared even when a DVN is unknown.
+  if (a.confirmations < b.confirmations) {
+    return { same: false, why: `the send side waits for ${a.confirmations} confirmations, but the receive side requires ${b.confirmations}` }
   }
-  if (aReq.join(',') !== bReq.join(',')) {
-    return { same: false, why: `the send side requires ${aReq.join(', ')}, the receive side ${bReq.join(', ')}` }
+  if (!sendReq || !sendOpt || !recvReq || !recvOpt) {
+    return { same: 'unknown', why: 'a DVN on one side is not in LayerZero’s published list, so the two sides cannot be matched by operator' }
   }
-  if (aOpt.join(',') !== bOpt.join(',')) {
-    return { same: false, why: `the optional DVNs differ: ${aOpt.join(', ') || 'none'} against ${bOpt.join(', ') || 'none'}` }
+  // ReceiveUln302 counts verifications per DVN ADDRESS. If one operator appears under two different
+  // addresses on the receive side, a single send-side DVN of that operator cannot satisfy both, and
+  // which one it is cannot be told from ids — so that is "cannot compare", never "compatible".
+  const recvAll = [...b.requiredDVNs, ...b.optionalDVNs].map((x) => x.toLowerCase())
+  const recvIds = [...recvReq, ...recvOpt]
+  const seenId = new Map<string, string>()
+  for (const [i, id] of recvIds.entries()) {
+    const prior = seenId.get(id)
+    if (prior !== undefined && prior !== recvAll[i]) {
+      return { same: 'unknown', why: `the receive side lists two different ${id} DVN contracts, so it cannot be matched to the send side by operator` }
+    }
+    seenId.set(id, recvAll[i]!)
+  }
+  const verifiers = new Set([...sendReq, ...sendOpt])
+  const missing = recvReq.filter((id) => !verifiers.has(id))
+  if (missing.length > 0) {
+    return { same: false, why: `the receive side requires ${missing.join(', ')}, which the send side never asks to verify` }
+  }
+  const available = new Set(recvOpt.filter((id) => verifiers.has(id))).size
+  if (available < b.optionalDVNThreshold) {
+    return {
+      same: false,
+      why: `the receive side needs ${b.optionalDVNThreshold} of its optional DVNs (${recvOpt.join(', ')}), and the send side asks only ${available} of them to verify`,
+    }
   }
   return { same: true }
 }
@@ -470,12 +504,46 @@ async function checkHistory(c: V2RiskContext): Promise<Outcome> {
       extra: { history: { kind: 'none_in_window', days: days.value } },
     }
   }
+  // The newest OFTReceived is the contract's own word, and its date is what "recent" rests on. It
+  // counts only when the same transaction carries the REGISTRY endpoint's PacketDelivered for
+  // exactly this (srcEid, sender) → receiver: an event the contract under test cannot write.
+  const confirmed = await endpointConfirms(c, (scan.value.log as { transactionHash?: Hex }).transactionHash)
+  if (!confirmed.ok) {
+    const reason = `the newest delivery the contract logs is not confirmed by the endpoint (${confirmed.reason})`
+    return { state: { status: 'unchecked', reason }, extra: { history: { kind: 'unknown', reason } } }
+  }
   const age = await daysSinceBlock(c.dstClient, scan.value.blockNumber)
   if (!age.ok) return { state: { status: 'unchecked', reason: age.reason }, extra: { history: { kind: 'unknown', reason: age.reason } } }
   return {
     state: { status: 'pass', note: `last delivered ${age.value < 1 ? 'today' : `${Math.floor(age.value)} day(s) ago`}` },
     extra: { history: { kind: 'delivered', days: age.value } },
   }
+}
+
+/**
+ * EndpointV2's PacketDelivered (ILayerZeroEndpointV2: `event PacketDelivered(Origin origin, address
+ * receiver)`, Origin = (uint32 srcEid, bytes32 sender, uint64 nonce)) — checked on a live BEM
+ * delivery on X Layer (tx 0x9d1e47…8e8b, nonce 1496) before it was written here.
+ */
+const PACKET_DELIVERED = parseAbi(['event PacketDelivered((uint32 srcEid, bytes32 sender, uint64 nonce) origin, address receiver)'])
+const PACKET_DELIVERED_TOPIC = toEventSelector(PACKET_DELIVERED[0])
+
+async function endpointConfirms(c: V2RiskContext, txHash: Hex | undefined): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (!txHash) return { ok: false, reason: 'no transaction hash on the log' }
+  const receipt = await attempt(c.dstClient.getTransactionReceipt({ hash: txHash }), undefined, 'delivery receipt')
+  if (!receipt.ok) return { ok: false, reason: receipt.reason }
+  const endpoint = registryEndpoint(c).toLowerCase()
+  const sender = `0x${'0'.repeat(24)}${c.info.oft.slice(2).toLowerCase()}`
+  for (const log of receipt.value.logs) {
+    if (log.address.toLowerCase() !== endpoint || log.topics[0] !== PACKET_DELIVERED_TOPIC) continue
+    try {
+      const [origin, receiver] = decodeAbiParameters(PACKET_DELIVERED[0].inputs, log.data)
+      if (origin.srcEid === c.plan.srcEid && origin.sender.toLowerCase() === sender && sameAddress(receiver, c.dstOft)) return { ok: true }
+    } catch {
+      /* not this event's shape: keep looking */
+    }
+  }
+  return { ok: false, reason: 'no PacketDelivered from the registry endpoint for this route in that transaction' }
 }
 
 /** 8. Was the peer changed recently? */
@@ -572,9 +640,11 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
     if (outcome.extra) extra = { ...extra, ...outcome.extra }
   }
   const adapter = await adapterStanding(c)
+  const merged = { history: { kind: 'unknown', reason: '' } as RiskInput['history'], delayed: undefined as RiskInput['delayed'], ...extra }
   return {
     checks,
     adapter,
+    recentDeliveries: deliveringNow(checks, merged.history, merged.delayed),
     unverifiedStandard: false,
     deprecatedVerifier: false,
     unknownInfra: false,
@@ -590,6 +660,19 @@ export async function assessV2Route(c: V2RiskContext): Promise<RiskInput> {
     linkCrossChecked: false,
     ...extra,
   }
+}
+
+/**
+ * Is this route delivering right now, by the registry endpoints' own records? The destination
+ * endpoint's inbound nonce for this exact (receiver, srcEid, sender) is above zero (check 7); the
+ * newest delivery is at most RECENT_DELIVERY_DAYS old — its date is the block of a transaction in
+ * which the registry endpoint itself emitted PacketDelivered for this route (endpointConfirms), so
+ * the contract under test cannot backdate or invent it; and the path is level — every packet sent
+ * has been verified and executed (check 2), so nothing is stuck behind today's receive config.
+ */
+const RECENT_DELIVERY_DAYS = 7
+export function deliveringNow(checks: Record<CheckId, CheckState>, history: RiskInput['history'], delayed: RiskInput['delayed']): boolean {
+  return history.kind === 'delivered' && history.days <= RECENT_DELIVERY_DAYS && checks.path.status === 'pass' && delayed === undefined
 }
 
 /** The destination-side OFT of a V2 route, from the peer bytes32. */

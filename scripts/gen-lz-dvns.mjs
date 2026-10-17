@@ -59,7 +59,8 @@ const SVM_KEYS = { solana: 'solana' }
 
 const chains = {}
 const unresolved = []
-for (const c of CHAINS) {
+// Only chains LayerZero V2 serves (eid > 0): a Wormhole- or CCIP-only chain has no DVN to look up.
+for (const c of CHAINS.filter((x) => x.eid > 0)) {
   const metaKey = c.vm === 'evm' ? keyByChainId.get(c.chainId) : SVM_KEYS[c.key]
   const entry = metaKey ? dvnFeed[metaKey] : undefined
   if (!entry || entry.environment !== 'mainnet' || !entry.dvns) {
