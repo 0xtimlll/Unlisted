@@ -16,7 +16,7 @@
  * the contract the user has to approve, for exactly the amount being sent.
  */
 import { getAddress, toFunctionSelector, type Address, type Hex } from 'viem'
-import { isContractRefusal } from '@/core/rpcErrors'
+import { isContractRefusal, batchOutage, probeBatchBytes } from '@/core/rpcErrors'
 import { erc20Abi } from '../../core/abi'
 import type { ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
@@ -218,16 +218,24 @@ export async function probeOftV1(client: ReadClient, chain: ChainKey, address: s
 
   // 3. Routes first, because the fee probe needs a destination the contract is wired to.
   const dsts = v1Destinations(chain)
+  const size = probeBatchBytes(client)
+  const batch = size === undefined ? {} : { batchSize: size }
   const [remotes, minGas] = await Promise.all([
     client.multicall({
+      ...batch,
       contracts: dsts.map((d) => ({ address: oft, abi: lzAppAbi, functionName: 'trustedRemoteLookup', args: [d.v1ChainId] }) as const),
       allowFailure: true,
     }),
     client.multicall({
+      ...batch,
       contracts: dsts.map((d) => ({ address: oft, abi: lzAppAbi, functionName: 'minDstGasLookup', args: [d.v1ChainId, PT_SEND] }) as const),
       allowFailure: true,
     }),
   ])
+  // A route that a provider failed to read is not a route the contract lacks: dropping it would make
+  // "no routes" (or a shorter list than the other operator's, read as a disagreement) out of a 429.
+  const routesOutage = batchOutage([...remotes, ...minGas])
+  if (routesOutage !== undefined) throw new ProbeV1Error('rpc_unavailable', String((routesOutage as Error)?.message ?? routesOutage).split('\n')[0])
   const routes: V1Route[] = []
   dsts.forEach((d: LzV1Chain, i) => {
     const r = remotes[i]
@@ -310,6 +318,8 @@ export async function probeOftV1(client: ReadClient, chain: ChainKey, address: s
     ],
     allowFailure: true,
   })
+  const metaOutage = batchOutage(meta)
+  if (metaOutage !== undefined) throw new ProbeV1Error('rpc_unavailable', String((metaOutage as Error)?.message ?? metaOutage).split('\n')[0])
   const [mDec, mSym, mName, mLocked] = meta
   if (!mDec || mDec.status !== 'success') throw new ProbeV1Error('token_unreadable', 'token.decimals() failed')
   const decimals = Number(mDec.result)

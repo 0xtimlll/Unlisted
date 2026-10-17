@@ -28,6 +28,33 @@ export function isContractRefusal(e: unknown): boolean {
   return /revert|returned no data|no data|is not a contract|does not exist/i.test(message)
 }
 
+/**
+ * The first result of an `allowFailure` multicall that failed because the PROVIDER did not answer.
+ *
+ * viem does not throw when the aggregate call itself fails (a timeout, a 429, a dropped socket):
+ * it marks every call in that batch `failure` with the network error. Read as "the contract did
+ * not answer", that turns one provider's bad second into a verdict — "not an OFT", "no routes",
+ * and in a cross-check "two providers disagree" (BEM on BNB Chain, 2026-10-17). A failure counts as
+ * the contract's answer only when the contract gave it (isContractRefusal); anything else is an
+ * outage, and callers throw it as one.
+ */
+export function batchOutage(results: readonly ({ status: 'success' } | { status: 'failure'; error: unknown } | undefined)[]): unknown | undefined {
+  for (const r of results) if (r && r.status === 'failure' && !isContractRefusal(r.error)) return r.error
+  return undefined
+}
+
+/**
+ * The multicall chunk size for a probe on this client. viem's default (1 KB of calldata per chunk)
+ * split one OFT probe over the 95 LayerZero chains into ~15 requests per operator — a burst public
+ * providers answer with 429. Where Multicall3 is deployed, 16 KB keeps it to a handful of
+ * `eth_call`s, each still a small call well inside any node's gas cap. Where it is not, the batch
+ * travels as a deployless call carrying Multicall3's bytecode, and some nodes refuse a large one
+ * outright (MemeCore: "Missing or invalid parameters") — so those keep viem's default.
+ */
+export function probeBatchBytes(client: { chain?: { contracts?: { multicall3?: unknown } | undefined } | undefined }): number | undefined {
+  return client.chain?.contracts?.multicall3 ? 16_384 : undefined
+}
+
 /** Thrown by gates when a read they needed never got an answer from the provider. */
 export class UnreadableError extends Error {
   constructor(public readonly what: string, cause?: unknown) {

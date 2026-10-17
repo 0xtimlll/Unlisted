@@ -178,3 +178,42 @@ describe('clientPair: the primary stays with one operator', () => {
     expect(p.primaryProvider).toBe(providerOfUrl('https://rpc.example.org/x'))
   })
 })
+
+describe('a provider that did not answer is an outage, not a verdict (BEM on BNB Chain, 2026-10-17)', () => {
+  const good = { info: treadOftInfo(), flags: [] }
+  const outage = new ProbeError('rpc_unavailable', 'the RPC provider did not answer: HTTP 429')
+  const C = { tag: 'C' } as unknown as ReadClient
+  const three: Pair = { primary: A, primaryProvider: 'a.example', endpointV2: ENDPOINT_HYPER, secondaries: [{ client: B, provider: 'b.example' }, { client: C, provider: 'c.example' }] }
+  const byThree = (a: unknown, b: unknown, c: unknown): never =>
+    (async (client: ReadClient) => {
+      const v = client === A ? a : client === B ? b : c
+      if (v instanceof Error) throw v
+      return v
+    }) as never
+
+  it('a secondary that hit a 429 does not make "two providers disagree"', async () => {
+    vi.mocked(probeOft).mockImplementation(byClient(good, outage))
+    const r = await probeOftQuorum(pair, TREAD_OFT)
+    expect(r.info.oft).toBe(TREAD_OFT)
+    expect(r.crossChecked).toBe(false)
+  })
+
+  it('a primary that hit a 429 is answered by the next operator, and a third one can still cross-check it', async () => {
+    vi.mocked(probeOft).mockImplementation(byThree(outage, good, good))
+    const r = await probeOftQuorum(three, TREAD_OFT)
+    expect(r.info.oft).toBe(TREAD_OFT)
+    expect(r.crossChecked).toBe(true)
+    vi.mocked(probeOft).mockImplementation(byThree(outage, good, outage))
+    expect((await probeOftQuorum(three, TREAD_OFT)).crossChecked).toBe(false)
+  })
+
+  it('nobody answered: the outage is reported as an outage', async () => {
+    vi.mocked(probeOft).mockImplementation(byClient(outage, outage))
+    await expect(probeOftQuorum(pair, TREAD_OFT)).rejects.toMatchObject({ code: 'rpc_unavailable' })
+  })
+
+  it('primary down, secondary definite "not an OFT": the verdict stands, so the v1 probe still runs', async () => {
+    vi.mocked(probeOft).mockImplementation(byClient(outage, new ProbeError('not_oft')))
+    await expect(probeOftQuorum(pair, TREAD_OFT)).rejects.toMatchObject({ code: 'not_oft' })
+  })
+})

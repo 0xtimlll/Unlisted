@@ -10,10 +10,14 @@ import { isZeroBytes32, sameAddress, ZERO_ADDRESS } from './encoding'
 import { labelLooksSpoofed as looksSpoofed, sanitizeLabel as sanitize } from './text'
 import type { OftInfo, SuspiciousFlag } from './types'
 
+import { batchOutage, probeBatchBytes } from './rpcErrors'
+
 export type ProbeErrorCode =
   | 'invalid_address'
   | 'not_contract'
   | 'not_oft'
+  /** The provider did not answer (a timeout, a 429): an outage, never a verdict about the contract. */
+  | 'rpc_unavailable'
   | 'token_unreadable'
   | 'rate_mismatch'
   | 'rpc_mismatch'
@@ -62,8 +66,11 @@ export async function probeOft(
   if (!code || code === '0x') throw new ProbeError('not_contract')
 
   const base = { address: oft, abi: oftAbi } as const
+  const size = probeBatchBytes(client)
+  const batch = size === undefined ? {} : { batchSize: size }
   const [fixedRes, peerRes, enforcedRes] = await Promise.all([
     client.multicall({
+      ...batch,
       contracts: [
         { ...base, functionName: 'token' },
         { ...base, functionName: 'approvalRequired' },
@@ -76,14 +83,21 @@ export async function probeOft(
       allowFailure: true,
     }),
     client.multicall({
+      ...batch,
       contracts: eids.map((eid) => ({ ...base, functionName: 'peers', args: [eid] }) as const),
       allowFailure: true,
     }),
     client.multicall({
+      ...batch,
       contracts: eids.map((eid) => ({ ...base, functionName: 'enforcedOptions', args: [eid, MSG_TYPE_SEND] }) as const),
       allowFailure: true,
     }),
   ])
+  // A provider that did not answer is not a contract that said no: never "not an OFT", never a
+  // silently empty enforced option, never a peer that "is not there". The quorum reads
+  // `rpc_unavailable` as an outage (not cross-checked), not as a disagreement.
+  const outage = batchOutage([...fixedRes, ...peerRes, ...enforcedRes])
+  if (outage !== undefined) throw new ProbeError('rpc_unavailable', `the RPC provider did not answer: ${String((outage as Error)?.message ?? outage).split('\n')[0]}`)
   const [rToken, rApproval, rShared, rRate, rEndpoint, rOwner, rVersion] = fixedRes
 
   // Anything an OFT V2 must answer; a revert on any of these means "not an OFT".
@@ -139,6 +153,8 @@ export async function probeOft(
       ],
       allowFailure: true,
     })
+    const metaOutage = batchOutage(meta)
+    if (metaOutage !== undefined) throw new ProbeError('rpc_unavailable', `the RPC provider did not answer: ${String((metaOutage as Error)?.message ?? metaOutage).split('\n')[0]}`)
     const [mDec, mSym, mName, mLocked] = meta
     // The contract named a token that does not answer as an ERC-20: a fact about THAT address,
     // said with the address, so it is never mistaken for "no code here" or "not an OFT".
