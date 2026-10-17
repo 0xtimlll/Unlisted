@@ -142,6 +142,18 @@ describe('finding CCIP messages in a transaction', () => {
     // An on-ramp the router no longer names stays unresolved.
     const none = fakeClient((address, fn) => (address === ETH_ROUTER && fn === 'getOnRamp' ? OTHER_RAMP : undefined))
     expect((await resolveCcipDestination(found, none)).dstChain).toBeUndefined()
+    expect((await resolveCcipDestination(found, none)).destUnreadable).toBeUndefined()
+  })
+
+  it('a lane the provider could not be asked about is not "the router no longer names it"', async () => {
+    const flaky = fakeClient((address, fn, args) => (address === ETH_ROUTER && fn === 'getOnRamp' ? (args?.[0] === BASE ? new Error('HTTP request failed. Status: 502') : OTHER_RAMP) : undefined))
+    const found = await resolveCcipDestination(findCcipSends([sent15()], 'ethereum')[0]!, flaky)
+    expect(found.dstChain).toBeUndefined()
+    expect(found.destUnreadable).toMatch(/502/)
+    const d = await diagnoseCcip(found, undefined)
+    expect(d.state).toMatchObject({ kind: 'unknown' })
+    expect((d.state as { reason: string }).reason).toMatch(/could not be asked/)
+    expect((d.state as { reason: string }).reason).not.toMatch(/no longer names/)
   })
 })
 

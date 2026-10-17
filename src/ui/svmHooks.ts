@@ -132,7 +132,14 @@ export function useSvmPlan(p: SvmPlanParams) {
   })
 }
 
-export type SvmCheckResult = { simulation: SimulationResult; selfCheck: SelfCheckResult; gasCostWei: bigint; debit: SvmDebitCheck | undefined }
+export type SvmCheckResult = {
+  simulation: SimulationResult
+  selfCheck: SelfCheckResult
+  gasCostWei: bigint
+  debit: SvmDebitCheck | undefined
+  /** The RPC failed before the program ran: "not checked", not "the simulation failed". */
+  rpcUnavailable?: string
+}
 
 /**
  * §6.13 + §6.14 for Solana: assemble the exact transaction, decode it back (SDK-free) and dry-run
@@ -151,6 +158,7 @@ export function useSvmCheck(ctx: SvmSendContext | undefined, plan: SvmSendPlan |
       const selfCheck = selfCheckSvm(plan!, view)
       let simulation: SimulationResult
       let debit: SvmDebitCheck | undefined
+      let rpcUnavailable: string | undefined
       try {
         // The program called is whatever owns the store, so the dry run is also asked what it
         // DOES: the sender's token account and wallet before, and as the node leaves them after.
@@ -171,9 +179,11 @@ export function useSvmCheck(ctx: SvmSendContext | undefined, plan: SvmSendPlan |
           })
         }
       } catch (e) {
+        // A program error comes back in `sim.err` above; a throw here is the RPC itself.
         simulation = { ok: false, reason: shortError(e) }
+        rpcUnavailable = simulation.reason
       }
-      return { simulation, selfCheck, gasCostWei: svmTxFeeLamports(plan!), debit }
+      return { simulation, selfCheck, gasCostWei: svmTxFeeLamports(plan!), debit, ...(rpcUnavailable !== undefined ? { rpcUnavailable } : {}) }
     },
     enabled: !!ctx && !!plan && ready,
     staleTime: 20_000,

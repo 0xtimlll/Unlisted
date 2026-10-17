@@ -58,7 +58,10 @@ describe('decodeTx', () => {
   it('rejects bad hash / missing tx / contract creation', async () => {
     await expect(decodeTx(clientWithTx(null), 'nope')).rejects.toMatchObject({ code: 'invalid_hash' })
     await expect(decodeTx(clientWithTx(null), HASH)).rejects.toMatchObject({ code: 'tx_not_found' })
-    await expect(decodeTx(clientWithTx(new Error('not found')), HASH)).rejects.toMatchObject({ code: 'tx_not_found' })
+    // viem's "could not be found" is the chain saying no; anything else is the provider (2026-10-17).
+    await expect(decodeTx(clientWithTx(Object.assign(new Error('Transaction with hash "0x" could not be found.'), { name: 'TransactionNotFoundError' })), HASH)).rejects.toMatchObject({ code: 'tx_not_found' })
+    await expect(decodeTx(clientWithTx(new Error('Method not found')), HASH)).rejects.toMatchObject({ code: 'rpc_unavailable' })
+    await expect(decodeTx(clientWithTx(new Error('HTTP request failed. Status: 502')), HASH)).rejects.toMatchObject({ code: 'rpc_unavailable' })
     await expect(decodeTx(clientWithTx({ to: null, from: OTHER, input: '0x', value: 0n }), HASH)).rejects.toMatchObject({ code: 'no_to' })
     await expect(decodeTx(clientWithTx({ to: null, from: OTHER, input: '0x', value: 0n }), HASH)).rejects.toBeInstanceOf(DecodeTxError)
   })

@@ -25,7 +25,9 @@ export function isContractRefusal(e: unknown): boolean {
     if (hit) return true
   }
   const message = e instanceof Error ? e.message : typeof e === 'string' ? e : ''
-  return /revert|returned no data|no data|is not a contract|does not exist/i.test(message)
+  // Text only for what is not a viem error (a mock, a string). Narrow on purpose: "does not exist"
+  // is also how a node says the METHOD does not exist, and that is a provider, not the contract.
+  return /revert|returned no data/i.test(message)
 }
 
 /**

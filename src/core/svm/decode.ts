@@ -122,8 +122,9 @@ export async function decodeSvmTx(rpc: SvmRpc, signature: string): Promise<SvmDe
     let tx: SvmTransaction | null
     try {
       tx = await rpc.single(url).getTransaction(sig)
-    } catch {
-      throw new DecodeTxError('tx_not_found')
+    } catch (e) {
+      // svm/rpc.ts throws only for HTTP and JSON-RPC errors; "no such transaction" is a null.
+      throw new DecodeTxError('rpc_unavailable', e instanceof Error ? e.message.split('\n')[0] : String(e))
     }
     if (!tx) throw new DecodeTxError('tx_not_found')
     return prefillFromTransaction(tx)
@@ -131,8 +132,10 @@ export async function decodeSvmTx(rpc: SvmRpc, signature: string): Promise<SvmDe
   const views = await Promise.allSettled(rpc.urls.map(one))
   const first = views.find((v) => v.status === 'fulfilled')
   if (!first || first.status !== 'fulfilled') {
-    const e = (views[0] as PromiseRejectedResult | undefined)?.reason
-    throw e instanceof Error ? e : new DecodeTxError('tx_not_found', String(e))
+    // A definite answer from any operator ("no such transaction", "not a send") beats an outage.
+    const reasons = views.map((v) => (v as PromiseRejectedResult).reason)
+    const e = reasons.find((r) => !(r instanceof DecodeTxError && r.code === 'rpc_unavailable')) ?? reasons[0]
+    throw e instanceof Error ? e : new DecodeTxError('rpc_unavailable', String(e))
   }
   // Same rule as svm/source.ts: only a different operator earns the cross-check.
   const usedProvider = providerOfUrl(rpc.urls[views.indexOf(first)] ?? '')

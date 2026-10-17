@@ -226,8 +226,18 @@ export function createRpcProxy(deps: RpcProxyDeps) {
     signal.addEventListener('abort', onOuter, { once: true })
     try {
       const r = await deps.fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body, signal: ctrl.signal, redirect: 'manual' })
-      if (r.status === 429 || r.status >= 500 || r.status === 403 || r.status === 402) return { ok: false, reason: `HTTP ${r.status}`, url }
-      if (r.status !== 200) return { ok: false, reason: `HTTP ${r.status}`, url }
+      if (r.status !== 200) {
+        // The provider's own words when it gave any ("block range greater than 100 max" comes as
+        // HTTP 400 on X Layer): the page decides from them whether to ask for a narrower window.
+        const said = await r
+          .text()
+          .then((t) => {
+            const m = (JSON.parse(t) as { error?: { message?: unknown } })?.error?.message
+            return typeof m === 'string' ? `: ${m.slice(0, 120)}` : ''
+          })
+          .catch(() => '')
+        return { ok: false, reason: `HTTP ${r.status}${said}`, url }
+      }
       const text = await r.text()
       let parsed: unknown
       try {
@@ -276,7 +286,10 @@ export function createRpcProxy(deps: RpcProxyDeps) {
           if (a.ok) return finish(a)
           failures.push(a)
           if (next < urls.length) launch()
-          else if (inFlight === 0) finish(failures[failures.length - 1]!)
+          // Every node's reason, not only the last one's: "HTTP 403" alone hides that the other two
+          // said "block range too large", and the page decides from the words whether to ask for a
+          // narrower log window (lz-risk/probe.ts isRangeRefusal) or to call it an outage.
+          else if (inFlight === 0) finish({ ok: false, url: a.url, reason: failures.map((f) => (f.ok ? '' : f.reason.slice(0, 160))).join('; ') })
         })
       }
       launch()

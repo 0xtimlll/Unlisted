@@ -265,6 +265,18 @@ export async function diagnose(m: FoundMessage, dstClient: ReadClient): Promise<
     if (failed.ok && failed.value !== ZERO_HASH) {
       return { message: m, state: { kind: 'failed_message', payloadHash: failed.value }, needsNativeDrop, dstEndpoint: v1.endpoint }
     }
+    // "Delivered" or "in flight" only once the two ways a message gets stuck have been ruled out:
+    // a provider that did not answer about either is no evidence of a clean path. A contract that
+    // refuses `failedMessages` (not a NonblockingLzApp) has simply nothing stored there.
+    const unasked = [stored, failed].find((x) => !x.ok && !x.refused)
+    if (inbound.ok && unasked && !unasked.ok) {
+      return {
+        message: m,
+        state: { kind: 'unknown', reason: `the destination nonce is ${inbound.value}, but whether the message is stuck could not be read: ${unasked.reason}` },
+        needsNativeDrop,
+        dstEndpoint: v1.endpoint,
+      }
+    }
     if (inbound.ok) {
       return inbound.value >= m.nonce
         ? {
@@ -330,7 +342,10 @@ export async function diagnose(m: FoundMessage, dstClient: ReadClient): Promise<
   if (verifiable.ok && verifiable.value) {
     return { message: m, state: { kind: 'verified_not_committed' }, needsNativeDrop, dstEndpoint }
   }
-  if (lazy.ok && lazy.value >= m.packet.nonce) {
+  // A nonce at or past this one is "delivered" only with the payload slot read empty: execution
+  // need not go in order, so a held payload behind a higher lazy nonce is committed-not-executed —
+  // and an unread slot is no evidence either way.
+  if (lazy.ok && lazy.value >= m.packet.nonce && held.ok) {
     return {
       message: m,
       state: { kind: 'delivered', note: `the destination has executed up to nonce ${lazy.value}` },
@@ -365,7 +380,7 @@ export const ZERO_HASH: Hex = `0x${'0'.repeat(64)}`
  * against the thresholds that will actually be enforced.
  */
 async function ulnVerifiable(dstClient: ReadClient, dstEndpoint: Address, m: Extract<FoundMessage, { version: 'v2' }>): Promise<Attempt<boolean>> {
-  if (!m.dstOApp) return { ok: false, reason: 'the receiver is not an EVM address' }
+  if (!m.dstOApp) return { ok: false, reason: 'the receiver is not an EVM address', refused: false }
   const lib = await attempt(
     dstClient.readContract({
       address: dstEndpoint,

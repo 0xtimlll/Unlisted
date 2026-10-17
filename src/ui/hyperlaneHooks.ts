@@ -21,6 +21,7 @@ import { buildHyperlanePlan, type HyperlanePlan } from '@/protocols/hyperlane/pl
 import { previewHyperlaneSend, type HyperlanePreview } from '@/protocols/hyperlane/preview'
 import { findHyperlaneDispatches } from '@/protocols/hyperlane/status'
 import { readHyperlaneDelivery } from '@/protocols/hyperlane/track'
+import { isNotFound } from '@/core/analysis/evmTx'
 
 const clientFor = (chain: ChainKey, customRpc: Partial<Record<ChainKey, string>>) => makeReadClient(evmByKey(chain), customRpc[chain])
 
@@ -157,6 +158,8 @@ export type HyperlaneDeliveryState = {
   sourceFailed?: boolean
   /** The transaction confirmed but carries no Hyperlane message to a chain served here. */
   noMessage?: boolean
+  /** The last poll could not reach a chain's RPC: shown as such, and polled again. */
+  unreachable?: boolean
 }
 
 /**
@@ -172,8 +175,9 @@ export function useHyperlaneDelivery(srcChain: ChainKey, txHash: string | undefi
       let receipt
       try {
         receipt = await src.getTransactionReceipt({ hash: txHash as Hash })
-      } catch {
-        return { phase: 'no_data' }
+      } catch (e) {
+        // Not mined yet is the normal first answer; anything else is the RPC.
+        return isNotFound(e) ? { phase: 'no_data' } : { phase: 'no_data', unreachable: true }
       }
       if (receipt.status === 'reverted') return { phase: 'failed', sourceFailed: true }
       const found = findHyperlaneDispatches(
@@ -188,6 +192,7 @@ export function useHyperlaneDelivery(srcChain: ChainKey, txHash: string | undefi
         messageId: first.messageId,
         dstChain: first.dstChain,
         ...(delivery.processedAtBlock !== undefined ? { processedAtBlock: delivery.processedAtBlock } : {}),
+        ...(delivery.unreachable ? { unreachable: true } : {}),
       }
     },
     enabled: !!txHash,

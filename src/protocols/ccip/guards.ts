@@ -49,8 +49,8 @@ export const CCIP_PENDING: ReadonlySet<CcipGuardCode> = new Set<CcipGuardCode>([
   'balance_unknown',
   'native_balance_unknown',
   'allowance_unknown',
-  'outbound_limit_unknown',
-  'inbound_limit_unknown',
+  // Not the two *_limit_unknown codes: they are only produced once the plan is built, so the read
+  // is over and failed. Shown as "checking…" they said a read was in flight that never would end.
   'simulation_missing',
   'selfcheck_missing',
 ])

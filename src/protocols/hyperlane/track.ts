@@ -34,6 +34,8 @@ export type HyperlaneDeliveryPhase = 'no_data' | 'pending' | 'delivered'
 
 export type HyperlaneDelivery = {
   phase: HyperlaneDeliveryPhase
+  /** `no_data` because the destination could not be asked, not because nothing is there yet. */
+  unreachable?: true
   /** The block the destination Mailbox processed it in, when it says so. */
   processedAtBlock?: bigint
 }
@@ -59,6 +61,6 @@ export async function readHyperlaneDelivery(dstClient: ReadClient, dstChain: Cha
     }
     return processedAtBlock === undefined ? { phase: 'delivered' } : { phase: 'delivered', processedAtBlock }
   } catch {
-    return { phase: 'no_data' }
+    return { phase: 'no_data', unreachable: true }
   }
 }

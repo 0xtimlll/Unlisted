@@ -907,6 +907,18 @@ describe('discovery through the transfer index', () => {
     expect(await discoverNtt(c, 'monad', TOKEN, listed, undefined, [FAKE])).toEqual({ kind: 'token_without_minter', token: TOKEN })
   })
 
+  it('a provider that does not answer is "could not read", never "not a manager" (2026-10-17)', async () => {
+    const down = new Error('HTTP request failed. Status: 502')
+    // token() of the pasted address fails by outage: the walk does not go on to call it a token.
+    await expect(discoverNtt(client({ [`${REAL.toLowerCase()}.token`]: down }), 'monad', REAL, unlisted, undefined, [])).rejects.toThrow(/502/)
+    // The only candidate could not be asked: thrown, not "no manager".
+    const c = client({ [`${TOKEN.toLowerCase()}.minter`]: new Error('execution reverted'), [`${REAL.toLowerCase()}.token`]: down })
+    await expect(discoverNtt(c, 'monad', TOKEN, unlisted, undefined, [REAL])).rejects.toThrow(/502/)
+    // Another candidate did answer: the one that failed is just skipped.
+    const c2 = client({ [`${TOKEN.toLowerCase()}.minter`]: new Error('execution reverted'), [`${REAL.toLowerCase()}.token`]: down, [`${RICH.toLowerCase()}.token`]: TOKEN, [`${TOKEN.toLowerCase()}.balanceOf`]: 1n })
+    expect(await discoverNtt(c2, 'monad', TOKEN, unlisted, undefined, [REAL, RICH])).toMatchObject({ manager: RICH, via: 'index' })
+  })
+
   it('the token’s own minter() still comes first, and a typed-in manager is taken as given', async () => {
     const c = client({
       [`${TOKEN.toLowerCase()}.minter`]: REAL,

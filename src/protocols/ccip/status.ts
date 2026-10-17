@@ -53,6 +53,11 @@ export type FoundCcipSend = {
   destSelector: bigint | undefined
   dstChain: ChainKey | undefined
   sender: Address | undefined
+  /**
+   * 1.5 only: the source router could not be asked about some lanes (the provider did not answer),
+   * so "the router no longer names this on-ramp" may not be said. The reason, when that happened.
+   */
+  destUnreadable?: string
 }
 
 /**
@@ -166,7 +171,9 @@ export async function resolveCcipDestination(found: FoundCcipSend, srcClient: Re
       return { ...found, destSelector: c!.selector, dstChain: key }
     }
   }
-  return found
+  // No lane named it. That is a fact only if every lane was actually asked.
+  const outage = answers.find((a) => !a.ok && !a.refused)
+  return outage && !outage.ok ? { ...found, destUnreadable: outage.reason } : found
 }
 
 /** What the destination off-ramp says. */
@@ -284,7 +291,9 @@ export async function diagnoseCcip(send: FoundCcipSend, dstClient: ReadClient | 
         kind: 'unknown',
         reason:
           send.destSelector === undefined
-            ? 'the destination could not be established: the event names none, and the source router no longer names this on-ramp'
+            ? send.destUnreadable !== undefined
+              ? `the destination could not be established: the event names none, and the source router could not be asked about every lane (${send.destUnreadable}) — try again`
+              : 'the destination could not be established: the event names none, and the source router no longer names this on-ramp'
             : 'the destination is not a chain this app serves over CCIP',
       },
     }

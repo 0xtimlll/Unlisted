@@ -292,6 +292,11 @@ export async function diagnoseNtt(t: FoundNttTransfer, dstClient: ReadClient): P
         peerOk,
       }
     }
+    // The queue could not be read (the provider, not a manager without a queue): "delivered" would
+    // be a guess, and a queued transfer still needs its release.
+    if (!queued.ok && !queued.refused) {
+      return { transfer: t, state: { kind: 'unknown', reason: `executed on the destination, but whether it is queued could not be read: ${queued.reason}` }, peerOk }
+    }
     return { transfer: t, state: { kind: 'delivered' }, peerOk }
   }
 

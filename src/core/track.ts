@@ -55,6 +55,8 @@ export type TrackState = {
   /** 0x-hex on EVM chains, a base58 signature on Solana. */
   srcTxHash?: string
   dstTxHash?: string
+  /** The API itself did not answer (network, 5xx, 429): `no_data` here means "could not ask". */
+  unreachable?: true
   /** The OApp on each side, as the pathway reports it (§Task 1.7). */
   sender?: string
   receiver?: string
@@ -163,10 +165,11 @@ export async function fetchStatusByGuid(guid: string, fetchImpl: FetchLike = fet
 async function fetchScan(url: string, fetchImpl: FetchLike): Promise<TrackState> {
   try {
     const r = await fetchImpl(url)
-    if (!r.ok) return { phase: 'no_data' }
+    // 404 is Scan's "no such message"; anything else non-OK is Scan not answering.
+    if (!r.ok) return r.status === 404 ? { phase: 'no_data' } : { phase: 'no_data', unreachable: true }
     return parseScanResponse(await r.json())
   } catch {
-    return { phase: 'no_data' }
+    return { phase: 'no_data', unreachable: true }
   }
 }
 

@@ -170,6 +170,14 @@ describe('what the destination manager says', () => {
     expect(d.peerOk).toBe(true)
   })
 
+  it('executed, but the queue could not be read: unknown, not delivered (2026-10-17)', async () => {
+    const d = await diagnoseNtt(found(), fakeClient(healthy({ isMessageExecuted: true, getInboundQueuedTransfer: new Error('HTTP request failed. Status: 502') })))
+    expect(d.state.kind).toBe('unknown')
+    // A manager without the queue getter (a revert) has nothing queued: delivered.
+    const old = await diagnoseNtt(found(), fakeClient(healthy({ isMessageExecuted: true, getInboundQueuedTransfer: new Error('execution reverted') })))
+    expect(old.state).toEqual({ kind: 'delivered' })
+  })
+
   it('executed with a queued entry is held by the rate limit, with the release time', async () => {
     const d = await diagnoseNtt(
       found(),

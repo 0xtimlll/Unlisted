@@ -24,7 +24,8 @@
 import { encodeFunctionData, keccak256, type Address, type Hex } from 'viem'
 import type { ReadClient } from '../../core/client'
 import { decodeRevert, revertDataFromError, type DecodedRevert } from '../../core/sim/revert'
-import { attempt, isTransportFailure } from '../lz-risk/probe'
+import { isContractRefusal } from '../../core/rpcErrors'
+import { attempt } from '../lz-risk/probe'
 import { lzV1 } from '../lz-v1/chains'
 import { endpointV1RescueAbi, endpointV2RescueAbi, lzAppRescueAbi, receiveUlnRescueAbi } from './abi'
 import { receiveLibraryOf, ZERO_HASH, type Diagnosis } from './diagnose'
@@ -261,7 +262,8 @@ export async function simulateRescue(dstClient: ReadClient, call: RescueCall, fr
   } catch (e) {
     const data = revertDataFromError(e)
     const raw = e instanceof Error ? (e.message.split('\n')[0] ?? '') : String(e)
-    if (data === undefined && isTransportFailure(raw)) return { status: 'unavailable', reason: raw }
+    // Only the contract's own answer is "reverted"; a provider that did not answer is "could not check".
+    if (data === undefined && !isContractRefusal(e)) return { status: 'unavailable', reason: raw }
     return { status: 'reverted', revert: decodeRevert(data), raw }
   }
   const gas = await attempt(dstClient.estimateGas(req), undefined, 'gas')

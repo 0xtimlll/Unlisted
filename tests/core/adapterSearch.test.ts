@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { getAddress, pad, type Address, type Hex } from 'viem'
+import { ProbeError } from '@/core/probe'
 import { findAdapterForToken, type AdapterSearchDeps } from '@/core/adapterSearch'
 import { byKey, type ChainKey } from '@/core/chains'
 import { treadAdapterInfo, treadOftInfo } from './fixtures'
@@ -29,7 +30,7 @@ function deps(peers: Partial<Record<ChainKey, Hex | Error>>, probes: Record<stri
     probe: async (address) => {
       log.push(`probe ${address}`)
       const r = probes[address.toLowerCase()]
-      if (!r) throw new Error('not_oft')
+      if (!r) throw new ProbeError('not_oft')
       if (r instanceof Error) throw r
       return r
     },
@@ -86,6 +87,27 @@ describe('findAdapterForToken', () => {
     expect(r.failed).toEqual(['arbitrum'])
   })
 
+  it('no contract at that address (the call returns no data or reverts) is "no peer", not "could not ask"', async () => {
+    const r = await findAdapterForToken(
+      { token: TOKEN, srcChain: 'ethereum', srcEid: ETH_EID, chains },
+      deps({ bsc: b32(ADAPTER), arbitrum: new Error('The contract function "peers" returned no data ("0x").'), polygon: new Error('execution reverted') }, { [ADAPTER.toLowerCase()]: adapterForToken }),
+    )
+    expect(r.found).toEqual([{ adapter: ADAPTER, foundOn: ['bsc'] }])
+    expect(r.failed).toEqual([])
+  })
+
+  it('a candidate that could not be probed is "unreadable", not "not an adapter"', async () => {
+    const d = deps({ bsc: b32(ADAPTER) }, {})
+    const r = await findAdapterForToken(
+      { token: TOKEN, srcChain: 'ethereum', srcEid: ETH_EID, chains },
+      { ...d, probe: async () => Promise.reject(new ProbeError('rpc_unavailable', 'HTTP request failed')) },
+    )
+    expect(r.rejected).toEqual([])
+    expect(r.unreadable).toEqual([ADAPTER])
+    const r2 = await findAdapterForToken({ token: TOKEN, srcChain: 'ethereum', srcEid: ETH_EID, chains }, { ...d, probe: async () => Promise.reject(new ProbeError('not_oft')) })
+    expect(r2.rejected).toEqual([ADAPTER])
+  })
+
   it('a 32-byte peer that is not an EVM address is not a candidate', async () => {
     const r = await findAdapterForToken({ token: TOKEN, srcChain: 'ethereum', srcEid: ETH_EID, chains }, deps({ bsc: `0x${'11'.repeat(32)}` }, {}))
     expect(r.found).toEqual([])
@@ -95,7 +117,7 @@ describe('findAdapterForToken', () => {
 
   it('nothing named anywhere: an empty, honest answer', async () => {
     const r = await findAdapterForToken({ token: TOKEN, srcChain: 'ethereum', srcEid: ETH_EID, chains }, deps({}, {}))
-    expect(r).toEqual({ found: [], named: [], failed: [], rejected: [] })
+    expect(r).toEqual({ found: [], named: [], failed: [], rejected: [], unreadable: [] })
   })
 })
 

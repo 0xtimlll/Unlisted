@@ -251,6 +251,15 @@ describe('v1: a parked payload', () => {
     expect(d.state.kind).toBe('unknown')
     expect((await planRescue(d, stub({}))).kind).toBe('nothing')
   })
+
+  it('the nonce alone is not "delivered" when the stuck-message slots could not be read (2026-10-17)', async () => {
+    const m = message()
+    const down = new Error('HTTP request failed')
+    expect((await diagnose(m, stub({ storedPayload: down, failedMessages: ZERO_HASH, getInboundNonce: 9n }))).state.kind).toBe('unknown')
+    expect((await diagnose(m, stub({ storedPayload: [0n, DST_OFT, ZERO_HASH], failedMessages: down, getInboundNonce: 9n }))).state.kind).toBe('unknown')
+    // A receiver without failedMessages (a revert) has nothing stored there: delivered.
+    expect((await diagnose(m, stub({ storedPayload: [0n, DST_OFT, ZERO_HASH], failedMessages: new Error('execution reverted'), getInboundNonce: 9n }))).state.kind).toBe('delivered')
+  })
 })
 
 describe('v1: a failed message', () => {
@@ -289,6 +298,12 @@ describe('V2: committed but not executed', () => {
     if (m?.version !== 'v2') throw new Error('expected a v2 message')
     return m
   }
+
+  it('a lazy nonce past this one is not "delivered" when the payload slot could not be read', async () => {
+    const m = message()
+    const client = stub({ endpoint: ENDPOINT_V2, inboundPayloadHash: new Error('HTTP request failed'), lazyInboundNonce: 9n, getReceiveLibrary: [SRC_OFT, true], getUlnConfig: {}, verifiable: false })
+    expect((await diagnose(m, client)).state.kind).toBe('unknown')
+  })
 
   it('offers lzReceive on the endpoint the receiver itself names', async () => {
     const m = message()

@@ -120,7 +120,10 @@ describe('decodeSvmTx', () => {
 
   it('tx_not_found when every provider has nothing', async () => {
     await expect(decodeSvmTx(rpcFor({ 'https://a': null, 'https://b': null }), SIG)).rejects.toMatchObject({ code: 'tx_not_found' })
-    await expect(decodeSvmTx(rpcFor({ 'https://a': 'boom' }), SIG)).rejects.toMatchObject({ code: 'tx_not_found' })
+    // Every operator failed: "could not read", not "no such transaction".
+    await expect(decodeSvmTx(rpcFor({ 'https://a': 'boom' }), SIG)).rejects.toMatchObject({ code: 'rpc_unavailable' })
+    // One operator failed, the other said null: that null is an answer.
+    await expect(decodeSvmTx(rpcFor({ 'https://a': 'boom', 'https://b': null }), SIG)).rejects.toMatchObject({ code: 'tx_not_found' })
   })
 
   it('two agreeing providers → crossChecked; a second provider down → not cross-checked; disagreement → rpc_mismatch', async () => {

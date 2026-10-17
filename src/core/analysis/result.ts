@@ -49,6 +49,7 @@ export type AnalysisCode =
   // --- input / lookup ----------------------------------------------------------
   | 'invalid_input'
   | 'tx_not_found'
+  | 'scan_unreachable' // a LayerZero Scan link, and Scan did not answer: nothing is known yet
   | 'unknown' // nothing recognised; details carry the raw material
 
 /*

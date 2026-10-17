@@ -26,7 +26,7 @@ import { ZERO_ADDRESS } from '../../core/encoding'
 import { readOptional, UnreadableError } from '../../core/rpcErrors'
 import { sanitizeLabel } from '../../core/text'
 import { ADAPTER_MIN_LOCKED_BPS, ADAPTER_MIN_OUTBOUND_NONCE, lockedBps } from '../lz-risk/adapters'
-import { attempt, pickEvent, READ_TIMEOUT_MS, SCAN_TIMEOUT_MS, type LogWindow } from '../lz-risk/probe'
+import { attempt, pickEvent, READ_TIMEOUT_MS, scanWidening, type LogWindow } from '../lz-risk/probe'
 import { bytes32ToEvmAddress, mailboxEventsAbi, warpRouteAbi } from './abi'
 import { chainOfHyperlaneDomain, hyperlaneConfig } from './chains'
 
@@ -423,21 +423,18 @@ export type WarpStanding = {
   window: LogWindow | undefined
 }
 
-/** The widest range a public provider will usually serve in one request, then smaller. */
-const SPANS: readonly bigint[] = [50_000n, 10_000n, 2_000n]
-
+/**
+ * Dispatches by this router, newest blocks first, widening only until the floor of twenty is met
+ * (lz-risk/probe.ts scanWidening: a provider that refuses wide ranges is not asked for them again).
+ */
 async function countDispatches(client: ReadClient, mailbox: Address, router: Address): Promise<{ count: number; window: LogWindow } | undefined> {
-  const head = await attempt(client.getBlockNumber(), READ_TIMEOUT_MS, 'block number')
-  if (!head.ok) return undefined
   const event = pickEvent(mailboxEventsAbi, 'Dispatch')
-  for (const span of SPANS) {
-    const toBlock = head.value
-    const fromBlock = toBlock > span ? toBlock - span : 0n
-    const got = await attempt(client.getLogs({ address: mailbox, event, args: { sender: router }, fromBlock, toBlock }), SCAN_TIMEOUT_MS, 'log scan')
-    if (!got.ok) continue
-    return { count: got.value.length, window: { fromBlock, toBlock, blocks: toBlock - fromBlock } }
-  }
-  return undefined
+  const got = await scanWidening(
+    client,
+    (fromBlock, toBlock) => client.getLogs({ address: mailbox, event, args: { sender: router }, fromBlock, toBlock }),
+    (logs) => BigInt(logs.length) >= ADAPTER_MIN_OUTBOUND_NONCE,
+  )
+  return got.status === 'ok' ? { count: got.logs.length, window: got.window } : undefined
 }
 
 export async function readWarpStanding(client: ReadClient, chain: ChainKey, router: WarpRouter): Promise<WarpStanding> {

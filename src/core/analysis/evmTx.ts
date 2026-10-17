@@ -12,16 +12,37 @@ import type { TxLike } from './detect'
 /** viem's own names for "this chain does not have it". */
 const NOT_FOUND = new Set(['TransactionNotFoundError', 'TransactionReceiptNotFoundError'])
 
-function isNotFound(e: unknown): boolean {
+export function isNotFound(e: unknown): boolean {
   const name = (e as { name?: string })?.name ?? ''
   if (NOT_FOUND.has(name)) return true
+  // viem's own wording only. A bare "not found" is also "Method not found", "header not found" and
+  // an HTTP 404 — a provider that could not answer, which must land in `failed`, not in "not here".
   const msg = (e instanceof Error ? e.message : String(e)).toLowerCase()
-  return msg.includes('could not be found') || msg.includes('not found')
+  return /transaction (receipt )?with hash .* could not be found/.test(msg)
 }
 
-export async function fetchEvmTx(client: ReadClient, hash: string): Promise<TxLike | null> {
+/**
+ * `txFirst`: ask for the transaction alone and fetch the receipt only when the chain has it. The
+ * search fans a hash out to every other chain (a hundred-odd since 2026-10), and all but one of them
+ * answer "not here" — asking each for the receipt as well doubled the requests for nothing. The
+ * selected chain, where the hash usually is, still asks for both at once.
+ */
+export async function fetchEvmTx(client: ReadClient, hash: string, opts: { txFirst?: boolean } = {}): Promise<TxLike | null> {
   const h = hash as Hash
-  const [txRes, receiptRes] = await Promise.allSettled([client.getTransaction({ hash: h }), client.getTransactionReceipt({ hash: h })])
+  type Settled<T> = PromiseSettledResult<T>
+  let txRes: Settled<Awaited<ReturnType<ReadClient['getTransaction']>>>
+  let receiptRes: Settled<Awaited<ReturnType<ReadClient['getTransactionReceipt']>>>
+  if (opts.txFirst) {
+    try {
+      txRes = { status: 'fulfilled', value: await client.getTransaction({ hash: h }) }
+    } catch (e) {
+      if (isNotFound(e)) return null
+      throw e
+    }
+    ;[receiptRes] = await Promise.allSettled([client.getTransactionReceipt({ hash: h })])
+  } else {
+    ;[txRes, receiptRes] = await Promise.allSettled([client.getTransaction({ hash: h }), client.getTransactionReceipt({ hash: h })])
+  }
 
   if (txRes.status === 'rejected' && !isNotFound(txRes.reason)) throw txRes.reason
   if (receiptRes.status === 'rejected' && !isNotFound(receiptRes.reason)) throw receiptRes.reason

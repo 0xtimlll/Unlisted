@@ -9,8 +9,16 @@ import type { ReadClient } from './client'
 import { byEid } from './chains'
 import { sanitizeOptions, type OptionItem } from './options'
 import { decodeSendCalldata } from './plan'
+import { isNotFound } from './analysis/evmTx'
 
-export type DecodeTxErrorCode = 'invalid_hash' | 'tx_not_found' | 'not_send' | 'no_to' | 'rpc_mismatch'
+export type DecodeTxErrorCode =
+  | 'invalid_hash'
+  | 'tx_not_found'
+  | 'not_send'
+  | 'no_to'
+  | 'rpc_mismatch'
+  /** The provider did not answer: nothing is known about the transaction, least of all that it is missing. */
+  | 'rpc_unavailable'
 
 export class DecodeTxError extends Error {
   constructor(
@@ -53,8 +61,8 @@ export async function decodeTx(client: ReadClient, txHash: string): Promise<TxPr
   let tx
   try {
     tx = await client.getTransaction({ hash: txHash })
-  } catch {
-    throw new DecodeTxError('tx_not_found')
+  } catch (e) {
+    throw isNotFound(e) ? new DecodeTxError('tx_not_found') : new DecodeTxError('rpc_unavailable', e instanceof Error ? e.message.split('\n')[0] : String(e))
   }
   if (!tx) throw new DecodeTxError('tx_not_found')
   if (!tx.to) throw new DecodeTxError('no_to', 'contract creation tx')

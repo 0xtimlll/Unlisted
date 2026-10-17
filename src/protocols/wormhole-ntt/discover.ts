@@ -28,6 +28,7 @@ import { evmChains, type ChainKey } from '../../core/chains'
 import type { ReadClient } from '../../core/client'
 import { erc20Abi } from '../../core/abi'
 import { isZeroBytes32, peerToAddress } from '../../core/encoding'
+import { isContractRefusal } from '../../core/rpcErrors'
 import { nttManagerAbi, nttTokenAnchorAbi } from './abi'
 import { nttServed, wormholeChainId } from './chains'
 import { COINGECKO_PLATFORM, findListedToken, type NttToken } from './tokenList'
@@ -49,7 +50,23 @@ export type NttDiscovery =
   /** Not an NTT token on this chain, and not a manager for one either. */
   | { kind: 'unknown'; reason: 'not_listed' | 'unreadable' }
 
+/**
+ * A read whose refusal is an answer ("this contract has no such function") and whose outage is not.
+ * The outage is thrown, so the tab shows "could not read — try again" (ReadFailed) instead of the
+ * red "this address does not answer as an NttManager" that one 502 in the middle of the walk used to
+ * produce.
+ */
 const read = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+  try {
+    return await fn()
+  } catch (e) {
+    if (isContractRefusal(e)) return undefined
+    throw e
+  }
+}
+
+/** For ranking only: a failed read counts as "no", whatever the reason. */
+const readSoft = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
   try {
     return await fn()
   } catch {
@@ -131,11 +148,14 @@ export async function discoverNtt(
  * The candidates that name this token, ranked: one the token vouches for first (the anchor the
  * gate will accept), then by the share of the token each holds — a hub holds what circulates on
  * its spokes, a fake holds nothing. Reads that fail count as "no" for the ranking only; the gate
- * reads everything again with the outage/refusal distinction it needs.
+ * reads everything again with the outage/refusal distinction it needs. A candidate whose `token()`
+ * the provider could not answer is skipped, and if no other candidate matched, the outage is thrown
+ * rather than reported as "no manager".
  */
 async function managerFromCandidates(client: ReadClient, token: Address, candidates: readonly Address[]): Promise<Address | undefined> {
   const seen = new Set<string>()
   const scored: { manager: Address; anchored: boolean; held: bigint }[] = []
+  let outage: unknown
   for (const raw of candidates) {
     let manager: Address
     try {
@@ -148,12 +168,21 @@ async function managerFromCandidates(client: ReadClient, token: Address, candida
     if (seen.size >= MAX_MANAGER_CANDIDATES) break
     seen.add(key)
 
-    const named = await read(() => client.readContract({ address: manager, abi: nttManagerAbi, functionName: 'token' }))
+    let named: Address | undefined
+    try {
+      named = await read(() => client.readContract({ address: manager, abi: nttManagerAbi, functionName: 'token' }))
+    } catch (e) {
+      // One candidate the provider could not answer for does not end the search; it only means
+      // "none found" may not be said if nothing else matches.
+      outage ??= e
+      continue
+    }
     if (!named || !isAddressEqual(getAddress(named), token)) continue
-    const anchored = (await read(() => tokenAnchor(client, token, manager))) !== undefined
-    const held = (await read(() => client.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [manager] }))) ?? 0n
+    const anchored = (await readSoft(() => tokenAnchor(client, token, manager))) !== undefined
+    const held = (await readSoft(() => client.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [manager] }))) ?? 0n
     scored.push({ manager, anchored, held })
   }
+  if (scored.length === 0 && outage !== undefined) throw outage
   scored.sort((a, b) => (a.anchored !== b.anchored ? (a.anchored ? -1 : 1) : a.held > b.held ? -1 : a.held < b.held ? 1 : 0))
   return scored[0]?.manager
 }

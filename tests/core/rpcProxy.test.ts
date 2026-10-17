@@ -139,11 +139,23 @@ describe('failover', () => {
     expect(h.calls).toHaveLength(1)
   })
 
-  it('answers 502 with the last reason when every RPC fails', async () => {
+  it('answers 502 with every node\'s reason when every RPC fails', async () => {
     const h = harness({ [ETH_A]: () => new Response('', { status: 500 }), [ETH_B]: () => new Response('', { status: 502 }) })
     const r = await h.send('1', CALL)
     expect(r.status).toBe(502)
-    expect(((await r.json()) as { error: { message: string } }).error.message).toMatch(/no RPC answered/)
+    const message = ((await r.json()) as { error: { message: string } }).error.message
+    expect(message).toMatch(/no RPC answered/)
+    expect(message).toMatch(/HTTP 500/)
+    expect(message).toMatch(/HTTP 502/)
+  })
+
+  it('passes on the provider\'s words from a non-200 answer (X Layer\'s range limit comes as HTTP 400)', async () => {
+    const said = () => new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'block range greater than 100 max' } }), { status: 400 })
+    const h = harness({ [ETH_A]: said, [ETH_B]: () => new Response('', { status: 503 }) })
+    const r = await h.send('1', CALL)
+    const message = ((await r.json()) as { error: { message: string } }).error.message
+    expect(message).toMatch(/HTTP 400: block range greater than 100 max/)
+    expect(message).toMatch(/HTTP 503/)
   })
 
   it('hedges: a second RPC is started when the first stays silent, and the first answer wins', async () => {

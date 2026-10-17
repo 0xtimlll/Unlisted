@@ -266,7 +266,10 @@ export function BridgeApp({
    * this chain it names as its peer, and each answer is probed here like a pasted address. One
    * adapter found is applied at once; several are offered; none is said with what was asked.
    */
-  const bothDeclined = v2SaysNotOft && !!probeV1.error && !svmSource
+  // v1 has to have SAID no: a v1 probe that could not be read is not a decline, and starting a
+  // hundred-chain search behind "Not a LayerZero OFT" on an outage says two untrue things at once.
+  const v1Declined = probeV1.error instanceof ProbeV1Error && probeV1.error.code !== 'rpc_unavailable' && probeV1.error.code !== 'rpc_mismatch'
+  const bothDeclined = v2SaysNotOft && v1Declined && !svmSource
   const adapterSearch = useAdapterSearch(evmSrc, bothDeclined ? (probeTarget as Address) : null, stored.customRpc, bothDeclined)
   const [adapterHint, setAdapterHint] = useState<{ token: string; adapter: string; foundOn: ChainKey[] } | null>(null)
   useEffect(() => {
@@ -290,7 +293,8 @@ export function BridgeApp({
         : bothDeclined && adapterSearch.data && adapterSearch.data.found.length === 0
           ? fmt(d.step1.adapterNone, { chain: src.name, n: otherChains }) +
             (adapterSearch.data.failed.length ? fmt(d.step1.adapterNoneFailed, { failed: adapterSearch.data.failed.length }) : '') +
-            (adapterSearch.data.rejected.length ? fmt(d.step1.adapterRejected, { rejected: adapterSearch.data.rejected.map((a) => `${a.slice(0, 6)}…${a.slice(-4)}`).join(', ') }) : '')
+            (adapterSearch.data.rejected.length ? fmt(d.step1.adapterRejected, { rejected: adapterSearch.data.rejected.map((a) => `${a.slice(0, 6)}…${a.slice(-4)}`).join(', ') }) : '') +
+            (adapterSearch.data.unreadable.length ? fmt(d.step1.adapterUnreadable, { unreadable: adapterSearch.data.unreadable.map((a) => `${a.slice(0, 6)}…${a.slice(-4)}`).join(', ') }) : '')
           : ''
   const adapterChoices =
     bothDeclined && adapterSearch.data && adapterSearch.data.found.length > 1
@@ -955,6 +959,7 @@ export function BridgeApp({
                 {riskCovered ? <RiskChecks risk={risk.data?.risk} loading={risk.isFetching} error={riskError ?? ''} /> : <RiskNotAssessed />}
                 <Checks report={report} show={!!planData} feeCtx={feeCtx} />
                 <SimulationNote check={evmData} />
+                {svmSource && svmCheck.data?.rpcUnavailable ? <p className="text-xs text-warn">{d.revert.rpcUnavailable}</p> : null}
                 <DvnNote config={dvn.data} />
               </PanelFold>
             </>

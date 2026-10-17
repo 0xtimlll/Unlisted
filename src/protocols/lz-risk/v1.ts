@@ -31,7 +31,7 @@ import type { OftV1Info } from '../lz-v1/detect'
 import type { V1SendPlan } from '../lz-v1/plan'
 import { lockedBps, type AdapterStanding } from './adapters'
 import { dvnInfo } from './dvns'
-import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
+import { attempt, daysSinceBlock, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
 
 /** Below this multiple of the destination estimate, the gas bought is called thin. */
@@ -294,11 +294,10 @@ async function checkDeliverySim(c: V1RiskContext): Promise<Outcome> {
   const call = { account: remote, to: remote, data } as const
   const sim = await attempt(c.dstClient.call(call), undefined, 'destination credit')
   if (!sim.ok) {
-    // A revert here is a real answer about the route, but an RPC that never replied is not. The
-    // reason text carries whichever it was, and a reverting call names the contract's own message.
-    return isTransportFailure(sim.reason)
-      ? { state: { status: 'unchecked', reason: sim.reason } }
-      : { state: { status: 'fail', reason: `the destination would not credit this transfer: ${sim.reason}` } }
+    // A revert here is a real answer about the route, but an RPC that never replied is not.
+    return sim.refused
+      ? { state: { status: 'fail', reason: `the destination would not credit this transfer: ${sim.reason}` } }
+      : { state: { status: 'unchecked', reason: sim.reason } }
   }
   const gas = await attempt(c.dstClient.estimateGas(call), undefined, 'destination gas')
   if (!gas.ok) return { state: { status: 'pass', note: 'the destination credit succeeds; its gas could not be measured' } }
@@ -348,7 +347,7 @@ async function checkLimits(c: V1RiskContext): Promise<Outcome> {
     attempt(c.srcClient.readContract({ address: c.info.oft, abi: v1DstAbi, functionName: 'paused' }), undefined, 'source pause'),
     remote
       ? attempt(c.dstClient.readContract({ address: remote, abi: v1DstAbi, functionName: 'paused' }), undefined, 'destination pause')
-      : Promise.resolve({ ok: false, reason: 'the destination contract is not known yet' } as const),
+      : Promise.resolve({ ok: false, reason: 'the destination contract is not known yet', refused: false } as const),
   ])
   if (srcPaused.ok && srcPaused.value) return { state: { status: 'fail', reason: 'the source contract is paused' } }
   if (dstPaused.ok && dstPaused.value) return { state: { status: 'fail', reason: 'the destination contract is paused' } }
@@ -356,7 +355,7 @@ async function checkLimits(c: V1RiskContext): Promise<Outcome> {
   // nothing to check and `skipped` is honest. A provider that never answered — on either side —
   // leaves this hard check unmade, and calling that `skipped` or `pass` would let the verdict
   // reach OK on a route whose pause state nobody established.
-  const transport = [srcPaused, dstPaused].filter((a) => !a.ok).map((a) => a.reason).filter(isTransportFailure)
+  const transport = [srcPaused, dstPaused].flatMap((a) => (!a.ok && !a.refused ? [a.reason] : []))
   if (transport.length > 0) return { state: { status: 'unchecked', reason: transport[0]! } }
   if (!srcPaused.ok && !dstPaused.ok) return { state: { status: 'skipped', reason: 'neither side has a pause or a rate limit to read' } }
   return { state: { status: 'pass' } }

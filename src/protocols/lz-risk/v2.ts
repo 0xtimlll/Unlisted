@@ -26,7 +26,7 @@ import type { EvmSendPlan } from '../../core/plan'
 import type { OftInfo } from '../../core/types'
 import { lockedBps, type AdapterStanding } from './adapters'
 import { DEAD_DVN_ID, dvnInfo, judgeDvns } from './dvns'
-import { attempt, daysSinceBlock, isTransportFailure, pickEvent, scanNewest, windowDays } from './probe'
+import { attempt, daysSinceBlock, pickEvent, scanNewest, windowDays } from './probe'
 import { allUnchecked, INFLIGHT_GRACE_MINUTES, type CheckId, type CheckState, type RiskInput } from './risk'
 import { THIN_GAS_RATIO } from './v1'
 
@@ -372,9 +372,9 @@ async function checkDeliverySim(c: V2RiskContext): Promise<Outcome> {
   const call = { account: dstEndpoint, to: c.dstOft, data } as const
   const sim = await attempt(c.dstClient.call(call), undefined, 'destination credit')
   if (!sim.ok) {
-    return isTransportFailure(sim.reason)
-      ? { state: { status: 'unchecked', reason: sim.reason } }
-      : { state: { status: 'fail', reason: `the destination would not credit this transfer: ${sim.reason}` } }
+    return sim.refused
+      ? { state: { status: 'fail', reason: `the destination would not credit this transfer: ${sim.reason}` } }
+      : { state: { status: 'unchecked', reason: sim.reason } }
   }
   const gas = await attempt(c.dstClient.estimateGas(call), undefined, 'destination gas')
   if (!gas.ok) return { state: { status: 'pass', note: 'the destination credit succeeds; its gas could not be measured' } }
@@ -446,7 +446,7 @@ async function checkLimits(c: V2RiskContext): Promise<Outcome> {
   // See the v1 note: a revert means there is no pause, an unreachable provider means this hard
   // check was never made — on EITHER side. One side reverting and the other timing out is still
   // an unmade check, not a pass.
-  const transport = [src, dst].filter((a) => !a.ok).map((a) => a.reason).filter(isTransportFailure)
+  const transport = [src, dst].flatMap((a) => (!a.ok && !a.refused ? [a.reason] : []))
   if (transport.length > 0) return { state: { status: 'unchecked', reason: transport[0]! } }
   if (!src.ok && !dst.ok) return { state: { status: 'skipped', reason: 'neither side has a pause or a rate limit to read' } }
   return { state: { status: 'pass' } }

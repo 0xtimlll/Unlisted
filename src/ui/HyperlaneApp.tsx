@@ -208,6 +208,10 @@ export function HyperlaneApp({
     [typedToken?.token, hints, ...candidates.map((q) => q.data)],
   )
   // The reason the first candidate was turned down, for the one line that says so.
+  // Every candidate failed to READ (not one of them turned down on its merits): that is an outage,
+  // said with a retry, not "none of them is a warp route this app can use".
+  const hintsUnreadable =
+    candidates.length > 0 && candidates.every((q) => q.isError || (q.data?.kind === 'unknown' && q.data.reason === 'unreadable'))
   const refusedReason = (() => {
     const c = candidates.find((q) => q.data !== undefined)?.data
     if (!c) return undefined
@@ -533,7 +537,9 @@ export function HyperlaneApp({
               ? d.tracker.sourceFailed
               : deliveryPhase === 'pending'
                 ? fmt(d.hyperlane.delivery_pending, { chain: dstDef?.name ?? '' })
-                : d.hyperlane.delivery_no_data}
+                : delivery.data?.unreachable
+                  ? d.hyperlane.delivery_unreachable
+                  : d.hyperlane.delivery_no_data}
           {delivery.data?.processedAtBlock !== undefined ? <span className="text-muted"> · {fmt(d.hyperlane.deliveryBlock, { block: delivery.data.processedAtBlock.toString() })}</span> : null}
         </p>
         {delivery.data?.messageId ? (
@@ -605,7 +611,15 @@ export function HyperlaneApp({
         {typedToken && hints.length > 0 && !candidatesSettled ? (
           <p className="px-1 text-xs text-muted">{fmt(d.hyperlane.hintChecking, { n: hints.length })}</p>
         ) : null}
-        {typedToken && candidatesSettled && hints.length > 0 && passing.length === 0 ? (
+        {typedToken && candidatesSettled && hints.length > 0 && passing.length === 0 && hintsUnreadable ? (
+          <ReadFailed
+            message={d.ui.readFailedRoute}
+            retryLabel={d.ui.retry}
+            busy={candidates.some((q) => q.isFetching)}
+            onRetry={() => candidates.forEach((q) => void q.refetch())}
+          />
+        ) : null}
+        {typedToken && candidatesSettled && hints.length > 0 && passing.length === 0 && !hintsUnreadable ? (
           <Alert kind="warn">{fmt(d.hyperlane.hintNoneUsable, { n: hints.length, chain: src.name, reason: refusedReason ?? '' })}</Alert>
         ) : null}
         {typedToken && passing.length === 1 && router ? (

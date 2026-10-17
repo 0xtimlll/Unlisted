@@ -16,6 +16,8 @@
 import type { Address, Hex } from 'viem'
 import type { ChainKey } from './chains'
 import { isZeroBytes32, peerToAddress, sameAddress } from './encoding'
+import { ProbeError } from './probe'
+import { isContractRefusal } from './rpcErrors'
 import type { OftInfo } from './types'
 
 export type AdapterCandidate = {
@@ -41,6 +43,8 @@ export type AdapterSearch = {
   failed: ChainKey[]
   /** Peers that were named but turned out not to be an adapter for this token on the source. */
   rejected: Address[]
+  /** Peers that were named but could not be checked on the source (the provider did not answer). */
+  unreadable: Address[]
 }
 
 /** How long the fan-out waits for the slowest chain before counting it as "could not ask". */
@@ -73,8 +77,11 @@ export async function findAdapterForToken(
         if (isZeroBytes32(peer)) return { chain }
         const address = peerToAddress(peer)
         return address ? { chain, peer: address } : { chain }
-      } catch {
-        return { chain, failed: true }
+      } catch (e) {
+        // No contract at this address on that chain, or one without `peers`: that chain's answer is
+        // "no peer". Only a provider that did not answer is "could not ask" — with a hundred chains
+        // asked, counting every empty address as a failure said "could not reach 93 networks".
+        return isContractRefusal(e) ? { chain } : { chain, failed: true }
       }
     }),
   )
@@ -94,6 +101,7 @@ export async function findAdapterForToken(
 
   const found: AdapterCandidate[] = []
   const rejected: Address[] = []
+  const unreadable: Address[] = []
   for (const c of candidates.values()) {
     // The token itself can never be its own adapter; a self-pointing peer is a different kind of
     // route (a plain OFT with the same address everywhere), not a lockbox for this token.
@@ -105,9 +113,12 @@ export async function findAdapterForToken(
       const info = await deps.probe(c.adapter)
       if (info.kind === 'OFTAdapter' && sameAddress(info.token, p.token)) found.push(c)
       else rejected.push(c.adapter)
-    } catch {
-      rejected.push(c.adapter)
+    } catch (e) {
+      // "Not an adapter" is the probe's verdict about the contract; an outage or two providers that
+      // disagree is no verdict at all, and saying "is not an adapter" there would be a lie.
+      if (e instanceof ProbeError && e.code !== 'rpc_unavailable' && e.code !== 'rpc_mismatch') rejected.push(c.adapter)
+      else unreadable.push(c.adapter)
     }
   }
-  return { found, named, failed, rejected }
+  return { found, named, failed, rejected, unreadable }
 }

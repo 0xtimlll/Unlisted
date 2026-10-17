@@ -102,6 +102,10 @@ describe('fetchStatus', () => {
   it('HTTP 404/500 -> no_data', async () => {
     expect((await fetchStatus(HASH, fakeFetch([{ httpStatus: 404 }]))).phase).toBe('no_data')
     expect((await fetchStatus(HASH, fakeFetch([{ httpStatus: 500 }]))).phase).toBe('no_data')
+    // Only the 404 is Scan saying "no such message"; the rest is Scan not answering (2026-10-17).
+    expect((await fetchStatus(HASH, fakeFetch([{ httpStatus: 404 }]))).unreachable).toBeUndefined()
+    expect((await fetchStatus(HASH, fakeFetch([{ httpStatus: 500 }]))).unreachable).toBe(true)
+    expect((await fetchStatus(HASH, fakeFetch([new Error('offline')]))).unreachable).toBe(true)
   })
 })
 

@@ -122,7 +122,7 @@ describe('what the destination says', () => {
     const id = found().messageId
     expect(await readHyperlaneDelivery(baseSide({ delivered: false }), 'base', id)).toEqual({ phase: 'pending' })
     expect(await readHyperlaneDelivery(baseSide({ delivered: true, processedAt: 5 }), 'base', id)).toEqual({ phase: 'delivered', processedAtBlock: 5n })
-    expect(await readHyperlaneDelivery(fakeClient(() => new Error('down')), 'base', id)).toEqual({ phase: 'no_data' })
+    expect(await readHyperlaneDelivery(fakeClient(() => new Error('down')), 'base', id)).toEqual({ phase: 'no_data', unreachable: true }) // said as "could not reach", not "waiting"
     expect(await readHyperlaneDelivery(baseSide(), 'solana', id)).toEqual({ phase: 'no_data' })
   })
 })

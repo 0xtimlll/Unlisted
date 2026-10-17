@@ -47,7 +47,7 @@ export function useAnalysis(input: AnalysisInput | null, tab: ProtocolId, select
         fetch: async (chain, hash) => {
           const def = byKey(chain)
           if (def.vm !== 'evm') return null
-          return fetchEvmTx(makeReadClient(def, customRpc[chain]), hash)
+          return fetchEvmTx(makeReadClient(def, customRpc[chain]), hash, { txFirst: chain !== selected })
         },
       })
 
@@ -57,7 +57,7 @@ export function useAnalysis(input: AnalysisInput | null, tab: ProtocolId, select
       // Not on any chain we could reach. A bare bytes32 may still be a LayerZero message id.
       if (i.mayBeGuid) {
         const viaGuid = await fromGuid(i.hash).catch(() => undefined)
-        if (viaGuid && viaGuid.code !== 'tx_not_found') return { results: [forTab(viaGuid, tab)], failed: found.failed }
+        if (viaGuid && viaGuid.code !== 'tx_not_found' && viaGuid.code !== 'scan_unreachable') return { results: [forTab(viaGuid, tab)], failed: found.failed }
       }
       return {
         results: [
@@ -81,6 +81,7 @@ export function useAnalysis(input: AnalysisInput | null, tab: ProtocolId, select
  */
 async function fromGuid(guid: string): Promise<AnalysisResult> {
   const state = await fetchStatusByGuid(guid)
+  if (state.unreachable) return result('unknown', 'scan_unreachable', { details: { txHash: guid } })
   if (state.phase === 'no_data' || state.srcEid === undefined) {
     return result('unknown', 'tx_not_found', { vars: { searched: '0', unreachable: '0' }, details: { txHash: guid } })
   }
